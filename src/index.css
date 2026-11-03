@@ -1,0 +1,808 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   BI-MODAL iOS GROUPED INSET DESIGN SYSTEM (LIGHT MODE & DARK MODE)
+   - Light Mode: Morning Sun (#F2F2F7 Canvas, #FFFFFF Cards, #E5E5EA Nested)
+   - Dark Mode: AMOLED Night (#000000 Canvas, #1A1A1A Cards, #282828 Nested)
+   - High-Contrast Typography & Pill Action Buttons
+   - Functional Color Isolation for Active Student Data
+   ───────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* LIGHT THEME (Morning Sun - iOS Grouped Inset Light) */
+  --canvas-bg: #F2F2F7;
+  --card-bg: #FFFFFF;
+  --card-elevated-bg: #FFFFFF;
+  --card-border: #E5E5EA;
+  --card-hover-border: #D1D1D6;
+  --nested-bg: #E5E5EA;
+  --nested-border: #D1D1D6;
+  --input-bg: #E5E5EA;
+  --input-text: #000000;
+  --text-primary: #000000;
+  --text-secondary: #6C6C70;
+  --text-tertiary: #8E8E93;
+  --text-muted: #6C6C70;
+  --nav-bg: rgba(242, 242, 247, 0.92);
+  --header-bg: rgba(242, 242, 247, 0.92);
+  --btn-primary-bg: #000000;
+  --btn-primary-text: #FFFFFF;
+  --btn-secondary-bg: #E5E5EA;
+  --btn-secondary-text: #000000;
+  --btn-secondary-border: #D1D1D6;
+  --modal-bg: #FFFFFF;
+  --modal-overlay: rgba(0, 0, 0, 0.45);
+  --card-shadow: 0 2px 10px -1px rgba(0, 0, 0, 0.06);
+  --accent-color: #007AFF;
+}
+
+html.dark, :root.dark {
+  /* DARK THEME (AMOLED Night - iOS Grouped Inset Dark) */
+  --canvas-bg: #000000;
+  --card-bg: #1A1A1A;
+  --card-elevated-bg: #1E1E1E;
+  --card-border: #2C2C2E;
+  --card-hover-border: #38383A;
+  --nested-bg: #282828;
+  --nested-border: #38383A;
+  --input-bg: #282828;
+  --input-text: #FFFFFF;
+  --text-primary: #FFFFFF;
+  --text-secondary: #8E8E93;
+  --text-tertiary: #636366;
+  --text-muted: #8E8E93;
+  --nav-bg: rgba(0, 0, 0, 0.92);
+  --header-bg: rgba(0, 0, 0, 0.92);
+  --btn-primary-bg: #FFFFFF;
+  --btn-primary-text: #000000;
+  --btn-secondary-bg: #282828;
+  --btn-secondary-text: #FFFFFF;
+  --btn-secondary-border: #38383A;
+  --modal-bg: #1A1A1A;
+  --modal-overlay: rgba(0, 0, 0, 0.75);
+  --card-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.5);
+  --accent-color: #30D158;
+}
+
+@layer base {
+  *, *::before, *::after {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html, body, #root {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  /* Only allow text selection in interactive text input and contenteditable fields */
+  input, textarea, [contenteditable="true"], .selectable-text {
+    -webkit-user-select: text !important;
+    -moz-user-select: text !important;
+    -ms-user-select: text !important;
+    user-select: text !important;
+    -webkit-touch-callout: default !important;
+  }
+
+  body {
+    @apply font-sans antialiased;
+    background-color: var(--canvas-bg);
+    color: var(--text-primary);
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    transition: background-color 0.2s cubic-bezier(0.2, 0, 0, 1), color 0.2s cubic-bezier(0.2, 0, 0, 1);
+  }
+
+  html {
+    background-color: var(--canvas-bg);
+    color-scheme: light;
+    font-size: clamp(14px, 3.8vw, 16px);
+    text-size-adjust: 100%;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  html.dark {
+    background-color: var(--canvas-bg);
+    color-scheme: dark;
+  }
+
+  /* Universal Select Controls Theming (Eliminates raw Android OS default dropdowns) */
+  select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-color: var(--input-bg);
+    color: var(--input-text);
+    border: 1px solid var(--card-border);
+    border-radius: 0.875rem;
+    padding: 0.5rem 2.25rem 0.5rem 0.875rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    line-height: 1.25;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238E8E93' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 1rem 1rem;
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.2s ease;
+  }
+
+  select:focus {
+    outline: none;
+    border-color: var(--card-hover-border);
+  }
+
+  select option {
+    background-color: var(--card-bg);
+    color: var(--text-primary);
+    padding: 0.5rem;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   DYNAMIC BI-MODAL THEME OVERRIDES (Transforms all screens cleanly)
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   DYNAMIC BI-MODAL THEME OVERRIDES (High-Fidelity Morning Sun Light Mode)
+   ───────────────────────────────────────────────────────────────────────────── */
+
+html:not(.dark) .bg-\[\#1A1A1A\],
+html:not(.dark) .bg-\[\#1E1E1E\],
+html:not(.dark) .bg-\[\#1C1C1E\],
+html:not(.dark) .bg-\[\#141416\],
+html:not(.dark) .bg-\[\#121212\],
+html:not(.dark) .bg-\[\#0D0D0D\],
+html:not(.dark) .bg-\[\#09090B\],
+html:not(.dark) .bg-neutral-900,
+html:not(.dark) .bg-neutral-950,
+html:not(.dark) .bg-zinc-900,
+html:not(.dark) .bg-zinc-950 {
+  background-color: var(--card-bg) !important;
+  box-shadow: var(--card-shadow);
+}
+
+html:not(.dark) .bg-\[\#282828\],
+html:not(.dark) .bg-\[\#242424\],
+html:not(.dark) .bg-\[\#333333\],
+html:not(.dark) .bg-neutral-800,
+html:not(.dark) .bg-neutral-800\/80,
+html:not(.dark) .bg-zinc-800 {
+  background-color: var(--nested-bg) !important;
+}
+
+html:not(.dark) .border-\[\#2C2C2E\],
+html:not(.dark) .border-\[\#3A3A3C\],
+html:not(.dark) .border-\[\#38383A\],
+html:not(.dark) .border-neutral-800,
+html:not(.dark) .border-neutral-700,
+html:not(.dark) .border-neutral-700\/80,
+html:not(.dark) .border-zinc-800,
+html:not(.dark) .border-zinc-700 {
+  border-color: var(--card-border) !important;
+}
+
+/* Universal Light Mode High-Contrast Text Rules:
+   Adapts .text-white on dark backgrounds to var(--text-primary) (#000000) in Light Mode,
+   while safely preserving text on primary dark buttons and solid colored badges. */
+html:not(.dark) .text-white:not(.btn-primary-ios):not(.btn-primary-ios *):not(.btn-3d):not(.btn-3d *):not(button.bg-black):not(button.bg-black *):not([class*="bg-blue-"]):not([class*="bg-blue-"] *):not([class*="bg-emerald-"]):not([class*="bg-emerald-"] *):not([class*="bg-red-"]):not([class*="bg-red-"] *):not([class*="bg-amber-"]):not([class*="bg-amber-"] *):not([class*="bg-purple-"]):not([class*="bg-purple-"] *):not([class*="bg-indigo-"]):not([class*="bg-indigo-"] *):not([class*="bg-cyan-"]):not([class*="bg-cyan-"] *):not([class*="bg-teal-"]):not([class*="bg-teal-"] *):not(.badge-white-text):not(.text-white-force) {
+  color: var(--text-primary) !important;
+}
+
+html:not(.dark) h1,
+html:not(.dark) h2,
+html:not(.dark) h3,
+html:not(.dark) h4,
+html:not(.dark) h5,
+html:not(.dark) h6 {
+  color: var(--text-primary);
+}
+
+html:not(.dark) label.text-white,
+html:not(.dark) strong.text-white,
+html:not(.dark) b.text-white {
+  color: var(--text-primary) !important;
+}
+
+html:not(.dark) .text-white\/90:not([class*="bg-black"]):not([class*="bg-neutral-9"]):not([class*="bg-zinc-9"]):not([class*="bg-slate-9"]):not([class*="bg-emerald-9"]):not([class*="bg-blue-9"]):not(.text-white-force),
+html:not(.dark) .text-white\/80:not([class*="bg-black"]):not([class*="bg-neutral-9"]):not([class*="bg-zinc-9"]):not([class*="bg-slate-9"]):not([class*="bg-emerald-9"]):not([class*="bg-blue-9"]):not(.text-white-force),
+html:not(.dark) .text-white\/70:not([class*="bg-black"]):not([class*="bg-neutral-9"]):not([class*="bg-zinc-9"]):not([class*="bg-slate-9"]):not([class*="bg-emerald-9"]):not([class*="bg-blue-9"]):not(.text-white-force) {
+  color: var(--text-secondary) !important;
+}
+
+html:not(.dark) .text-white\/60:not([class*="bg-black"]):not([class*="bg-neutral-9"]):not([class*="bg-zinc-9"]):not([class*="bg-slate-9"]):not(.text-white-force),
+html:not(.dark) .text-white\/50:not([class*="bg-black"]):not([class*="bg-neutral-9"]):not([class*="bg-zinc-9"]):not([class*="bg-slate-9"]):not(.text-white-force),
+html:not(.dark) .text-white\/40:not([class*="bg-black"]):not([class*="bg-neutral-9"]):not([class*="bg-zinc-9"]):not([class*="bg-slate-9"]):not(.text-white-force) {
+  color: var(--text-tertiary) !important;
+}
+
+html:not(.dark) .text-slate-100:not([class*="bg-black"]):not([class*="bg-neutral-9"]):not([class*="bg-neutral-8"]):not([class*="bg-zinc-9"]):not([class*="bg-zinc-8"]):not([class*="bg-slate-9"]):not(.text-white-force),
+html:not(.dark) .text-slate-200:not([class*="bg-black"]):not([class*="bg-neutral-9"]):not([class*="bg-neutral-8"]):not([class*="bg-zinc-9"]):not([class*="bg-zinc-8"]):not([class*="bg-slate-9"]):not(.text-white-force),
+html:not(.dark) .text-slate-300:not([class*="bg-black"]):not([class*="bg-neutral-9"]):not([class*="bg-neutral-8"]):not([class*="bg-zinc-9"]):not([class*="bg-zinc-8"]):not([class*="bg-slate-9"]):not(.text-white-force),
+html:not(.dark) .text-gray-100:not([class*="bg-black"]):not([class*="bg-neutral-9"]):not([class*="bg-neutral-8"]):not([class*="bg-zinc-9"]):not([class*="bg-zinc-8"]):not([class*="bg-slate-9"]):not(.text-white-force),
+html:not(.dark) .text-gray-200:not([class*="bg-black"]):not([class*="bg-neutral-9"]):not([class*="bg-neutral-8"]):not([class*="bg-zinc-9"]):not([class*="bg-zinc-8"]):not([class*="bg-slate-9"]):not(.text-white-force),
+html:not(.dark) .text-zinc-100:not([class*="bg-black"]):not([class*="bg-neutral-9"]):not([class*="bg-neutral-8"]):not([class*="bg-zinc-9"]):not([class*="bg-zinc-8"]):not([class*="bg-slate-9"]):not(.text-white-force),
+html:not(.dark) .text-zinc-200:not([class*="bg-black"]):not([class*="bg-neutral-9"]):not([class*="bg-neutral-8"]):not([class*="bg-zinc-9"]):not([class*="bg-zinc-8"]):not([class*="bg-slate-9"]):not(.text-white-force),
+html:not(.dark) .text-neutral-100:not([class*="bg-black"]):not([class*="bg-neutral-9"]):not([class*="bg-neutral-8"]):not([class*="bg-zinc-9"]):not([class*="bg-zinc-8"]):not([class*="bg-slate-9"]):not(.text-white-force),
+html:not(.dark) .text-neutral-200:not([class*="bg-black"]):not([class*="bg-neutral-9"]):not([class*="bg-neutral-8"]):not([class*="bg-zinc-9"]):not([class*="bg-zinc-8"]):not([class*="bg-slate-9"]):not(.text-white-force) {
+  color: var(--text-primary) !important;
+}
+
+html:not(.dark) .text-slate-400:not([class*="bg-black"]):not([class*="bg-neutral-9"]):not([class*="bg-zinc-9"]):not([class*="bg-slate-9"]),
+html:not(.dark) .text-slate-500:not([class*="bg-black"]):not([class*="bg-neutral-9"]):not([class*="bg-zinc-9"]):not([class*="bg-slate-9"]),
+html:not(.dark) .text-zinc-400:not([class*="bg-black"]):not([class*="bg-neutral-9"]):not([class*="bg-zinc-9"]):not([class*="bg-slate-9"]),
+html:not(.dark) .text-zinc-500:not([class*="bg-black"]):not([class*="bg-neutral-9"]):not([class*="bg-zinc-9"]):not([class*="bg-slate-9"]),
+html:not(.dark) .text-gray-400:not([class*="bg-black"]):not([class*="bg-neutral-9"]):not([class*="bg-zinc-9"]):not([class*="bg-slate-9"]),
+html:not(.dark) .text-gray-500:not([class*="bg-black"]):not([class*="bg-neutral-9"]):not([class*="bg-zinc-9"]):not([class*="bg-slate-9"]),
+html:not(.dark) .text-neutral-400:not([class*="bg-black"]):not([class*="bg-neutral-9"]):not([class*="bg-zinc-9"]):not([class*="bg-slate-9"]),
+html:not(.dark) .text-neutral-500:not([class*="bg-black"]):not([class*="bg-neutral-9"]):not([class*="bg-zinc-9"]):not([class*="bg-slate-9"]) {
+  color: var(--text-secondary) !important;
+}
+
+.text-white-force {
+  color: #FFFFFF !important;
+}
+
+.bg-black-force {
+  background-color: #000000 !important;
+}
+
+html:not(.dark) .bg-black:not(.btn-primary-ios):not(.btn-3d):not(button.bg-black):not(button.bg-black *):not(.badge-dark-bg):not(.bg-black-force):not(.leaflet-container):not(.leaflet-container *) {
+  background-color: var(--canvas-bg) !important;
+}
+
+html:not(.dark) .border-white\/5,
+html:not(.dark) .border-white\/10,
+html:not(.dark) .border-white\/15,
+html:not(.dark) .border-white\/20 {
+  border-color: var(--card-border) !important;
+}
+
+html:not(.dark) .text-\[\#8E8E93\] {
+  color: var(--text-secondary) !important;
+}
+
+html:not(.dark) .bg-black\/95,
+html:not(.dark) .bg-black\/90,
+html:not(.dark) .bg-black\/85,
+html:not(.dark) .bg-black\/80 {
+  background-color: var(--nav-bg) !important;
+}
+
+html:not(.dark) input,
+html:not(.dark) textarea,
+html:not(.dark) select {
+  background-color: var(--nested-bg) !important;
+  color: #000000 !important;
+  border-color: var(--nested-border) !important;
+}
+
+html:not(.dark) .btn-primary-ios,
+html:not(.dark) .btn-3d {
+  background-color: #000000 !important;
+  color: #FFFFFF !important;
+  border-color: #000000 !important;
+}
+
+html:not(.dark) .hover\:bg-\[\#282828\]:hover,
+html:not(.dark) .hover\:bg-\[\#333333\]:hover,
+html:not(.dark) .hover\:bg-\[\#242424\]:hover,
+html:not(.dark) .hover\:bg-\[\#1A1A1A\]:hover,
+html:not(.dark) .hover\:bg-\[\#2C2C2E\]:hover,
+html:not(.dark) .hover\:bg-\[\#3A3A3C\]:hover {
+  background-color: var(--nested-bg) !important;
+  opacity: 0.92;
+}
+
+html:not(.dark) .active\:bg-black:active,
+html:not(.dark) .active\:bg-\[\#242424\]:active,
+html:not(.dark) .active\:bg-\[\#333333\]:active,
+html:not(.dark) .active\:bg-\[\#2C2C2E\]:active {
+  background-color: var(--nested-bg) !important;
+  opacity: 0.85;
+}
+
+html:not(.dark) .list-row-interactive:hover {
+  background-color: var(--nested-bg) !important;
+}
+
+html:not(.dark) .list-row-interactive:active {
+  background-color: var(--nested-border) !important;
+}
+
+html:not(.dark) .hover\:text-white:hover {
+  color: var(--text-primary) !important;
+}
+
+html:not(.dark) .hover\:border-\[\#3A3A3C\]:hover,
+html:not(.dark) .hover\:border-\[\#38383A\]:hover {
+  border-color: #C7C7CC !important;
+}
+
+html:not(.dark) .divide-\[\#2C2C2E\],
+html:not(.dark) .divide-\[\#38383A\] {
+  border-color: var(--card-border) !important;
+}
+
+/* Minimalist Scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--nested-border);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   iOS GROUPED INSET SURFACES & CONTAINERS
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.ios-canvas {
+  background-color: var(--canvas-bg);
+}
+
+.surface-base {
+  background-color: var(--canvas-bg);
+}
+
+.surface-elevated {
+  background-color: var(--card-bg);
+  border: 1px solid var(--card-border);
+}
+
+.ios-card,
+.card-chunky,
+.glass-card {
+  background-color: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 20px;
+  box-shadow: var(--card-shadow);
+  transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1), border-color 0.2s ease;
+}
+
+.ios-card:hover,
+.card-chunky:hover,
+.glass-card:hover {
+  border-color: var(--card-hover-border);
+}
+
+.ios-card-nested,
+.glass-panel {
+  background-color: var(--nested-bg);
+  border: 1px solid var(--nested-border);
+  border-radius: 14px;
+}
+
+/* Grouped Inset List Row */
+.ios-list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background-color: var(--card-bg);
+  border-bottom: 1px solid var(--card-border);
+  transition: background-color 0.15s ease;
+}
+.ios-list-row:last-child {
+  border-bottom: none;
+}
+.ios-list-row:active {
+  background-color: var(--nested-bg);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   iOS BUTTONS & CONTROLS
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* Primary Action Button */
+.btn-primary-ios,
+.btn-3d {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  border-radius: 9999px;
+  background-color: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+  border: 1px solid var(--btn-primary-bg);
+  padding: 10px 20px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+  transition: transform 0.1s cubic-bezier(0.3, 0, 1, 1), opacity 0.15s ease;
+  cursor: pointer;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+  will-change: transform;
+}
+.btn-primary-ios:active,
+.btn-3d:active {
+  transform: scale(0.97);
+  opacity: 0.9;
+}
+
+/* Secondary Button */
+.btn-secondary-ios,
+.btn-3d-secondary {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  border-radius: 9999px;
+  background-color: var(--btn-secondary-bg);
+  color: var(--btn-secondary-text);
+  border: 1px solid var(--btn-secondary-border);
+  padding: 10px 18px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  transition: transform 0.1s cubic-bezier(0.3, 0, 1, 1), background-color 0.15s ease;
+  cursor: pointer;
+  font-size: 13px;
+  will-change: transform;
+}
+.btn-secondary-ios:active,
+.btn-3d-secondary:active {
+  transform: scale(0.97);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   PHYSICS-BASED MOTION DESIGN TOKENS
+   ───────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --ease-standard: cubic-bezier(0.2, 0.0, 0, 1.0);
+  --ease-decelerate: cubic-bezier(0.0, 0.0, 0.2, 1.0);
+  --ease-accelerate: cubic-bezier(0.3, 0.0, 1.0, 1.0);
+  --ease-spring-snappy: cubic-bezier(0.175, 0.885, 0.32, 1.15);
+  --ease-spring-bounce: cubic-bezier(0.34, 1.56, 0.64, 1.0);
+  --ease-sheet-spring: cubic-bezier(0.32, 0.72, 0, 1.0);
+  --ease-fluid: cubic-bezier(0.4, 0.0, 0.2, 1.0);
+
+  --motion-instant: 100ms;
+  --motion-fast: 150ms;
+  --motion-normal: 220ms;
+  --motion-screen: 260ms;
+  --motion-modal: 320ms;
+  --motion-stagger-step: 35ms;
+}
+
+/* ─── Tactile Press Micro-Interactions ─── */
+.pressable {
+  transition: transform var(--motion-instant) var(--ease-accelerate), opacity var(--motion-instant) ease;
+  will-change: transform;
+}
+.pressable:active {
+  transform: scale(0.97);
+  opacity: 0.85;
+}
+
+.pressable-subtle {
+  transition: transform var(--motion-instant) var(--ease-accelerate), background-color var(--motion-fast) var(--ease-fluid);
+  will-change: transform;
+}
+.pressable-subtle:active {
+  transform: scale(0.985);
+}
+
+.pressable-icon {
+  transition: transform var(--motion-instant) var(--ease-accelerate), opacity var(--motion-fast) var(--ease-fluid);
+  will-change: transform;
+}
+.pressable-icon:active {
+  transform: scale(0.92);
+  opacity: 0.7;
+}
+
+/* ─── List Row Selection Highlight ─── */
+.list-row-interactive {
+  transition: background-color var(--motion-fast) var(--ease-decelerate), transform var(--motion-instant) var(--ease-accelerate);
+}
+.list-row-interactive:active {
+  transform: scale(0.985);
+}
+
+@keyframes pageSlideIn {
+  0% {
+    opacity: 0.2;
+    transform: translate3d(10px, 0, 0) scale(0.995);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+.animate-page-enter {
+  animation: fadeIn 200ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ─── Screen Transition Blueprints (Push & Pop) ─── */
+@keyframes screenForwardEnter {
+  from {
+    opacity: 0.85;
+    transform: translate3d(100%, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes screenForwardExit {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    opacity: 0.85;
+    transform: translate3d(-15%, 0, 0);
+  }
+}
+
+@keyframes screenBackEnter {
+  from {
+    opacity: 0.85;
+    transform: translate3d(-15%, 0, 0) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes screenBackExit {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(100%, 0, 0);
+  }
+}
+
+.screen-enter-forward {
+  animation: screenForwardEnter var(--motion-screen) var(--ease-decelerate) forwards;
+  will-change: transform, opacity;
+}
+
+.screen-exit-forward {
+  animation: screenForwardExit var(--motion-screen) var(--ease-accelerate) forwards;
+  will-change: transform, opacity;
+}
+
+.screen-enter-back {
+  animation: screenBackEnter var(--motion-screen) var(--ease-decelerate) forwards;
+  will-change: transform, opacity;
+}
+
+.screen-exit-back {
+  animation: screenBackExit var(--motion-screen) var(--ease-accelerate) forwards;
+  will-change: transform, opacity;
+}
+
+/* ─── Modal Sheets & Inset Drawers ─── */
+@keyframes sheetBackdropEnter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes sheetSlideUpSpring {
+  from {
+    transform: translate3d(0, 100%, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes sheetSlideDownExit {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 100%, 0);
+  }
+}
+
+.sheet-backdrop-enter {
+  animation: sheetBackdropEnter var(--motion-screen) var(--ease-decelerate) forwards;
+}
+
+.sheet-enter-spring {
+  animation: sheetSlideUpSpring var(--motion-modal) var(--ease-sheet-spring) forwards;
+  will-change: transform;
+}
+
+.sheet-exit-slide {
+  animation: sheetSlideDownExit var(--motion-normal) var(--ease-accelerate) forwards;
+  will-change: transform;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -16px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.animate-slide-down {
+  animation: slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out forwards;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes stepSlideRight {
+  0% {
+    opacity: 0;
+    transform: translate3d(38px, 0, 0) scale(0.97);
+  }
+  60% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes stepSlideLeft {
+  0% {
+    opacity: 0;
+    transform: translate3d(-38px, 0, 0) scale(0.97);
+  }
+  60% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+.animate-step-next {
+  animation: stepSlideRight 0.38s cubic-bezier(0.2, 0.9, 0.2, 1.05) forwards;
+  will-change: transform, opacity;
+}
+
+.animate-step-prev {
+  animation: stepSlideLeft 0.38s cubic-bezier(0.2, 0.9, 0.2, 1.05) forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  20%, 60% { transform: translate3d(-6px, 0, 0); }
+  40%, 80% { transform: translate3d(6px, 0, 0); }
+}
+
+.animate-shake {
+  animation: shake 0.35s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+/* Mobile Leaflet Controls & Attribution Clearance */
+@media (max-width: 768px) {
+  .leaflet-bottom {
+    bottom: calc(env(safe-area-inset-bottom) + 3.75rem) !important;
+  }
+}
+
+/* QR Code Scanner Viewfinder Video Stream */
+#qr-reader-container {
+  overflow: hidden;
+  position: relative;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+#qr-reader-container video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  border-radius: 1rem;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   UNIVERSAL LEAFLET MAP THEME ENGINE (Harmonized with all 6 themes)
+   ───────────────────────────────────────────────────────────────────────────── */
+.leaflet-container {
+  background-color: var(--canvas-bg) !important;
+  font-family: inherit !important;
+}
+
+.leaflet-popup-content-wrapper {
+  background: var(--card-bg) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--card-border) !important;
+  border-radius: 18px !important;
+  box-shadow: var(--card-shadow) !important;
+  padding: 4px !important;
+}
+
+.leaflet-popup-tip-container {
+  display: none !important;
+}
+
+.leaflet-popup-content {
+  margin: 10px 14px !important;
+  line-height: 1.4 !important;
+  color: var(--text-primary) !important;
+}
+
+.leaflet-popup-close-button {
+  color: var(--text-secondary) !important;
+  padding: 6px !important;
+  top: 6px !important;
+  right: 6px !important;
+}
+
+.leaflet-popup-close-button:hover {
+  color: var(--text-primary) !important;
+}
+
+.leaflet-bar {
+  border: 1px solid var(--card-border) !important;
+  border-radius: 14px !important;
+  overflow: hidden;
+  box-shadow: var(--card-shadow) !important;
+}
+
+.leaflet-bar a {
+  background-color: var(--card-bg) !important;
+  color: var(--text-primary) !important;
+  border-bottom: 1px solid var(--card-border) !important;
+  transition: background-color 0.15s ease;
+}
+
+.leaflet-bar a:hover {
+  background-color: var(--nested-bg) !important;
+  color: var(--text-primary) !important;
+}
+
+.leaflet-bar a:last-child {
+  border-bottom: none !important;
+}
+
+.leaflet-container .leaflet-control-attribution {
+  background: var(--card-bg) !important;
+  color: var(--text-tertiary) !important;
+  border: 1px solid var(--card-border) !important;
+  border-radius: 8px !important;
+  padding: 2px 8px !important;
+  margin: 4px !important;
+  font-size: 10px !important;
+}
+
+.leaflet-container .leaflet-control-attribution a {
+  color: var(--text-secondary) !important;
+  text-decoration: none !important;
+}
+
+

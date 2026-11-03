@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item type="id" name="widget_title" />
+    <item type="id" name="widget_current_class" />
+    <item type="id" name="widget_next_class" />
+    <item type="id" name="skwela_widget_badge" />
+    <item type="id" name="skwela_widget_subject" />
+    <item type="id" name="skwela_widget_upcoming" />
+</resources>

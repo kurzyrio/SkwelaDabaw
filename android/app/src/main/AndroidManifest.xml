@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Verified Android App Links (Deep Linking to Share and Schedule) -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="skweladabaw.kurzyrio.site" android:pathPrefix="/share" />
+                <data android:scheme="https" android:host="skweladabaw.kurzyrio.site" android:pathPrefix="/schedule" />
+            </intent-filter>
+
+            <!-- Custom URI Scheme Deep Link Fallback (skwela://) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="skwela" />
+            </intent-filter>
+
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"></meta-data>
+        </provider>
+
+        <!-- Android Home Screen Widgets -->
+        <receiver
+            android:name="com.kurzyrio.skweladabaw.SkwelaWidgetProvider"
+            android:label="Skwela Timetable Widget"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/skwela_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name="com.kurzyrio.skweladabaw.ScheduleSmallWidgetProvider"
+            android:label="Skwela Schedule Small"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_schedule_info_small" />
+        </receiver>
+
+        <receiver
+            android:name="com.kurzyrio.skweladabaw.ScheduleMediumWidgetProvider"
+            android:label="Skwela Schedule Medium"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_schedule_info_medium" />
+        </receiver>
+
+        <receiver
+            android:name="com.kurzyrio.skweladabaw.ScheduleLargeWidgetProvider"
+            android:label="Skwela Schedule Large"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_schedule_info_large" />
+        </receiver>
+
+        <receiver
+            android:name="com.kurzyrio.skweladabaw.TasksWidgetProvider"
+            android:label="Skwela Tasks"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_tasks_info" />
+        </receiver>
+
+        <!-- Widget Background Lifecycle & Transition Alarm Receiver -->
+        <receiver
+            android:name="com.kurzyrio.skweladabaw.WidgetUpdateReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="com.kurzyrio.skweladabaw.ACTION_SCHEDULE_WIDGET_UPDATE" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Widget Interactive Actions (Day Navigation, Refresh, Today) -->
+        <receiver
+            android:name="com.kurzyrio.skweladabaw.WidgetActionReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.kurzyrio.skweladabaw.ACTION_WIDGET_NAVIGATE_DAY" />
+                <action android:name="com.kurzyrio.skweladabaw.ACTION_WIDGET_REFRESH" />
+                <action android:name="com.kurzyrio.skweladabaw.ACTION_WIDGET_TODAY" />
+            </intent-filter>
+        </receiver>
+
+        <!-- 5-Minute Background Weather Monitoring Receiver -->
+        <receiver
+            android:name="com.kurzyrio.skweladabaw.WeatherBackgroundReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="com.kurzyrio.skweladabaw.ACTION_WEATHER_CHECK" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Unremovable Ongoing Class Status Bar Foreground Service -->
+        <service
+            android:name="com.kurzyrio.skweladabaw.SkwelaOngoingService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Student daily timetable and real-time class reminder status bar service" />
+        </service>
+
+        <!-- RemoteViews Service for Scrollable Schedule Widget -->
+        <service
+            android:name="com.kurzyrio.skweladabaw.WidgetScheduleListService"
+            android:permission="android.permission.BIND_REMOTEVIEWS"
+            android:exported="false" />
+
+        <!-- Native System-Wide Floating Eagle Overlay Service -->
+        <service
+            android:name="com.kurzyrio.skweladabaw.EagleOverlayService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="System-wide floating student companion bubble providing real-time class and weather updates" />
+        </service>
+    </application>
+
+    <!-- Permissions -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+</manifest>

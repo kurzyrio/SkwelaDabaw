@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/notif_root"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/notification_card_bg"
+    android:paddingLeft="12dp"
+    android:paddingRight="12dp"
+    android:paddingTop="8dp"
+    android:paddingBottom="10dp">
+
+    <!-- Top Status: Active Assistant Indication (No duplicate icon or app name) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="4dp">
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_marginEnd="6dp"
+            android:src="@drawable/ic_eagle_buddy"
+            android:contentDescription="Bayani" />
+
+        <TextView
+            android:id="@+id/notif_assistant_status"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Bayani • Assisting your campus day"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:textColor="#30D158"
+            android:singleLine="true"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/notif_current_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="IN SESSION"
+            android:textSize="9sp"
+            android:textStyle="bold"
+            android:textColor="#FFFFFF"
+            android:background="@drawable/notification_current_pill_bg"
+            android:paddingLeft="6dp"
+            android:paddingRight="6dp"
+            android:paddingTop="1dp"
+            android:paddingBottom="1dp" />
+    </LinearLayout>
+
+    <!-- Current Class Primary Details -->
+    <TextView
+        android:id="@+id/notif_current_subject"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="No Class in Session"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:textColor="#FFFFFF"
+        android:singleLine="true"
+        android:ellipsize="end" />
+
+    <TextView
+        android:id="@+id/notif_current_meta"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Campus • Free Time"
+        android:textSize="11sp"
+        android:textColor="#A1A1AA"
+        android:singleLine="true"
+        android:ellipsize="end"
+        android:layout_marginTop="1dp" />
+
+    <!-- Next Class Row -->
+    <LinearLayout
+        android:id="@+id/notif_next_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@drawable/notification_next_container_bg"
+        android:paddingLeft="8dp"
+        android:paddingRight="8dp"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp"
+        android:layout_marginTop="6dp">
+
+        <TextView
+            android:id="@+id/notif_next_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="NEXT"
+            android:textSize="8sp"
+            android:textStyle="bold"
+            android:textColor="#FFFFFF"
+            android:background="@drawable/notification_next_pill_bg"
+            android:paddingLeft="5dp"
+            android:paddingRight="5dp"
+            android:paddingTop="1dp"
+            android:paddingBottom="1dp"
+            android:layout_marginRight="6dp" />
+
+        <TextView
+            android:id="@+id/notif_next_details"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="No upcoming class today"
+            android:textSize="11sp"
+            android:textColor="#D4D4D8"
+            android:singleLine="true"
+            android:ellipsize="end" />
+    </LinearLayout>
+
+    <!-- TeraBox-Style Quick Action Chips Row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:layout_marginTop="8dp">
+
+        <TextView
+            android:id="@+id/notif_action_schedule"
+            android:layout_width="0dp"
+            android:layout_height="28dp"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:background="@drawable/notification_chip_bg"
+            android:text="Timetable"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:textColor="#FFFFFF"
+            android:layout_marginRight="4dp" />
+
+        <TextView
+            android:id="@+id/notif_action_bus"
+            android:layout_width="0dp"
+            android:layout_height="28dp"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:background="@drawable/notification_chip_bg"
+            android:text="DC Bus"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:textColor="#38BDF8"
+            android:layout_marginRight="4dp" />
+
+        <TextView
+            android:id="@+id/notif_action_tasks"
+            android:layout_width="0dp"
+            android:layout_height="28dp"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:background="@drawable/notification_chip_bg"
+            android:text="Tasks"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:textColor="#30D158"
+            android:layout_marginRight="4dp" />
+
+        <TextView
+            android:id="@+id/notif_action_chat"
+            android:layout_width="0dp"
+            android:layout_height="28dp"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:background="@drawable/notification_chip_bg"
+            android:text="Lounge"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:textColor="#FF9F0A" />
+    </LinearLayout>
+</LinearLayout>

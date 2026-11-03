@@ -1,0 +1,18 @@
+{
+  "appId": "com.kurzyrio.skweladabaw",
+  "appName": "SkwelaDabaw",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    },
+    "FirebaseAuthentication": {
+      "skipNativeAuth": false,
+      "providers": ["google.com", "phone"]
+    }
+  }
+}

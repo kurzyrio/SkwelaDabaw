@@ -1,0 +1,27 @@
+{
+  "version": "1.11.3.2",
+  "versionCode": 114,
+  "releaseDate": "2026-11-03",
+  "versionScheme": {
+    "digit1": "App Version",
+    "digit2": "Major Features added",
+    "digit3": "Minor updates",
+    "digit4": "Fixes"
+  },
+  "minSupportedVersion": "1.6.0.0",
+  "required": "no",
+  "forceUpdate": false,
+  "developer": "Kurzyrio",
+  "supportEmail": "jerriviencenatad@gmail.com",
+  "title": "Streamlined Google & Guest Sign-In",
+  "releaseNotes": [
+    "Streamlined Sign-In: Temporarily disabled mobile number sign-in to keep onboarding clean, fast, and focused on Google Account and Guest access.",
+    "Academic Profile Onboarding: Degree Program / Course and College Year Level remain fully integrated in Step 3.",
+    "Passwordless Experience: Zero password prompts or password creation screens during onboarding."
+  ],
+  "downloadUrl": "https://skweladabaw.kurzyrio.site/download",
+  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.3.2.apk",
+  "sizeBytes": 26581223,
+  "sizeFormatted": "25.3 MB",
+  "sha256": "d2d74b303d1d5c4a718a4c78b2842ee2d37f342479e078a7107e557426aac7f6"
+}

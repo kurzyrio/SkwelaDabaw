@@ -1,0 +1,12 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">SkwelaDabaw</string>
+    <string name="title_activity_main">SkwelaDabaw</string>
+    <string name="package_name">com.kurzyrio.skweladabaw</string>
+    <string name="custom_url_scheme">com.kurzyrio.skweladabaw</string>
+    <string name="default_web_client_id">981655805429-f16f8mrme8snjr02mnapmj27ln3ofb2a.apps.googleusercontent.com</string>
+    <string name="widget_schedule_small_desc">Displays your next upcoming class with room and start time.</string>
+    <string name="widget_schedule_medium_desc">Displays today\'s schedule count, current subject, and upcoming class.</string>
+    <string name="widget_schedule_large_desc">Detailed daily timetable grid with times, rooms, and upcoming classes.</string>
+    <string name="widget_tasks_desc">Quick glance at pending assignments, projects, and deadlines.</string>
+</resources>

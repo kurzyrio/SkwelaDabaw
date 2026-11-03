@@ -1,0 +1,98 @@
+<svg viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0A1128" />
+      <stop offset="50%" stop-color="#14213D" />
+      <stop offset="100%" stop-color="#1E3A8A" />
+    </linearGradient>
+    <radialGradient id="pedestalGlow1" cx="50%" cy="80%" r="55%">
+      <stop offset="0%" stop-color="#38BDF8" stop-opacity="0.4" />
+      <stop offset="100%" stop-color="#0A1128" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="crestGrad1" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#674121"/>
+      <stop offset="45%" stop-color="#674121"/>
+      <stop offset="85%" stop-color="#F6ECD5"/>
+      <stop offset="100%" stop-color="#F6ECD5"/>
+    </linearGradient>
+    <linearGradient id="beakGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3D4650"/>
+      <stop offset="100%" stop-color="#222830"/>
+    </linearGradient>
+    <linearGradient id="wingGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#5A361C"/>
+      <stop offset="60%" stop-color="#744827"/>
+      <stop offset="100%" stop-color="#3C2310"/>
+    </linearGradient>
+    <linearGradient id="rimBorder1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F59E0B" />
+      <stop offset="50%" stop-color="#38BDF8" />
+      <stop offset="100%" stop-color="#1E40AF" />
+    </linearGradient>
+    <filter id="mascotShadow1" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.45" />
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg1)" />
+  <rect width="512" height="512" rx="112" fill="url(#pedestalGlow1)" />
+  <rect width="506" height="506" x="3" y="3" rx="109" stroke="url(#rimBorder1)" stroke-width="4.5" opacity="0.8" />
+  <g filter="url(#mascotShadow1)" transform="translate(49, 44) scale(0.74)">
+    <ellipse cx="265" cy="565" rx="140" ry="18" fill="#000000" opacity="0.35" />
+    <g id="tailFeathers">
+      <path d="M310 460 C360 480 415 515 425 545 C410 548 395 550 380 542 C415 555 425 570 395 565 C380 562 360 550 340 520 C320 500 310 475 310 460 Z" fill="#3C2310" stroke="#111" stroke-width="4" stroke-linejoin="round"/>
+      <path d="M315 480 C360 505 390 535 410 558 C380 558 350 535 330 505 Z" fill="#3C2310" stroke="#111" stroke-width="3.5" stroke-linejoin="round"/>
+    </g>
+    <g id="legsTalons">
+      <path d="M190 420 C185 450 180 470 185 490 C195 495 210 495 220 485 C225 465 225 440 220 420 Z" fill="#FAF3E5" stroke="#111" stroke-width="4"/>
+      <path d="M198 480 L195 525 L210 525 L212 480 Z" fill="#FFB800" stroke="#111" stroke-width="3.5"/>
+      <path d="M185 520 C175 525 165 535 162 546 C170 548 180 542 188 535 Z" fill="#FFB800" stroke="#111" stroke-width="3.5"/>
+      <path d="M162 546 C155 552 153 560 156 565 C162 563 166 555 170 548 Z" fill="#202224" stroke="#111" stroke-width="2.5"/>
+      <path d="M195 522 C195 535 190 550 190 558 C198 560 206 550 206 535 Z" fill="#FFB800" stroke="#111" stroke-width="3.5"/>
+      <path d="M190 558 C188 566 189 574 194 577 C198 572 201 564 198 560 Z" fill="#202224" stroke="#111" stroke-width="2.5"/>
+      <path d="M208 522 C215 532 222 544 226 554 C232 550 230 540 220 530 Z" fill="#FFB800" stroke="#111" stroke-width="3.5"/>
+      <path d="M226 554 C230 562 236 568 240 567 C240 560 236 553 232 550 Z" fill="#202224" stroke="#111" stroke-width="2.5"/>
+      <path d="M270 425 C265 455 260 475 268 495 C280 500 295 495 305 480 C305 455 300 435 295 425 Z" fill="#FAF3E5" stroke="#111" stroke-width="4"/>
+      <path d="M278 485 L275 528 L290 528 L292 485 Z" fill="#FFB800" stroke="#111" stroke-width="3.5"/>
+      <path d="M265 525 C255 532 246 542 244 552 C252 554 260 548 268 538 Z" fill="#FFB800" stroke="#111" stroke-width="3.5"/>
+      <path d="M244 552 C238 558 236 566 239 570 C245 568 248 560 252 554 Z" fill="#202224" stroke="#111" stroke-width="2.5"/>
+      <path d="M276 525 C276 538 273 552 273 560 C282 562 289 552 289 536 Z" fill="#FFB800" stroke="#111" stroke-width="3.5"/>
+      <path d="M273 560 C271 568 273 576 278 578 C281 573 284 565 282 562 Z" fill="#202224" stroke="#111" stroke-width="2.5"/>
+      <path d="M288 525 C298 534 308 546 312 556 C318 550 315 540 302 530 Z" fill="#FFB800" stroke="#111" stroke-width="3.5"/>
+      <path d="M312 556 C318 563 325 568 328 567 C327 559 322 553 318 550 Z" fill="#202224" stroke="#111" stroke-width="2.5"/>
+    </g>
+    <path d="M165 280 C135 320 120 390 135 480 C145 490 165 485 180 470 C165 430 160 380 175 320 Z" fill="#3C2310" stroke="#111" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M175 250 C155 320 145 400 170 465 C185 500 235 515 275 510 C315 505 350 470 360 415 C370 340 340 260 310 240 Z" fill="#FAF3E5" stroke="#111" stroke-width="4.5" stroke-linejoin="round"/>
+    <path d="M175 230 C160 260 165 295 185 315 C190 300 200 320 215 325 C220 310 230 330 245 330 C260 330 270 310 280 325 C295 315 305 300 315 310 C330 290 340 260 335 230 Z" fill="#EBD9B7" stroke="#111" stroke-width="4" stroke-linejoin="round"/>
+    <g stroke="#7A522F" stroke-width="3" stroke-linecap="round">
+      <path d="M198 255 C195 270 197 285 200 295"/>
+      <path d="M228 250 C226 270 228 290 230 305"/>
+      <path d="M260 250 C262 270 260 290 258 305"/>
+      <path d="M288 255 C290 270 288 285 285 295"/>
+      <path d="M215 365 C210 385 214 405 218 420"/>
+      <path d="M245 360 C242 385 245 410 248 435"/>
+      <path d="M272 368 C275 388 272 408 270 422"/>
+    </g>
+    <path d="M295 240 C340 260 410 320 420 430 C425 480 395 550 365 570 C345 580 330 570 320 545 C320 490 300 410 290 330 Z" fill="url(#wingGrad1)" stroke="#111" stroke-width="4.5" stroke-linejoin="round"/>
+    <path d="M320 330 C350 380 395 440 395 510 C380 535 365 550 355 540 C345 490 330 430 310 370 Z" fill="#744827" stroke="#111" stroke-width="3.5" stroke-linejoin="round"/>
+    <path d="M335 350 C365 400 385 450 380 500 C370 515 358 520 350 510 C345 470 335 425 320 380 Z" fill="#5A361C" stroke="#111" stroke-width="3"/>
+    <g stroke="#111" stroke-width="3" stroke-linecap="round">
+      <path d="M330 310 C360 340 385 370 395 400"/>
+      <path d="M325 360 C350 390 375 425 385 460"/>
+    </g>
+    <g id="headGroup">
+      <path d="M 180 180 C 150 160 130 135 125 105 C 145 110 160 125 170 140 C 150 110 140 80 142 55 C 160 68 175 90 185 110 C 170 75 168 40 178 20 C 192 38 202 65 208 90 C 200 55 205 20 220 5 C 232 25 238 55 240 80 C 240 40 252 8 268 0 C 278 20 282 50 282 78 C 290 38 310 12 328 10 C 330 35 328 65 320 90 C 338 55 362 35 380 40 C 375 68 365 95 350 118 C 375 95 400 85 415 100 C 400 125 385 145 365 160 C 390 150 415 155 422 175 C 405 195 385 205 360 210 C 370 230 365 255 345 270 C 330 260 320 240 315 220 C 295 240 265 245 240 240 C 210 245 185 235 175 210 Z" fill="url(#crestGrad1)" stroke="#111" stroke-width="4.5" stroke-linejoin="round"/>
+      <path d="M190 160 C185 115 220 85 270 85 C320 85 345 115 345 165 C345 210 325 240 270 240 C215 240 190 210 190 160 Z" fill="#FAFAF0" stroke="#111" stroke-width="4.5" stroke-linejoin="round"/>
+      <path d="M210 145 C205 125 225 115 255 115 C285 115 315 120 330 140 C345 160 340 190 320 200 C295 210 265 210 240 205 C215 200 205 175 210 145 Z" fill="#2C3238" stroke="#111" stroke-width="4" stroke-linejoin="round"/>
+      <ellipse cx="295" cy="155" rx="20" ry="22" fill="#FFFFFF" stroke="#111" stroke-width="3.5"/>
+      <circle cx="295" cy="155" r="16" fill="#0284C7"/>
+      <circle cx="295" cy="155" r="12" fill="#16191D"/>
+      <circle cx="290" cy="148" r="5.5" fill="#FFFFFF"/>
+      <circle cx="302" cy="162" r="2.8" fill="#FFFFFF"/>
+      <path d="M276 135 C288 130 305 130 316 135" fill="none" stroke="#111" stroke-width="4" stroke-linecap="round"/>
+      <path d="M320 145 C350 150 385 165 390 195 C392 215 375 235 350 240 C340 235 330 220 330 205 C330 195 325 185 315 180 Z" fill="url(#beakGrad1)" stroke="#111" stroke-width="4.5" stroke-linejoin="round"/>
+      <ellipse cx="338" cy="165" rx="3.5" ry="2" fill="#111" transform="rotate(-15 338 165)"/>
+      <path d="M330 195 C345 202 365 202 375 195" fill="none" stroke="#111" stroke-width="3.5" stroke-linecap="round"/>
+    </g>
+  </g>
+  <polygon points="446,46 454,62 472,65 459,78 462,96 446,87 430,96 433,78 420,65 438,62" fill="#FBBF24" opacity="0.9" />
+</svg>

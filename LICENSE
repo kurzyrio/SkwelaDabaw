@@ -1,0 +1,65 @@
+SkwelaDabaw Source-Available and Community Trust License
+Version 1.0, November 2026
+
+Copyright (c) 2026 KurzIsRio / Jerri Vie Natad and SkwelaDabaw Contributors.
+All rights reserved.
+
+==============================================================================
+PREAMBLE: COMMITMENT TO TRANSPARENCY & COMMUNITY TRUST
+==============================================================================
+
+SkwelaDabaw is an offline-first student academic and commuter companion built 
+for the students and commuters of Davao City.
+
+This source code is made publicly available on GitHub to establish complete 
+transparency, foster student trust, enable independent security and privacy 
+audits, and invite collaborative peer contributions from the local and global 
+developer community.
+
+==============================================================================
+TERMS AND CONDITIONS FOR USE, INSPECTION, AND CONTRIBUTION
+==============================================================================
+
+1. TRANSPARENCY & INSPECTION RIGHTS
+   Permission is hereby granted, free of charge, to any person obtaining a copy 
+   of this software and associated documentation files (the "Software"), to 
+   inspect, audit, review, study, and compile the Software on their personal 
+   devices solely for personal, non-commercial, and educational purposes.
+
+2. COMMUNITY CONTRIBUTIONS
+   You are encouraged to contribute to the official SkwelaDabaw project. 
+   Bug fixes, documentation improvements, UI refinements, and feature 
+   enhancements submitted via GitHub Pull Requests or official repository 
+   issue trackers may be reviewed and incorporated into official releases 
+   by the project maintainer.
+
+3. STRICT PROHIBITION ON UNAUTHORIZED DISTRIBUTION & STORE RE-PUBLISHING
+   You may NOT, under any circumstance:
+   a. Re-publish, redistribute, sublicense, or package this Software (or any 
+      derivative, re-branded, or modified version thereof) to public or 
+      commercial app distribution channels—including, but not limited to, 
+      the Google Play Store, Apple App Store, F-Droid, or third-party APK 
+      hosting repositories—without explicit prior written consent from the 
+      copyright holder.
+   b. Sell, monetize, rent, or lease the Software, its branding, or its assets.
+   
+   Official public distributions of the SkwelaDabaw application are provided 
+   strictly and exclusively through official channels:
+   - Official GitHub Releases: https://github.com/KurzIsRio/SkwelaDabaw
+   - Official Web Portal: https://skweladabaw.kurzyrio.site
+   - Official Google Play listing (when published by KurzIsRio)
+
+4. TRADEMARKS & ASSETS
+   The names "SkwelaDabaw", "Bayani", and related graphic logos, mascots, 
+   audio files, and branding elements remain the exclusive intellectual property 
+   of the copyright holder and may not be used in connection with any third-party 
+   or derivative product without permission.
+
+5. DISCLAIMER OF WARRANTY
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN 
+   THE SOFTWARE.

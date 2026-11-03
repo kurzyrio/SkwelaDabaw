@@ -1,0 +1,99 @@
+# ==============================================================================
+# SkwelaDabaw Mobile Application — Root Git Ignore
+# ==============================================================================
+
+# 1. Environment Variables & Secrets
+.env
+.env.*
+!.env.example
+android/app/google-services.json
+!android/app/google-services.json.example
+**/local.properties
+android/local.properties
+*.jks
+*.keystore
+*.p12
+*.pem
+*.key
+
+# 2. Dependencies & Build Artifacts
+node_modules/
+dist/
+dist-ssr/
+*.local
+*.tsbuildinfo
+temp.css
+
+# 3. Android Native Build Artifacts
+android/.gradle/
+android/build/
+android/app/build/
+android/.externalNativeBuild/
+android/.cxx/
+android/captures/
+android/.navigation/
+android/app/src/main/assets/public
+android/app/src/main/assets/capacitor.config.json
+android/app/src/main/assets/capacitor.plugins.json
+android/app/src/main/res/xml/config.xml
+android/capacitor-cordova-android-plugins
+
+# 4. Binaries, Archives & Package Outputs
+*.apk
+*.aab
+*.aar
+*.ap_
+*.dex
+*.class
+*.zip
+*.tar
+*.gz
+*.7z
+*.rar
+public/**/*.apk
+public/*.apk
+public/downloads/
+
+# 5. Logs & Temporary Files
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+admin_log.txt
+scratch/
+
+# 6. IDEs & Operating System Files
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# 7. Internal Subsystems & Non-Client Codebases (Kept in Private Repos)
+web/
+admin-desktop/
+admin-android/
+decompiled_routeapps/
+scripts/
+
+# 8. Internal Documentation, Tracking & AI Prompt Files
+.agents/
+.changelog/
+CHANGELOG.pdf
+GEMINI.md
+FEATURE_TRACKER.md
+PROJECT.md
+DOCUMENTATION.md
+EAGLE_BUDDY_DOCUMENTATION (1).md
+EagleBuddy_Mobile_Asset_Kit/
+SKWELA_DABAW_COMPLETE_DOCUMENTATION.txt
+TAP_POP_FX_DOCUMENTATION.md

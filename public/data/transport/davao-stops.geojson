@@ -1,0 +1,193 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "osm-node-9206525697",
+        "name": null,
+        "role": "platform",
+        "osmNodeId": 9206525697,
+        "boardingType": "official_stop"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          125.6074456,
+          7.0641159
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "osm-node-8519477450",
+        "name": null,
+        "role": "stop",
+        "osmNodeId": 8519477450,
+        "boardingType": "route_segment"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          121.0995117,
+          14.3110966
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "osm-node-2972932777",
+        "name": null,
+        "role": "stop",
+        "osmNodeId": 2972932777,
+        "boardingType": "route_segment"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          123.1895208,
+          13.6193575
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "osm-node-5927884962",
+        "name": null,
+        "role": "stop",
+        "osmNodeId": 5927884962,
+        "boardingType": "route_segment"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          123.7457294,
+          13.1432088
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "osm-node-10285427459",
+        "name": null,
+        "role": "stop",
+        "osmNodeId": 10285427459,
+        "boardingType": "route_segment"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          124.6116207,
+          12.0623551
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "osm-node-2531985956",
+        "name": null,
+        "role": "stop",
+        "osmNodeId": 2531985956,
+        "boardingType": "route_segment"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          124.9878317,
+          11.2392235
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "osm-node-6071905557",
+        "name": null,
+        "role": "stop",
+        "osmNodeId": 6071905557,
+        "boardingType": "route_segment"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          125.4844956,
+          9.7626344
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "osm-node-10254129858",
+        "name": null,
+        "role": "stop",
+        "osmNodeId": 10254129858,
+        "boardingType": "route_segment"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          125.5209026,
+          8.9407525
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "osm-node-1694610835",
+        "name": null,
+        "role": "stop",
+        "osmNodeId": 1694610835,
+        "boardingType": "route_segment"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          125.9788381,
+          8.5077032
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "osm-node-1260581113",
+        "name": null,
+        "role": "stop",
+        "osmNodeId": 1260581113,
+        "boardingType": "route_segment"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          125.5356242,
+          8.958558
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "osm-node-7169491404",
+        "name": null,
+        "role": "stop",
+        "osmNodeId": 7169491404,
+        "boardingType": "route_segment"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          123.4164921,
+          13.4230633
+        ]
+      }
+    }
+  ],
+  "attribution": "© OpenStreetMap contributors"
+}

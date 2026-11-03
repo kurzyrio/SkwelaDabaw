@@ -1,0 +1,22 @@
+{
+  "generatedAt": "2026-10-11T08:39:47.507Z",
+  "datasetVersion": "2026.10.11",
+  "osmTimestamp": "2026-06-01T08:52:28Z",
+  "routes": 123,
+  "verifiedRoutes": 114,
+  "partialRoutes": 0,
+  "unverifiedRoutes": 9,
+  "provincialRoutes": 13,
+  "provincialVerifiedRoutes": 1,
+  "provincialPartialRoutes": 2,
+  "provincialUnverifiedRoutes": 10,
+  "stopsImported": 11,
+  "attribution": "© OpenStreetMap contributors",
+  "license": "Map data from OpenStreetMap is available under the Open Database License (ODbL). Route geometry imported from OpenStreetMap route relations retains its source relation ID for attribution and re-verification.",
+  "jeepneyDataset": {
+    "source": "routes.ts (user-provided dataset) + Davao City PUJ route KMLs (LTFRB Region XI codes, added 2026-10-11)",
+    "migratedAt": "2026-10-11T08:39:47.507Z",
+    "routeCount": 114,
+    "note": "Replaces all prior numbered/named registry, OSM-stitched, and commutedavao/commutetour-merged jeepney geometry wholesale."
+  }
+}
