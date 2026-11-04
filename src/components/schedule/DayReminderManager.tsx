@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Bell, Plus, Trash2, X, Clock, CalendarDays, Check, Pencil } from 'lucide-react';
 import { db } from '../../db';
@@ -6,6 +6,7 @@ import { DayReminderItem, DayOfWeek } from '../../types';
 import { scheduleDayReminder, cancelDayReminder } from '../../services/notificationService';
 import { CustomTimePicker } from '../common/CustomTimePicker';
 import { queueCloudSync } from '../../services/cloudSyncService';
+import { syncRoutinesToWidgets } from '../../services/widgetService';
 
 const DAYS_OF_WEEK: DayOfWeek[] = [
   'Everyday',
@@ -27,6 +28,12 @@ export const DayReminderManager: React.FC = () => {
   const [editingReminder, setEditingReminder] = useState<DayReminderItem | null>(null);
 
   const reminders = useLiveQuery(() => db.dayReminders.toArray(), []) || [];
+
+  useEffect(() => {
+    if (reminders && reminders.length >= 0) {
+      syncRoutinesToWidgets(reminders);
+    }
+  }, [reminders]);
 
   const handleCreateReminder = async (e: React.FormEvent) => {
     e.preventDefault();

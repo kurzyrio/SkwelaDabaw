@@ -61,7 +61,7 @@ export const DEFAULT_GUEST_SESSION: StudentAuthSession = {
   name: 'Student',
   email: '',
   avatar: '',
-  campusId: 'addu-jacinto',
+  campusId: '',
   studentId: '',
   course: 'Enrolled Student',
   yearLevel: 'Freshman',
@@ -87,7 +87,7 @@ export const getSavedSession = (): StudentAuthSession => {
             username: serverUser.username || '',
             email: serverUser.email || '',
             avatar: serverUser.avatar_url || '',
-            campusId: serverUser.campus_id || 'addu-jacinto',
+            campusId: serverUser.campus_id || '',
             course: serverUser.course || 'Enrolled Student',
             role: serverUser.role || 'student'
           };
@@ -293,10 +293,11 @@ const performGoogleSignIn = async (currentCampusId: string): Promise<StudentAuth
   return null;
 };
 
-export const signInWithGoogle = async (currentCampusId = 'addu-jacinto'): Promise<StudentAuthSession | null> => {
+export const signInWithGoogle = async (currentCampusId?: string): Promise<StudentAuthSession | null> => {
+  const resolvedCampus = currentCampusId || getSavedSession().campusId || '';
   try {
     const session = await withTimeout(
-      performGoogleSignIn(currentCampusId),
+      performGoogleSignIn(resolvedCampus),
       AUTH_TIMEOUT_MS,
       'Authentication timeout • Network response took too long'
     );
@@ -375,9 +376,10 @@ export const sendPhoneOtp = async (phoneNumber: string): Promise<{ verificationI
 export const verifyPhoneOtpCode = async (
   verificationId: string,
   verificationCode: string,
-  campusId = 'addu-jacinto'
+  campusId?: string
 ): Promise<StudentAuthSession> => {
   const code = verificationCode.trim();
+  const effectiveCampusId = campusId || getSavedSession().campusId || '';
   let pendingPhone = '';
   try {
     pendingPhone = sessionStorage.getItem('pending_phone_number') || '';
@@ -393,7 +395,7 @@ export const verifyPhoneOtpCode = async (
       body: JSON.stringify({
         phone: pendingPhone,
         code: code,
-        campusId: campusId
+        campusId: effectiveCampusId
       })
     });
 
@@ -461,7 +463,7 @@ export const verifyPhoneOtpCode = async (
     email: user.email || syntheticEmail,
     phoneNumber: rawPhone,
     avatar: user.photoUrl || user.photoURL || '',
-    campusId: campusId || 'addu-jacinto',
+    campusId: campusId || getSavedSession().campusId || '',
     studentId: '',
     course: 'Enrolled Student',
     yearLevel: 'Freshman',

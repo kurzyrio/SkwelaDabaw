@@ -1,6 +1,6 @@
 {
-  "version": "1.11.3.6",
-  "versionCode": 118,
+  "version": "1.11.3.7",
+  "versionCode": 119,
   "releaseDate": "2026-11-05",
   "versionScheme": {
     "digit1": "App Version",
@@ -13,15 +13,17 @@
   "forceUpdate": false,
   "developer": "Kurzyrio",
   "supportEmail": "jerriviencenatad@gmail.com",
-  "title": "Timetable Auto-Sync & Single-Row Topbar",
+  "title": "Widget Polish, Routines & Tasks Widgets, and Campus Persistence",
   "releaseNotes": [
-    "Automated Timetable Login Sync: Classes and coursework automatically restore from cloud backup immediately upon logging in or switching accounts.",
-    "Guest Schedule Preservation: Guest local schedules are safely preserved during sign-in transitions, preventing accidental data loss.",
-    "Single-Row Timetable Topbar: Cleanly unified Today, Weekly, Routines, Add Class, and More Options across a single organized topbar row."
+    "Widget Outline & Layout Polish: Fixed outline and border clipping on schedule cards across home screen widgets.",
+    "New Routines & Tasks Widgets: Added dedicated home screen widgets for day routine alarms and scrollable tasks.",
+    "Adaptive Theme Eagle Overlay: The floating Eagle companion bubble and quick glance card now match your equipped app theme.",
+    "Permanent Campus Persistence: Resolved an issue where selected campuses reverted to default after app restarts.",
+    "Timetable Options Menu Fix: Resolved the 3-dot options dropdown on the timetable header so options open cleanly."
   ],
   "downloadUrl": "https://skweladabaw.kurzyrio.site/download",
-  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.3.6.apk",
-  "sizeBytes": 26582319,
+  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.3.7.apk",
+  "sizeBytes": 26598245,
   "sizeFormatted": "25.4 MB",
-  "sha256": "ed2b92d6361fac99ae360add8941fc3ec1e7e1d60871c33fc1d03343a61e9fcc"
+  "sha256": "19637f2fd18321c79f3a670b270b80e9d9330c752a8d5def31aa54822c4956d1"
 }

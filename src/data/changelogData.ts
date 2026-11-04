@@ -17,10 +17,51 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.3.7',
+    releaseDate: 'November 5, 2026',
+    title: 'Widget Polish, Routines & Tasks Widgets, and Campus Persistence',
+    isLatest: true,
+    tagline: 'Fixed schedule widget outline clipping, added new Day Routines and Tasks List home screen widgets, theme-adaptive Eagle Overlay, and permanent campus persistence.',
+    highlights: [
+      'Eliminated border and corner outline clipping across schedule cards in home screen widgets',
+      'Added dedicated home screen widgets for weekly Day Routine alarms and scrollable Tasks checklist',
+      'Upgraded Eagle Overlay with dynamic color theme adaptation matching your active app theme',
+      'Resolved campus selection persistence so chosen campuses remain saved across restarts and syncs',
+      'Fixed the timetable 3-dot options menu to open smoothly without clipping or glitching'
+    ],
+    items: [
+      {
+        type: 'fix',
+        title: 'Widget Card Outline Polish',
+        description: 'Fixed schedule card borders and rounded corners being cut off on home screen widgets.'
+      },
+      {
+        type: 'feature',
+        title: 'Day Routines & Tasks Widgets',
+        description: 'Added dedicated home screen widgets for daily routine alarms and a scrollable tasks list.'
+      },
+      {
+        type: 'improvement',
+        title: 'Theme-Adaptive Eagle Overlay',
+        description: 'The floating Eagle companion bubble and quick glance card now seamlessly match your active app theme.'
+      },
+      {
+        type: 'fix',
+        title: 'Campus Selection Persistence',
+        description: 'Eliminated hardcoded fallbacks so your selected campus stays saved permanently.'
+      },
+      {
+        type: 'fix',
+        title: 'Timetable Options Menu Glitch Fix',
+        description: 'Resolved the 3-dot options dropdown on the schedule header to open cleanly over page content.'
+      }
+    ]
+  },
+  {
     version: '1.11.3.6',
     releaseDate: 'November 5, 2026',
     title: 'Timetable Auto-Sync & Single-Row Topbar',
-    isLatest: true,
+    isLatest: false,
     tagline: 'Automated timetable cloud restoration upon login or account switch with guest schedule preservation, and unified the Schedule header into a crisp single row.',
     highlights: [
       'Automated timetable cloud restoration immediately upon account login or switch without requiring manual sync',

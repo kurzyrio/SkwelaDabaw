@@ -54,7 +54,16 @@ export const WelcomeOnboardingModal: React.FC<WelcomeOnboardingModalProps> = ({
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [slideDirection, setSlideDirection] = useState<'right' | 'left'>('right');
   const [selectedRole, setSelectedRole] = useState<'student' | 'teacher'>('student');
-  const [selectedCampus, setSelectedCampus] = useState<string>('addu-jacinto');
+  const [selectedCampus, setSelectedCampus] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('skweladabaw_user_session');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.campusId) return parsed.campusId;
+      }
+    } catch (_) {}
+    return '';
+  });
   const [selectedYear, setSelectedYear] = useState<string>('1st');
   const [selectedFacultyRank, setSelectedFacultyRank] = useState<string>('asst_prof');
   const [selectedHub, setSelectedHub] = useState<string>('Matina Crossing');

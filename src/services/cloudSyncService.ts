@@ -14,7 +14,7 @@ import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
 import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 import { scheduleAllClassSchedulesReminders, refreshUnremovableClassNotification } from './notificationService';
-import { syncScheduleToWidgets, syncTasksToWidgets } from './widgetService';
+import { syncScheduleToWidgets, syncTasksToWidgets, syncRoutinesToWidgets } from './widgetService';
 
 const SYNC_API_URL = 'https://skweladabaw.kurzyrio.site/api/sync.php';
 
@@ -142,9 +142,9 @@ export async function restoreUserData(
       );
       const isProfileDirty = typeof window !== 'undefined' && localStorage.getItem('skweladabaw_profile_dirty') === 'true';
 
-      const isLocalCampusCustom = Boolean(currentSaved.campusId && currentSaved.campusId !== 'addu-jacinto');
-      const isCloudCampusDefault = !u.campus_id || u.campus_id === 'addu-jacinto';
-      const shouldPreserveLocalCampus = isProfileDirty || hasPendingSync || (isLocalCampusCustom && isCloudCampusDefault) || (Boolean(currentSaved.campusId) && currentSaved.campusId !== u.campus_id && hasPendingSync);
+      const isLocalCampusCustom = Boolean(currentSaved.campusId);
+      const isCloudCampusDefault = !u.campus_id;
+      const shouldPreserveLocalCampus = isProfileDirty || hasPendingSync || isLocalCampusCustom || (Boolean(currentSaved.campusId) && currentSaved.campusId !== u.campus_id);
 
       const hasRealLocalUsername = Boolean(currentSaved.username && !/^student_[a-f0-9]{6,16}$/i.test(currentSaved.username));
       const isCloudUsernameValid = Boolean(u.username && !/^student_[a-f0-9]{6,16}$/i.test(u.username));
@@ -155,7 +155,7 @@ export async function restoreUserData(
       const shouldPreserveLocalName = isProfileDirty || hasPendingSync || (isLocalNameCustom && isCloudNameDefault);
       const resolvedName = shouldPreserveLocalName ? (currentSaved.name || u.display_name || 'Student') : ((u.display_name && u.display_name !== 'Davao Student') ? u.display_name : (currentSaved.name || 'Student'));
 
-      const resolvedCampus = shouldPreserveLocalCampus ? (currentSaved.campusId || u.campus_id || 'addu-jacinto') : (u.campus_id || currentSaved.campusId || 'addu-jacinto');
+      const resolvedCampus = shouldPreserveLocalCampus ? (currentSaved.campusId || u.campus_id || '') : (u.campus_id || currentSaved.campusId || '');
 
       const isLocalCourseCustom = Boolean(currentSaved.course && currentSaved.course !== 'Enrolled Student');
       const isCloudCourseDefault = !u.course || u.course === 'Enrolled Student';
@@ -370,6 +370,7 @@ export async function restoreUserData(
           await db.dayReminders.clear();
         }
       }
+      db.dayReminders.toArray().then(syncRoutinesToWidgets).catch(() => {});
 
       // 5. Restore Expenses into Dexie
       if (Array.isArray(responseData.expenses) && responseData.expenses.length > 0) {

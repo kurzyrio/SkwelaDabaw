@@ -40,7 +40,7 @@ import { checkForAppUpdate, UpdateCheckResult } from './services/updateService';
 import { PopupAnnouncement, fetchActivePopupAnnouncement, isAnnouncementSnoozed } from './services/announcementService';
 import { fetchDavaoWeather } from './services/weatherService';
 import { db, initializeDatabaseWithSeedData } from './db';
-import { syncScheduleToWidgets, syncTasksToWidgets, isBatteryExemptionActive, WidgetBridge } from './services/widgetService';
+import { syncScheduleToWidgets, syncTasksToWidgets, syncRoutinesToWidgets, isBatteryExemptionActive, WidgetBridge } from './services/widgetService';
 import { Capacitor } from '@capacitor/core';
 import { 
   subscribeToRemoteAppConfig, 
@@ -336,9 +336,9 @@ export function App() {
             );
             const isProfileDirty = typeof localStorage !== 'undefined' && localStorage.getItem('skweladabaw_profile_dirty') === 'true';
 
-            const isLocalCampusCustom = Boolean(userSession.campusId && userSession.campusId !== 'addu-jacinto');
-            const isCloudCampusDefault = !result.user.campusId || result.user.campusId === 'addu-jacinto';
-            const preserveLocalCampus = isProfileDirty || hasPendingSync || (isLocalCampusCustom && isCloudCampusDefault) || (Boolean(userSession.campusId) && userSession.campusId !== result.user.campusId && hasPendingSync);
+            const isLocalCampusCustom = Boolean(userSession.campusId);
+            const isCloudCampusDefault = !result.user.campusId;
+            const preserveLocalCampus = isProfileDirty || hasPendingSync || isLocalCampusCustom || (Boolean(userSession.campusId) && userSession.campusId !== result.user.campusId);
 
             const isLocalNameCustom = Boolean(userSession.name && userSession.name !== 'Davao Student' && userSession.name !== 'Student');
             const isCloudNameDefault = !result.user.displayName || result.user.displayName === 'Davao Student';
@@ -360,7 +360,7 @@ export function App() {
               username: result.user.username || userSession.username,
               email: result.user.email || userSession.email,
               avatar: (preserveLocalName && userSession.avatar) ? userSession.avatar : (result.user.avatar || userSession.avatar),
-              campusId: preserveLocalCampus ? (userSession.campusId || result.user.campusId || 'addu-jacinto') : (result.user.campusId || userSession.campusId || 'addu-jacinto'),
+              campusId: preserveLocalCampus ? (userSession.campusId || result.user.campusId || '') : (result.user.campusId || userSession.campusId || ''),
               course: preserveLocalCourse ? (userSession.course || result.user.course || 'Enrolled Student') : (result.user.course || userSession.course || 'Enrolled Student'),
               yearLevel: preserveLocalYear ? (userSession.yearLevel || result.user.yearLevel || 'College Student') : (result.user.yearLevel || userSession.yearLevel || 'College Student'),
               role: result.user.role || userSession.role,
@@ -644,13 +644,15 @@ export function App() {
 
     const handleResume = async () => {
       try {
-        const [allSchedules, allTasks] = await Promise.all([
+        const [allSchedules, allTasks, allRoutines] = await Promise.all([
           db.schedules.toArray(),
-          db.tasks.toArray()
+          db.tasks.toArray(),
+          db.dayReminders.toArray()
         ]);
         await Promise.all([
           syncScheduleToWidgets(allSchedules),
-          syncTasksToWidgets(allTasks)
+          syncTasksToWidgets(allTasks),
+          syncRoutinesToWidgets(allRoutines)
         ]);
       } catch (err) {
         console.warn('Widget resume sync error:', err);

@@ -30,6 +30,7 @@
             android:orientation="vertical">
 
             <TextView
+                android:id="@+id/card_header_title"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Eagle Companion"
@@ -114,6 +115,7 @@
                 android:ellipsize="end" />
 
             <TextView
+                android:id="@+id/card_weather_subtext"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Tap for forecast details"

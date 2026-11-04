@@ -43,6 +43,27 @@ public class WidgetScheduleHelper {
         public int endMinutes;
     }
 
+    public static class RoutineItem {
+        public String id;
+        public String title;
+        public String time;
+        public String dayOfWeek;
+        public boolean enabled = true;
+        public String notes;
+        public int timeMinutes;
+    }
+
+    public static class TaskWidgetItem {
+        public String id;
+        public String title;
+        public String dueDate;
+        public String dueTime;
+        public String priority;
+        public String courseCode;
+        public boolean completed;
+        public String notes;
+    }
+
     public static PendingIntent getPendingIntentForAction(Context context, String action, int delta, int requestCode) {
         return getPendingIntentForWidgetAction(context, action, AppWidgetManager.INVALID_APPWIDGET_ID, delta, requestCode);
     }
@@ -766,6 +787,197 @@ public class WidgetScheduleHelper {
         return views;
     }
 
+    public static List<RoutineItem> getAllRoutineItems(Context context) {
+        List<RoutineItem> list = new ArrayList<>();
+        if (context == null) return list;
+
+        SharedPreferences widgetPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        String allRoutinesJson = widgetPrefs.getString("all_routines_json", null);
+
+        if (allRoutinesJson == null || allRoutinesJson.trim().isEmpty()) {
+            SharedPreferences capPrefs = context.getSharedPreferences("CapacitorStorage", Context.MODE_PRIVATE);
+            allRoutinesJson = capPrefs.getString("all_routines_json", null);
+        }
+        if (allRoutinesJson == null || allRoutinesJson.trim().isEmpty()) {
+            SharedPreferences customPrefs = context.getSharedPreferences("SkwelaDabawWidgets", Context.MODE_PRIVATE);
+            allRoutinesJson = customPrefs.getString("all_routines_json", null);
+        }
+
+        if (allRoutinesJson == null || allRoutinesJson.trim().isEmpty()) {
+            return list;
+        }
+
+        try {
+            JSONArray arr = new JSONArray(allRoutinesJson);
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject obj = arr.getJSONObject(i);
+                RoutineItem item = new RoutineItem();
+                item.id = obj.optString("id", String.valueOf(i));
+                item.title = obj.optString("title", "Routine");
+                item.time = obj.optString("time", "08:00");
+                item.dayOfWeek = obj.optString("dayOfWeek", "Everyday");
+                item.enabled = obj.optBoolean("enabled", true);
+                item.notes = obj.optString("notes", "");
+                item.timeMinutes = parseMinutes(item.time);
+                list.add(item);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Error parsing all_routines_json", e);
+        }
+        return list;
+    }
+
+    public static List<TaskWidgetItem> getAllTaskItems(Context context) {
+        List<TaskWidgetItem> list = new ArrayList<>();
+        if (context == null) return list;
+
+        SharedPreferences widgetPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        String allTasksJson = widgetPrefs.getString("all_tasks_json", null);
+
+        if (allTasksJson == null || allTasksJson.trim().isEmpty()) {
+            SharedPreferences capPrefs = context.getSharedPreferences("CapacitorStorage", Context.MODE_PRIVATE);
+            allTasksJson = capPrefs.getString("all_tasks_json", null);
+        }
+        if (allTasksJson == null || allTasksJson.trim().isEmpty()) {
+            SharedPreferences customPrefs = context.getSharedPreferences("SkwelaDabawWidgets", Context.MODE_PRIVATE);
+            allTasksJson = customPrefs.getString("all_tasks_json", null);
+        }
+
+        if (allTasksJson == null || allTasksJson.trim().isEmpty()) {
+            return list;
+        }
+
+        try {
+            JSONArray arr = new JSONArray(allTasksJson);
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject obj = arr.getJSONObject(i);
+                TaskWidgetItem item = new TaskWidgetItem();
+                item.id = obj.optString("id", String.valueOf(i));
+                item.title = obj.optString("title", "Task");
+                item.dueDate = obj.optString("dueDate", "");
+                item.dueTime = obj.optString("dueTime", "");
+                item.priority = obj.optString("priority", "normal");
+                item.courseCode = obj.optString("courseCode", "");
+                item.completed = obj.optBoolean("completed", false) || obj.optBoolean("is_completed", false);
+                item.notes = obj.optString("notes", "");
+                list.add(item);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Error parsing all_tasks_json", e);
+        }
+        return list;
+    }
+
+    public static RemoteViews buildRoutinesWidgetViews(Context context, int appWidgetId) {
+        RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.widget_routines);
+
+        views.setOnClickPendingIntent(R.id.widget_routines_root,
+                getPendingIntentForTab(context, "schedule", 1006));
+
+        views.setOnClickPendingIntent(R.id.widget_routines_btn_add,
+                getPendingIntentForTab(context, "schedule", "routines", 6001));
+
+        views.setOnClickPendingIntent(R.id.widget_routines_btn_refresh,
+                getPendingIntentForWidgetAction(context, ACTION_WIDGET_REFRESH, appWidgetId, 0, 6002));
+
+        List<RoutineItem> routines = getAllRoutineItems(context);
+        int activeCount = 0;
+        for (RoutineItem r : routines) {
+            if (r.enabled) activeCount++;
+        }
+        views.setTextViewText(R.id.widget_routines_count, activeCount + " Active");
+
+        // Remote adapter
+        Intent serviceIntent = new Intent(context, WidgetRoutinesListService.class);
+        serviceIntent.putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId);
+        serviceIntent.setData(Uri.parse(serviceIntent.toUri(Intent.URI_INTENT_SCHEME)));
+        views.setRemoteAdapter(R.id.widget_routines_list, serviceIntent);
+        views.setEmptyView(R.id.widget_routines_list, R.id.widget_routines_empty);
+
+        Intent clickIntent = new Intent(context, MainActivity.class);
+        clickIntent.putExtra("target_tab", "schedule");
+        PendingIntent clickPendingIntent = PendingIntent.getActivity(
+                context,
+                1006,
+                clickIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_MUTABLE
+        );
+        views.setPendingIntentTemplate(R.id.widget_routines_list, clickPendingIntent);
+
+        // Apply theme
+        WidgetTheme theme = getWidgetTheme(context);
+        views.setInt(R.id.widget_routines_root, "setBackgroundResource", theme.cardBgRes);
+        views.setInt(R.id.widget_routines_badge, "setBackgroundResource", theme.badgeBgRes);
+        views.setTextColor(R.id.widget_routines_badge, theme.badgeTextColor);
+
+        views.setTextColor(R.id.widget_routines_count, theme.textSecondary);
+        views.setInt(R.id.widget_routines_btn_add, "setBackgroundResource", theme.btnBgRes);
+        views.setTextColor(R.id.widget_routines_btn_add, theme.textAccent);
+        views.setInt(R.id.widget_routines_btn_refresh, "setBackgroundResource", theme.btnBgRes);
+        views.setTextColor(R.id.widget_routines_btn_refresh, theme.btnTextColor);
+
+        views.setTextColor(R.id.widget_routines_empty_title, theme.textPrimary);
+        views.setTextColor(R.id.widget_routines_empty_sub, theme.textSecondary);
+        views.setTextColor(R.id.widget_routines_footer_brand, theme.textSecondary);
+
+        return views;
+    }
+
+    public static RemoteViews buildTasksLargeWidgetViews(Context context, int appWidgetId) {
+        RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.widget_tasks_large);
+
+        views.setOnClickPendingIntent(R.id.widget_tasks_large_root,
+                getPendingIntentForTab(context, "tasks", 1007));
+
+        views.setOnClickPendingIntent(R.id.widget_tasks_large_btn_add,
+                getPendingIntentForTab(context, "tasks", "tasks_add", 7001));
+
+        views.setOnClickPendingIntent(R.id.widget_tasks_large_btn_refresh,
+                getPendingIntentForWidgetAction(context, ACTION_WIDGET_REFRESH, appWidgetId, 0, 7002));
+
+        List<TaskWidgetItem> tasks = getAllTaskItems(context);
+        int pendingCount = 0;
+        for (TaskWidgetItem t : tasks) {
+            if (!t.completed) pendingCount++;
+        }
+        views.setTextViewText(R.id.widget_tasks_large_count, pendingCount + " Pending");
+
+        // Remote adapter
+        Intent serviceIntent = new Intent(context, WidgetTasksListService.class);
+        serviceIntent.putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId);
+        serviceIntent.setData(Uri.parse(serviceIntent.toUri(Intent.URI_INTENT_SCHEME)));
+        views.setRemoteAdapter(R.id.widget_tasks_large_list, serviceIntent);
+        views.setEmptyView(R.id.widget_tasks_large_list, R.id.widget_tasks_large_empty);
+
+        Intent clickIntent = new Intent(context, MainActivity.class);
+        clickIntent.putExtra("target_tab", "tasks");
+        PendingIntent clickPendingIntent = PendingIntent.getActivity(
+                context,
+                1007,
+                clickIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_MUTABLE
+        );
+        views.setPendingIntentTemplate(R.id.widget_tasks_large_list, clickPendingIntent);
+
+        // Apply theme
+        WidgetTheme theme = getWidgetTheme(context);
+        views.setInt(R.id.widget_tasks_large_root, "setBackgroundResource", theme.cardBgRes);
+        views.setInt(R.id.widget_tasks_large_badge, "setBackgroundResource", theme.badgeBgRes);
+        views.setTextColor(R.id.widget_tasks_large_badge, theme.badgeTextColor);
+
+        views.setTextColor(R.id.widget_tasks_large_count, theme.textSecondary);
+        views.setInt(R.id.widget_tasks_large_btn_add, "setBackgroundResource", theme.btnBgRes);
+        views.setTextColor(R.id.widget_tasks_large_btn_add, theme.textAccent);
+        views.setInt(R.id.widget_tasks_large_btn_refresh, "setBackgroundResource", theme.btnBgRes);
+        views.setTextColor(R.id.widget_tasks_large_btn_refresh, theme.btnTextColor);
+
+        views.setTextColor(R.id.widget_tasks_large_empty_title, theme.textPrimary);
+        views.setTextColor(R.id.widget_tasks_large_empty_sub, theme.textSecondary);
+        views.setTextColor(R.id.widget_tasks_large_footer_brand, theme.textSecondary);
+
+        return views;
+    }
+
     public static void updateWidgetInstance(Context context, int appWidgetId) {
         if (context == null || appWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) return;
         try {
@@ -784,8 +996,12 @@ public class WidgetScheduleHelper {
                 ScheduleSmallWidgetProvider.updateAppWidget(context, manager, appWidgetId);
             } else if (clsName.contains("SkwelaWidgetProvider")) {
                 SkwelaWidgetProvider.updateAppWidget(context, manager, appWidgetId);
+            } else if (clsName.contains("TasksLargeWidgetProvider")) {
+                TasksLargeWidgetProvider.updateAppWidget(context, manager, appWidgetId);
             } else if (clsName.contains("TasksWidgetProvider")) {
                 TasksWidgetProvider.updateAppWidget(context, manager, appWidgetId);
+            } else if (clsName.contains("RoutinesWidgetProvider")) {
+                RoutinesWidgetProvider.updateAppWidget(context, manager, appWidgetId);
             } else {
                 updateWidgetProvidersDirectly(context);
             }
@@ -826,10 +1042,24 @@ public class WidgetScheduleHelper {
                 }
             }
 
+            int[] tasksLargeIds = manager.getAppWidgetIds(new ComponentName(context, TasksLargeWidgetProvider.class));
+            if (tasksLargeIds != null && tasksLargeIds.length > 0) {
+                for (int id : tasksLargeIds) {
+                    TasksLargeWidgetProvider.updateAppWidget(context, manager, id);
+                }
+            }
+
             int[] tasksIds = manager.getAppWidgetIds(new ComponentName(context, TasksWidgetProvider.class));
             if (tasksIds != null && tasksIds.length > 0) {
                 for (int id : tasksIds) {
                     TasksWidgetProvider.updateAppWidget(context, manager, id);
+                }
+            }
+
+            int[] routinesIds = manager.getAppWidgetIds(new ComponentName(context, RoutinesWidgetProvider.class));
+            if (routinesIds != null && routinesIds.length > 0) {
+                for (int id : routinesIds) {
+                    RoutinesWidgetProvider.updateAppWidget(context, manager, id);
                 }
             }
         } catch (Exception e) {

@@ -1,5 +1,5 @@
 import { registerPlugin, Capacitor } from '@capacitor/core';
-import { ClassSchedule, TaskItem } from '../types';
+import { ClassSchedule, TaskItem, DayReminderItem } from '../types';
 
 export interface WidgetBridgePluginType {
   setWidgetData(options: { key: string; value: string }): Promise<{ success: boolean }>;
@@ -243,17 +243,41 @@ export async function syncTasksToWidgets(tasks: TaskItem[]): Promise<void> {
     };
 
     const jsonStr = JSON.stringify(payload);
+    const allTasksJson = JSON.stringify(tasks || []);
     localStorage.setItem('skweladabaw_widget_tasks_data', jsonStr);
+    localStorage.setItem('skweladabaw_all_tasks_json', allTasksJson);
 
     if (Capacitor.isNativePlatform()) {
       const activeThemeId = localStorage.getItem('skweladabaw_theme') || 'light';
       await WidgetBridge.setWidgetData({ key: 'app_theme_id', value: activeThemeId });
       await WidgetBridge.setWidgetData({ key: 'widget_tasks_data', value: jsonStr });
+      await WidgetBridge.setWidgetData({ key: 'all_tasks_json', value: allTasksJson });
       await WidgetBridge.updateWidgets();
       import('./eagleOverlayService').then((m) => m.autoSyncCurrentStateToOverlay()).catch(() => {});
     }
   } catch (err) {
     console.warn('Error syncing tasks to widgets:', err);
+  }
+}
+
+/**
+ * Synchronize weekly day routine reminders to Android Home Screen Widgets
+ */
+export async function syncRoutinesToWidgets(routines: DayReminderItem[]): Promise<void> {
+  try {
+    const allRoutines = routines || [];
+    const allRoutinesJson = JSON.stringify(allRoutines);
+    localStorage.setItem('skweladabaw_all_routines_json', allRoutinesJson);
+
+    if (Capacitor.isNativePlatform()) {
+      const activeThemeId = localStorage.getItem('skweladabaw_theme') || 'light';
+      await WidgetBridge.setWidgetData({ key: 'app_theme_id', value: activeThemeId });
+      await WidgetBridge.setWidgetData({ key: 'all_routines_json', value: allRoutinesJson });
+      await WidgetBridge.updateWidgets();
+      import('./eagleOverlayService').then((m) => m.autoSyncCurrentStateToOverlay()).catch(() => {});
+    }
+  } catch (err) {
+    console.warn('Error syncing routines to widgets:', err);
   }
 }
 

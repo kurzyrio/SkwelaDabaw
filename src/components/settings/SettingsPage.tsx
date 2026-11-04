@@ -349,7 +349,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   // Comprehensive Edit Profile Modal State
   const [isEditProfileOpen, setIsEditProfileOpen] = useState<boolean>(false);
   const [editDisplayName, setEditDisplayName] = useState<string>(userSession.name || '');
-  const [editCampusId, setEditCampusId] = useState<string>(userSession.campusId || 'addu-jacinto');
+  const [editCampusId, setEditCampusId] = useState<string>(userSession.campusId || '');
   const [editYearLevel, setEditYearLevel] = useState<string>(userSession.yearLevel || 'Freshman');
   const [editCourse, setEditCourse] = useState<string>(userSession.course || '');
   const [editAge, setEditAge] = useState<number | string>(userSession.age || 20);
@@ -654,7 +654,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
   const handleOpenEditProfile = () => {
     setEditDisplayName(userSession.name || '');
-    setEditCampusId(userSession.campusId || 'addu-jacinto');
+    setEditCampusId(userSession.campusId || '');
     setEditYearLevel(userSession.yearLevel || 'Freshman');
     setEditCourse(userSession.course || '');
     setEditAge(userSession.age || 20);

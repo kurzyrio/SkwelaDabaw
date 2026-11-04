@@ -16,6 +16,7 @@ export interface EagleOverlayData {
   pendingTasksCount?: number;
   nextTaskTitle?: string;
   nextTaskDue?: string;
+  themeId?: string;
 }
 
 export interface EagleOverlayPluginType {
@@ -236,6 +237,8 @@ export async function autoSyncCurrentStateToOverlay(): Promise<void> {
     } catch (taskErr) {
       console.warn('Error fetching tasks for overlay:', taskErr);
     }
+
+    payload.themeId = typeof localStorage !== 'undefined' ? (localStorage.getItem('skweladabaw_theme') || 'light') : 'light';
 
     await syncDataToEagleOverlay(payload);
   } catch (err) {

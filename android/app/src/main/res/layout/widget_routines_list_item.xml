@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingLeft="3dp"
+    android:paddingRight="3dp"
+    android:paddingTop="2dp"
+    android:paddingBottom="5dp">
+
+    <LinearLayout
+        android:id="@+id/widget_routine_item_root"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingLeft="10dp"
+        android:paddingRight="10dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
+        android:background="@drawable/widget_item_bg">
+
+        <TextView
+            android:id="@+id/widget_routine_item_time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="06:30 AM"
+            android:textSize="9sp"
+            android:textColor="#38BDF8"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_routine_item_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Morning Wake-up &amp; Commute"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:textColor="#FFFFFF"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/widget_routine_item_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Alarm active • Weekdays"
+            android:textSize="10sp"
+            android:textColor="#94A3B8"
+            android:maxLines="1"
+            android:ellipsize="end" />
+    </LinearLayout>
+</FrameLayout>

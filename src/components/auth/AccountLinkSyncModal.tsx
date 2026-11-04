@@ -39,8 +39,8 @@ export const AccountLinkSyncModal: React.FC<AccountLinkSyncModalProps> = ({
     return found ? (found.shortName || found.name) : campusId;
   };
 
-  const cloudCampusName = getCampusName(cloudUser.campusId || 'addu-jacinto');
-  const guestCampusName = getCampusName(guestSession.campusId || 'addu-jacinto');
+  const cloudCampusName = getCampusName(cloudUser.campusId || '') || 'Campus Not Set';
+  const guestCampusName = getCampusName(guestSession.campusId || '') || 'Campus Not Set';
 
   const handleExecuteConfirmedAction = () => {
     if (confirmingAction === 'sync-guest') {

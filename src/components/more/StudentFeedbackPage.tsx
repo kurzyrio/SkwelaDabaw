@@ -49,7 +49,7 @@ export const StudentFeedbackPage: React.FC<StudentFeedbackPageProps> = ({
 
   // Feedback State
   const [feedbackCategory, setFeedbackCategory] = useState<string>('bug');
-  const [feedbackCampus, setFeedbackCampus] = useState<string>(session?.campusId || 'addu-jacinto');
+  const [feedbackCampus, setFeedbackCampus] = useState<string>(session?.campusId || '');
   const [feedbackDetails, setFeedbackDetails] = useState<string>('');
 
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -98,7 +98,7 @@ export const StudentFeedbackPage: React.FC<StudentFeedbackPageProps> = ({
       await dexieDb.feedback.add({
         name: session?.name || 'Dabawenyo Student',
         email: session?.email || undefined,
-        campus: session?.campusId || 'addu-jacinto',
+        campus: session?.campusId || '',
         category: 'Student Survey',
         rating: surveyRating,
         subject: `Campus Survey Response`,
@@ -115,7 +115,7 @@ export const StudentFeedbackPage: React.FC<StudentFeedbackPageProps> = ({
         body: JSON.stringify({
           name: session?.name || 'Dabawenyo Student',
           email: session?.email || '',
-          campus: session?.campusId || 'addu-jacinto',
+          campus: session?.campusId || '',
           category: 'Student Survey',
           rating: surveyRating,
           subject: 'Campus Survey Response',

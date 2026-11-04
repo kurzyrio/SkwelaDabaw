@@ -1386,7 +1386,7 @@ export const StudentCommunityChat: React.FC<StudentCommunityChatProps> = ({
           <button
             type="button"
             onClick={async () => {
-              await signInWithGoogle(userSession?.campusId || 'addu-jacinto');
+              await signInWithGoogle(userSession?.campusId || '');
               window.location.reload();
             }}
             className="px-4 py-2 rounded-full bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] text-xs font-bold shrink-0 pressable shadow-sm"

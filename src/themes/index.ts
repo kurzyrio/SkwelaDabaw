@@ -63,10 +63,13 @@ export function applyTheme(id?: string | null): ThemeConfig {
       detail: { themeId: theme.id, theme }
     }));
 
-    // 5. Synchronize equipped theme with native Android home screen widgets
+    // 5. Synchronize equipped theme with native Android home screen widgets and Eagle Overlay
     try {
       import('../services/widgetService').then(({ syncThemeToWidgets }) => {
         syncThemeToWidgets(theme.id);
+      }).catch(() => {});
+      import('../services/eagleOverlayService').then(({ autoSyncCurrentStateToOverlay }) => {
+        autoSyncCurrentStateToOverlay();
       }).catch(() => {});
     } catch (_) {}
   }

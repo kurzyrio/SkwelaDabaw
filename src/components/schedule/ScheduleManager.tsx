@@ -600,9 +600,9 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
       />
 
       {/* Header & Inset Subtabs - Row 1 Only */}
-      <div className="flex items-center justify-between gap-1.5 pb-2.5 border-b border-[var(--card-border)] overflow-x-auto no-scrollbar">
+      <div className="flex items-center justify-between gap-1.5 pb-2.5 border-b border-[var(--card-border)] relative">
         {/* iOS Segmented Subtabs */}
-        <div className="flex items-center gap-1 p-1 bg-[var(--nested-bg)] border border-[var(--card-border)] rounded-xl shrink-0">
+        <div className="flex items-center gap-1 p-1 bg-[var(--nested-bg)] border border-[var(--card-border)] rounded-xl shrink-0 overflow-x-auto no-scrollbar max-w-[calc(100%-115px)] sm:max-w-none">
           <button
             type="button"
             onClick={() => {
@@ -685,10 +685,10 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
             {isMoreMenuOpen && (
               <>
                 <div 
-                  className="fixed inset-0 z-30" 
+                  className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[1px]" 
                   onClick={() => setIsMoreMenuOpen(false)} 
                 />
-                <div className="absolute right-0 top-full mt-1.5 z-40 w-52 p-1.5 rounded-2xl bg-[var(--card-bg)]/95 backdrop-blur-xl border border-[var(--card-border)] shadow-xl animate-fade-in space-y-1">
+                <div className="absolute right-0 top-full mt-1.5 z-50 w-52 p-1.5 rounded-2xl bg-[var(--card-bg)] border border-[var(--card-border)] shadow-2xl animate-fade-in space-y-1">
                   <button
                     type="button"
                     onClick={() => {

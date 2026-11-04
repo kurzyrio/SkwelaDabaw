@@ -145,6 +145,7 @@ public class EagleOverlayPlugin extends Plugin {
             if (call.hasOption("pendingTasksCount")) editor.putInt("pending_tasks_count", call.getInt("pendingTasksCount", 0));
             if (call.hasOption("nextTaskTitle")) editor.putString("next_task_title", call.getString("nextTaskTitle"));
             if (call.hasOption("nextTaskDue")) editor.putString("next_task_due", call.getString("nextTaskDue"));
+            if (call.hasOption("themeId")) editor.putString("theme_id", call.getString("themeId"));
             editor.apply();
 
             if (EagleOverlayService.isRunning()) {

@@ -9,4 +9,6 @@
     <string name="widget_schedule_medium_desc">Displays today\'s schedule count, current subject, and upcoming class.</string>
     <string name="widget_schedule_large_desc">Detailed daily timetable grid with times, rooms, and upcoming classes.</string>
     <string name="widget_tasks_desc">Quick glance at pending assignments, projects, and deadlines.</string>
+    <string name="widget_tasks_large_desc">Full scrollable list of pending assignments, priority tags, and due dates.</string>
+    <string name="widget_routines_desc">Weekly day routine alarms and campus activity schedule.</string>
 </resources>

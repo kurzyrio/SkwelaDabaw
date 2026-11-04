@@ -103,7 +103,16 @@ export const DedicatedOnboardingPage: React.FC<DedicatedOnboardingPageProps> = (
   // Form State
   const [username, setUsername] = useState<string>('');
   const [displayName, setDisplayName] = useState<string>('');
-  const [campusId, setCampusId] = useState<string>('addu-jacinto');
+  const [campusId, setCampusId] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('skweladabaw_user_session');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.campusId) return parsed.campusId;
+      }
+    } catch (_) {}
+    return '';
+  });
   const [role, setRole] = useState<'student' | 'teacher'>('student');
   const [course, setCourse] = useState<string>('');
   const [yearLevel, setYearLevel] = useState<string>('Freshman');

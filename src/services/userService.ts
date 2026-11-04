@@ -401,7 +401,7 @@ export async function saveUserProfile(
     username: (session.username || '').trim().toLowerCase(),
     displayName: session.name || 'Davao Student',
     avatar: session.avatar || '',
-    campusId: session.campusId || 'addu-jacinto',
+    campusId: session.campusId || '',
     course: session.course || '',
     yearLevel: session.yearLevel || 'Freshman',
     role: (session.role as any) || 'student',

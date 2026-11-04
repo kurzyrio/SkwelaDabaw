@@ -90,7 +90,7 @@ export async function initializeDatabaseWithSeedData() {
   if (profileCount === 0) {
     await db.userProfile.add({
       name: 'Student',
-      campusId: 'addu-jacinto',
+      campusId: '',
       course: 'Enrolled Student',
       yearLevel: '1st Year',
       dailyAllowance: 150

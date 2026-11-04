@@ -140,6 +140,11 @@
             android:layout_height="match_parent"
             android:divider="@null"
             android:dividerHeight="0dp"
+            android:clipToPadding="false"
+            android:paddingLeft="2dp"
+            android:paddingRight="2dp"
+            android:paddingTop="1dp"
+            android:paddingBottom="2dp"
             android:scrollbars="vertical" />
 
         <LinearLayout

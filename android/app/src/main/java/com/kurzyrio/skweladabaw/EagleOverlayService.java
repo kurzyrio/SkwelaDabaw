@@ -228,6 +228,7 @@ public class EagleOverlayService extends Service {
 
         cardView = inflater.inflate(R.layout.eagle_overlay_card, null);
         setupCardListeners();
+        applyThemeToOverlay();
 
         // Attach bubble and dismiss targets to WindowManager
         try {
@@ -531,22 +532,16 @@ public class EagleOverlayService extends Service {
         if (tabClasses != null && tabTasks != null) {
             tabClasses.setOnClickListener(v -> {
                 isTasksTabSelected = false;
-                tabClasses.setBackgroundResource(R.drawable.notification_current_pill_bg);
-                tabClasses.setTextColor(0xFF38BDF8);
-                tabTasks.setBackgroundResource(R.drawable.notification_chip_bg);
-                tabTasks.setTextColor(0xFF94A3B8);
                 if (sectionClasses != null) sectionClasses.setVisibility(View.VISIBLE);
                 if (sectionTasks != null) sectionTasks.setVisibility(View.GONE);
+                applyThemeToOverlay();
             });
 
             tabTasks.setOnClickListener(v -> {
                 isTasksTabSelected = true;
-                tabTasks.setBackgroundResource(R.drawable.notification_current_pill_bg);
-                tabTasks.setTextColor(0xFF30D158);
-                tabClasses.setBackgroundResource(R.drawable.notification_chip_bg);
-                tabClasses.setTextColor(0xFF94A3B8);
                 if (sectionClasses != null) sectionClasses.setVisibility(View.GONE);
                 if (sectionTasks != null) sectionTasks.setVisibility(View.VISIBLE);
+                applyThemeToOverlay();
             });
         }
 
@@ -707,22 +702,130 @@ public class EagleOverlayService extends Service {
         View sectionTasks = cardView.findViewById(R.id.card_tasks_section);
         TextView tabClasses = cardView.findViewById(R.id.card_tab_classes);
 
-        if (sectionClasses != null && sectionTasks != null && tabClasses != null && tabTasks != null) {
-            if (isTasksTabSelected) {
-                sectionClasses.setVisibility(View.GONE);
-                sectionTasks.setVisibility(View.VISIBLE);
-                tabTasks.setBackgroundResource(R.drawable.notification_current_pill_bg);
-                tabTasks.setTextColor(0xFF30D158);
-                tabClasses.setBackgroundResource(R.drawable.notification_chip_bg);
-                tabClasses.setTextColor(0xFF94A3B8);
-            } else {
-                sectionClasses.setVisibility(View.VISIBLE);
-                sectionTasks.setVisibility(View.GONE);
-                tabClasses.setBackgroundResource(R.drawable.notification_current_pill_bg);
-                tabClasses.setTextColor(0xFF38BDF8);
-                tabTasks.setBackgroundResource(R.drawable.notification_chip_bg);
-                tabTasks.setTextColor(0xFF94A3B8);
+        // Apply active app theme to overlay
+        applyThemeToOverlay();
+    }
+
+    private void applyThemeToOverlay() {
+        if (cardView == null) return;
+        try {
+            WidgetScheduleHelper.WidgetTheme theme = WidgetScheduleHelper.getWidgetTheme(this);
+            String themeId = WidgetScheduleHelper.getActiveThemeId(this);
+
+            // 1. Root Card Background
+            View cardRoot = cardView.findViewById(R.id.card_root);
+            if (cardRoot != null) {
+                cardRoot.setBackgroundResource(theme.cardBgRes);
             }
+
+            // 2. Header
+            TextView tvHeaderTitle = cardView.findViewById(R.id.card_header_title);
+            if (tvHeaderTitle != null) tvHeaderTitle.setTextColor(theme.textPrimary);
+            TextView tvHeaderSub = cardView.findViewById(R.id.card_header_subtitle);
+            if (tvHeaderSub != null) tvHeaderSub.setTextColor(theme.textSecondary);
+            TextView btnRefresh = cardView.findViewById(R.id.card_btn_refresh);
+            if (btnRefresh != null) btnRefresh.setTextColor(theme.textAccent);
+            TextView btnClose = cardView.findViewById(R.id.card_btn_close);
+            if (btnClose != null) btnClose.setTextColor(theme.textSecondary);
+
+            // 3. Weather Container
+            View weatherContainer = cardView.findViewById(R.id.card_weather_container);
+            if (weatherContainer != null) {
+                weatherContainer.setBackgroundResource(theme.itemBgRes);
+            }
+            TextView tvTemp = cardView.findViewById(R.id.card_weather_temp);
+            if (tvTemp != null) tvTemp.setTextColor(theme.textAccent);
+            TextView tvCond = cardView.findViewById(R.id.card_weather_cond);
+            if (tvCond != null) tvCond.setTextColor(theme.textPrimary);
+            TextView tvWeatherSub = cardView.findViewById(R.id.card_weather_subtext);
+            if (tvWeatherSub != null) tvWeatherSub.setTextColor(theme.textSecondary);
+
+            // 4. Tab Switcher
+            TextView tabClasses = cardView.findViewById(R.id.card_tab_classes);
+            TextView tabTasks = cardView.findViewById(R.id.card_tab_tasks);
+            if (tabClasses != null && tabTasks != null) {
+                if (isTasksTabSelected) {
+                    tabTasks.setBackgroundResource(theme.btnBgRes);
+                    tabTasks.setTextColor(theme.textAccent);
+                    tabClasses.setBackgroundResource(theme.badgeBgRes);
+                    tabClasses.setTextColor(theme.textSecondary);
+                } else {
+                    tabClasses.setBackgroundResource(theme.btnBgRes);
+                    tabClasses.setTextColor(theme.textAccent);
+                    tabTasks.setBackgroundResource(theme.badgeBgRes);
+                    tabTasks.setTextColor(theme.textSecondary);
+                }
+            }
+
+            // 5. Classes Section
+            View sectionClasses = cardView.findViewById(R.id.card_classes_section);
+            if (sectionClasses != null) {
+                sectionClasses.setBackgroundResource(theme.itemBgRes);
+            }
+            TextView tvSubject = cardView.findViewById(R.id.card_class_subject);
+            if (tvSubject != null) tvSubject.setTextColor(theme.textPrimary);
+            TextView tvMeta = cardView.findViewById(R.id.card_class_meta);
+            if (tvMeta != null) tvMeta.setTextColor(theme.textSecondary);
+
+            // 6. Tasks Section
+            View sectionTasks = cardView.findViewById(R.id.card_tasks_section);
+            if (sectionTasks != null) {
+                sectionTasks.setBackgroundResource(theme.itemBgRes);
+            }
+            TextView tvTaskTitle = cardView.findViewById(R.id.card_task_title);
+            if (tvTaskTitle != null) tvTaskTitle.setTextColor(theme.textPrimary);
+            TextView tvTaskMeta = cardView.findViewById(R.id.card_task_meta);
+            if (tvTaskMeta != null) tvTaskMeta.setTextColor(theme.textSecondary);
+
+            // 7. Open App Button
+            Button btnOpenApp = cardView.findViewById(R.id.card_btn_open_app);
+            if (btnOpenApp != null) {
+                btnOpenApp.setBackgroundResource(theme.btnBgRes);
+                btnOpenApp.setTextColor(theme.btnTextColor);
+            }
+
+            // 8. Navigation Action Chips
+            TextView btnTimetable = cardView.findViewById(R.id.card_action_timetable);
+            if (btnTimetable != null) {
+                btnTimetable.setBackgroundResource(theme.btnBgRes);
+                btnTimetable.setTextColor(theme.btnTextColor);
+            }
+            TextView btnBus = cardView.findViewById(R.id.card_action_bus);
+            if (btnBus != null) {
+                btnBus.setBackgroundResource(theme.btnBgRes);
+                btnBus.setTextColor(theme.textAccent);
+            }
+            TextView btnTasksAction = cardView.findViewById(R.id.card_action_tasks);
+            if (btnTasksAction != null) {
+                btnTasksAction.setBackgroundResource(theme.btnBgRes);
+                btnTasksAction.setTextColor(theme.textAccent);
+            }
+
+            // 9. Floating Mascot Bubble theme background & stroke
+            if (bubbleView != null) {
+                View bubbleRoot = bubbleView.findViewById(R.id.bubble_root);
+                if (bubbleRoot != null) {
+                    android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable();
+                    gd.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+                    int bubbleBgColor;
+                    if ("light".equals(themeId)) {
+                        bubbleBgColor = 0xFFFFFFFF;
+                    } else if ("oled".equals(themeId)) {
+                        bubbleBgColor = 0xFF000000;
+                    } else if ("emerald".equals(themeId)) {
+                        bubbleBgColor = 0xFF064E3B;
+                    } else if ("violet".equals(themeId)) {
+                        bubbleBgColor = 0xFF2E1065;
+                    } else {
+                        bubbleBgColor = 0xFF18181B;
+                    }
+                    gd.setColor(bubbleBgColor);
+                    gd.setStroke(dpToPx(2), theme.textAccent);
+                    bubbleRoot.setBackground(gd);
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 
