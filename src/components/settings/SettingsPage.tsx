@@ -92,6 +92,7 @@ import { EagleBuddy } from '../common/EagleBuddy';
 import { ScheduleImportModal } from '../schedule/ScheduleImportModal';
 import { CachedAvatar } from '../common/CachedAvatar';
 import { useBackHandler, BackPriority } from '../../hooks/useBackHandler';
+import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 import { useAppLanguage, AppLanguage, t } from '../../services/languageService';
 import { isAudioEnabled, setAudioEnabled } from '../../utils/audio';
 import { checkForAppUpdate, CURRENT_APP_VERSION, UpdateCheckResult } from '../../services/updateService';
@@ -351,36 +352,26 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   useBackHandler(Boolean(activeCategory), () => setActiveCategory(null), BackPriority.SUBVIEW, 'settings_subpage');
   useBackHandler(isAccountLinkSyncModalOpen, () => setIsAccountLinkSyncModalOpen(false), BackPriority.MODAL, 'settings_account_link_sync');
   useBackHandler(isCampusPickerOpen, () => setIsCampusPickerOpen(false), BackPriority.MODAL, 'settings_campus');
+  useBackHandler(isEditProfileOpen, () => setIsEditProfileOpen(false), BackPriority.MODAL, 'settings_edit_profile');
   useBackHandler(isLogoutModalOpen, () => setIsLogoutModalOpen(false), BackPriority.MODAL, 'settings_logout');
   useBackHandler(isResetModalOpen, () => setIsResetModalOpen(false), BackPriority.MODAL, 'settings_reset');
   useBackHandler(isImportModalOpen, () => setIsImportModalOpen(false), BackPriority.MODAL, 'settings_import');
   useBackHandler(Boolean(foundUpdateModal), () => setFoundUpdateModal(null), BackPriority.MODAL, 'settings_update');
   useBackHandler(isEditingUsername, () => setIsEditingUsername(false), BackPriority.MODAL, 'settings_edit_username');
 
-  // Background Scroll Lock when any modal dialog is active
+  // Background Scroll Lock safely managed via reference counting
+  // CampusPickerModal encapsulates its own lock; isEditingUsername is an inline card (not a modal)
   const isAnyModalActive = Boolean(
-    isCampusPickerOpen ||
     isLogoutModalOpen ||
     isResetModalOpen ||
     isImportModalOpen ||
     isNotifSettingsModalOpen ||
     isAccountLinkSyncModalOpen ||
-    isEditingUsername ||
+    isEditProfileOpen ||
     foundUpdateModal
   );
 
-  useEffect(() => {
-    if (isAnyModalActive) {
-      const prevOverflow = document.body.style.overflow;
-      const prevTouch = document.body.style.touchAction;
-      document.body.style.overflow = 'hidden';
-      document.body.style.touchAction = 'none';
-      return () => {
-        document.body.style.overflow = prevOverflow;
-        document.body.style.touchAction = prevTouch;
-      };
-    }
-  }, [isAnyModalActive]);
+  useBodyScrollLock(isAnyModalActive);
 
   // Re-check overlay permission when app gains focus or visibility (e.g. returning from Android system settings)
   useEffect(() => {

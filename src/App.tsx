@@ -68,6 +68,7 @@ import { requestNotificationPermission, notifyAppUpdateAvailable } from './servi
 import { useScheduleAlarm } from './hooks/useScheduleAlarm';
 import { useBackHandler } from './hooks/useBackHandler';
 import { useAntiSnooperEasterEgg } from './hooks/useAntiSnooperEasterEgg';
+import { forceUnlockBodyScroll } from './hooks/useBodyScrollLock';
 import { navigationManager, BackPriority } from './services/navigationManager';
 import { applyTheme, DEFAULT_THEME_ID } from './themes';
 
@@ -104,6 +105,7 @@ export function App() {
 
   // Navigation Stack Helpers
   const navigateToView = useCallback((nextView: AppView) => {
+    forceUnlockBodyScroll();
     if (nextView === currentView) return;
     if (nextView === 'main') {
       setViewHistory(['main']);
@@ -118,6 +120,7 @@ export function App() {
   }, [currentView]);
 
   const handleBackView = useCallback(() => {
+    forceUnlockBodyScroll();
     if (viewHistory.length > 1) {
       const updated = [...viewHistory];
       updated.pop();
@@ -134,6 +137,7 @@ export function App() {
   }, [viewHistory, currentView]);
 
   const navigateToTab = useCallback((nextTab: NavigationTab) => {
+    forceUnlockBodyScroll();
     if (currentView !== 'main') {
       setViewHistory(['main']);
       setCurrentView('main');
@@ -151,6 +155,7 @@ export function App() {
   }, [currentView, activeTab]);
 
   const handleBackTab = useCallback(() => {
+    forceUnlockBodyScroll();
     if (tabHistory.length > 1) {
       const updated = [...tabHistory];
       updated.pop();

@@ -17,10 +17,39 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.3.3',
+    releaseDate: 'November 5, 2026',
+    title: 'Campus Selection Scroll Lock Fix',
+    isLatest: true,
+    tagline: 'Fixed vertical scroll lock across all pages after selecting or updating campus by introducing a reference-counted body scroll lock manager.',
+    highlights: [
+      'Fixed vertical scrolling freeze occurring after selecting or updating university campus in Settings or onboarding',
+      'Implemented reference-counted body scroll lock manager preventing conflicting modal state overrides',
+      'Restored smooth touch and vertical scrolling navigation across all pages and student tools'
+    ],
+    items: [
+      {
+        type: 'fix',
+        title: 'Campus Selection Scroll Lock Fix',
+        description: 'Resolved race condition where modal close handlers trapped overflow and touch-action styles in document body.'
+      },
+      {
+        type: 'improvement',
+        title: 'Reference-Counted Scroll Management',
+        description: 'Centralized modal scroll locking with safe reference counting, preventing stuck locks during parallel or subpage overlays.'
+      },
+      {
+        type: 'fix',
+        title: 'Settings Username Edit Scrollability',
+        description: 'Fixed inline username editing card so the settings page remains fully scrollable when typing.'
+      }
+    ]
+  },
+  {
     version: '1.11.3.2',
     releaseDate: 'November 3, 2026',
     title: 'Streamlined Google & Guest Sign-In',
-    isLatest: true,
+    isLatest: false,
     tagline: 'Streamlined onboarding focused on Google Account and offline Guest access while preserving degree program and academic profile onboarding.',
     highlights: [
       'Clean and fast onboarding interface with Google Account and offline Guest mode',

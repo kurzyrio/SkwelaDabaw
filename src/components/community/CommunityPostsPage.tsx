@@ -41,6 +41,7 @@ import { CommunityReportModal } from './CommunityReportModal';
 import { CachedAvatar } from '../common/CachedAvatar';
 import { CustomSelect, CustomSelectOption } from '../common/CustomSelect';
 import { useBackHandler, BackPriority } from '../../hooks/useBackHandler';
+import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 
 interface CommunityPostsPageProps {
   userSession?: StudentAuthSession;
@@ -101,16 +102,8 @@ export const CommunityPostsPage: React.FC<CommunityPostsPageProps> = ({
   useBackHandler(Boolean(activeCommentsPost), () => setActiveCommentsPost(null), BackPriority.MODAL, 'community_comments');
   useBackHandler(isLoginModalOpen, () => setIsLoginModalOpen(false), BackPriority.MODAL, 'community_login');
 
-  // Prevent background scroll when image lightbox is open
-  useEffect(() => {
-    if (viewingImage) {
-      const original = document.body.style.overflow;
-      document.body.style.overflow = 'hidden';
-      return () => {
-        document.body.style.overflow = original;
-      };
-    }
-  }, [viewingImage]);
+  // Prevent background scroll when image lightbox is open safely with reference counting
+  useBodyScrollLock(Boolean(viewingImage));
 
   const CATEGORY_OPTIONS: CustomSelectOption[] = [
     { value: 'academic', label: 'Academic & Q&A' },

@@ -1,7 +1,7 @@
 {
-  "version": "1.11.3.2",
-  "versionCode": 114,
-  "releaseDate": "2026-11-03",
+  "version": "1.11.3.3",
+  "versionCode": 115,
+  "releaseDate": "2026-11-05",
   "versionScheme": {
     "digit1": "App Version",
     "digit2": "Major Features added",
@@ -13,15 +13,15 @@
   "forceUpdate": false,
   "developer": "Kurzyrio",
   "supportEmail": "jerriviencenatad@gmail.com",
-  "title": "Streamlined Google & Guest Sign-In",
+  "title": "Campus Selection Scroll Lock Fix",
   "releaseNotes": [
-    "Streamlined Sign-In: Temporarily disabled mobile number sign-in to keep onboarding clean, fast, and focused on Google Account and Guest access.",
-    "Academic Profile Onboarding: Degree Program / Course and College Year Level remain fully integrated in Step 3.",
-    "Passwordless Experience: Zero password prompts or password creation screens during onboarding."
+    "Fixed Campus Scroll Freeze: Resolved issue where updating or selecting your university campus locked vertical scrolling across pages.",
+    "Reference-Counted Scroll Lock: Implemented centralized body scroll management to prevent conflicting modal state overrides.",
+    "Settings Usability: Fixed inline username editing so the settings page remains fully scrollable while typing."
   ],
   "downloadUrl": "https://skweladabaw.kurzyrio.site/download",
-  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.3.2.apk",
-  "sizeBytes": 26581223,
-  "sizeFormatted": "25.3 MB",
-  "sha256": "d2d74b303d1d5c4a718a4c78b2842ee2d37f342479e078a7107e557426aac7f6"
+  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.3.3.apk",
+  "sizeBytes": 26581612,
+  "sizeFormatted": "25.4 MB",
+  "sha256": "7cc8bc06e796d367d917a3c1f43bbf7acfc9f8f2df3cd5e49786728bd5831e34"
 }

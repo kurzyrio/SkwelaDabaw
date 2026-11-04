@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { School, Search, Check, X, MapPin } from 'lucide-react';
 import { DAVAO_CAMPUSES } from '../../data/davaoCampuses';
 import { useBackHandler, BackPriority } from '../../hooks/useBackHandler';
+import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 
 interface CampusPickerModalProps {
   isOpen: boolean;
@@ -19,19 +20,8 @@ export const CampusPickerModal: React.FC<CampusPickerModalProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Lock background scrolling when modal is open
-  useEffect(() => {
-    if (isOpen) {
-      const prevOverflow = document.body.style.overflow;
-      const prevTouch = document.body.style.touchAction;
-      document.body.style.overflow = 'hidden';
-      document.body.style.touchAction = 'none';
-      return () => {
-        document.body.style.overflow = prevOverflow;
-        document.body.style.touchAction = prevTouch;
-      };
-    }
-  }, [isOpen]);
+  // Lock background scrolling safely with reference counting
+  useBodyScrollLock(isOpen);
 
   // Dismiss modal on Android back press
   useBackHandler(isOpen, onClose, BackPriority.MODAL);
