@@ -348,6 +348,18 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const [pendingScheduleCount, setPendingScheduleCount] = useState<number>(0);
   const [isResolvingSyncConflict, setIsResolvingSyncConflict] = useState<boolean>(false);
 
+  // Comprehensive Edit Profile Modal State
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState<boolean>(false);
+  const [editDisplayName, setEditDisplayName] = useState<string>(userSession.name || '');
+  const [editCampusId, setEditCampusId] = useState<string>(userSession.campusId || 'addu-jacinto');
+  const [editYearLevel, setEditYearLevel] = useState<string>(userSession.yearLevel || 'Freshman');
+  const [editCourse, setEditCourse] = useState<string>(userSession.course || '');
+  const [editAge, setEditAge] = useState<number | string>(userSession.age || 20);
+  const [editGender, setEditGender] = useState<string>(userSession.gender || 'Prefer not to say');
+  const [editRole, setEditRole] = useState<'student' | 'teacher' | 'admin'>(userSession.role || 'student');
+  const [isSavingProfile, setIsSavingProfile] = useState<boolean>(false);
+  const [profileSuccessToast, setProfileSuccessToast] = useState<string | null>(null);
+
   // Hardware Back Button Interception for Settings Sub-pages & Modals
   useBackHandler(Boolean(activeCategory), () => setActiveCategory(null), BackPriority.SUBVIEW, 'settings_subpage');
   useBackHandler(isAccountLinkSyncModalOpen, () => setIsAccountLinkSyncModalOpen(false), BackPriority.MODAL, 'settings_account_link_sync');
@@ -642,18 +654,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       daysRemaining = Math.ceil((cooldownMs - diff) / (24 * 60 * 60 * 1000));
     }
   }
-
-  // Comprehensive Edit Profile Modal State
-  const [isEditProfileOpen, setIsEditProfileOpen] = useState<boolean>(false);
-  const [editDisplayName, setEditDisplayName] = useState<string>(userSession.name || '');
-  const [editCampusId, setEditCampusId] = useState<string>(userSession.campusId || 'addu-jacinto');
-  const [editYearLevel, setEditYearLevel] = useState<string>(userSession.yearLevel || 'Freshman');
-  const [editCourse, setEditCourse] = useState<string>(userSession.course || '');
-  const [editAge, setEditAge] = useState<number | string>(userSession.age || 20);
-  const [editGender, setEditGender] = useState<string>(userSession.gender || 'Prefer not to say');
-  const [editRole, setEditRole] = useState<'student' | 'teacher' | 'admin'>(userSession.role || 'student');
-  const [isSavingProfile, setIsSavingProfile] = useState<boolean>(false);
-  const [profileSuccessToast, setProfileSuccessToast] = useState<string | null>(null);
 
   const handleOpenEditProfile = () => {
     setEditDisplayName(userSession.name || '');

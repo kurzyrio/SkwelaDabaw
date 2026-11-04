@@ -822,20 +822,22 @@ export function App() {
     if (currentView === 'settings') {
       return (
         <div key="settings" className="animate-page-enter">
-          <SettingsPage
-            userSession={userSession}
-            onUpdateSession={handleUpdateSession}
-            currentTheme={theme}
-            onChangeTheme={setTheme}
-            onBack={handleBackView}
-            onOpenAbout={() => navigateToView('about')}
-            onOpenChangelog={() => navigateToView('changelog')}
-            onReplayOnboarding={() => {
-              navigateToView('main');
-              setIsOnboardingOpen(true);
-            }}
-            onOpenFeedback={() => navigateToView('feedback')}
-          />
+          <ErrorBoundary fallbackTitle="Settings" onGoBack={handleBackView} onReset={() => setCurrentView('main')}>
+            <SettingsPage
+              userSession={userSession}
+              onUpdateSession={handleUpdateSession}
+              currentTheme={theme}
+              onChangeTheme={setTheme}
+              onBack={handleBackView}
+              onOpenAbout={() => navigateToView('about')}
+              onOpenChangelog={() => navigateToView('changelog')}
+              onReplayOnboarding={() => {
+                navigateToView('main');
+                setIsOnboardingOpen(true);
+              }}
+              onOpenFeedback={() => navigateToView('feedback')}
+            />
+          </ErrorBoundary>
         </div>
       );
     }
@@ -843,10 +845,12 @@ export function App() {
     if (currentView === 'about') {
       return (
         <div key="about" className="animate-page-enter">
-          <AboutPage 
-            onBack={handleBackView}
-            onOpenChangelog={() => navigateToView('changelog')}
-          />
+          <ErrorBoundary fallbackTitle="About" onGoBack={handleBackView} onReset={() => setCurrentView('main')}>
+            <AboutPage 
+              onBack={handleBackView}
+              onOpenChangelog={() => navigateToView('changelog')}
+            />
+          </ErrorBoundary>
         </div>
       );
     }
@@ -854,10 +858,12 @@ export function App() {
     if (currentView === 'changelog') {
       return (
         <div key="changelog" className="animate-page-enter">
-          <ChangelogPage 
-            onBack={handleBackView} 
-            onOpenAbout={() => navigateToView('about')}
-          />
+          <ErrorBoundary fallbackTitle="Changelog" onGoBack={handleBackView} onReset={() => setCurrentView('main')}>
+            <ChangelogPage 
+              onBack={handleBackView} 
+              onOpenAbout={() => navigateToView('about')}
+            />
+          </ErrorBoundary>
         </div>
       );
     }
@@ -865,10 +871,12 @@ export function App() {
     if (currentView === 'feedback') {
       return (
         <div key="feedback" className="animate-page-enter">
-          <StudentFeedbackPage 
-            onBack={handleBackView}
-            onOpenSettings={() => navigateToView('settings')}
-          />
+          <ErrorBoundary fallbackTitle="Feedback" onGoBack={handleBackView} onReset={() => setCurrentView('main')}>
+            <StudentFeedbackPage 
+              onBack={handleBackView}
+              onOpenSettings={() => navigateToView('settings')}
+            />
+          </ErrorBoundary>
         </div>
       );
     }
@@ -876,7 +884,7 @@ export function App() {
     if (currentView === 'import-schedule') {
       return (
         <div key="import-schedule" className="animate-page-enter">
-          <ErrorBoundary fallbackTitle="Unable to load Schedule Import" onReset={() => navigateToTab('schedule')}>
+          <ErrorBoundary fallbackTitle="Schedule Import" onGoBack={handleBackView} onReset={() => navigateToTab('schedule')}>
             <ScheduleImportPage
               onBack={handleBackView}
               initialCode={pendingImportCode}
@@ -949,17 +957,17 @@ export function App() {
             className={`${(activeTab === 'dcbus' || activeTab === 'chat' || isFullScreenMap) ? 'flex-1 min-h-0 flex flex-col overflow-hidden w-full h-full' : 'mt-2 animate-page-enter'}`}
           >
             {activeTab === 'schedule' && (
-              <ErrorBoundary fallbackTitle="Unable to load Timetable" onReset={() => navigateToTab('schedule')}>
+              <ErrorBoundary fallbackTitle="Class Schedule" onGoBack={handleBackTab} onReset={() => navigateToTab('schedule')}>
                 <ScheduleManager onOpenImport={() => navigateToView('import-schedule')} />
               </ErrorBoundary>
             )}
             {activeTab === 'tasks' && (
-              <ErrorBoundary fallbackTitle="Unable to load Tasks" onReset={() => navigateToTab('schedule')}>
+              <ErrorBoundary fallbackTitle="Tasks" onGoBack={handleBackTab} onReset={() => navigateToTab('schedule')}>
                 <TaskTrackerPage />
               </ErrorBoundary>
             )}
             {activeTab === 'tools' && (
-              <ErrorBoundary fallbackTitle="Unable to load Student Hub" onReset={() => navigateToTab('schedule')}>
+              <ErrorBoundary fallbackTitle="Student Hub" onGoBack={handleBackTab} onReset={() => navigateToTab('schedule')}>
                 <StudentHubPage 
                   onSelectTool={(tab) => {
                     if (tab === 'settings') {
@@ -975,17 +983,17 @@ export function App() {
               </ErrorBoundary>
             )}
             {(activeTab === 'gpa' || activeTab === 'grades') && (
-              <ErrorBoundary fallbackTitle="Unable to load GPA Calculator" onReset={() => navigateToTab('schedule')}>
+              <ErrorBoundary fallbackTitle="GPA Calculator" onGoBack={handleBackTab} onReset={() => navigateToTab('schedule')}>
                 <GpaCalculatorPage />
               </ErrorBoundary>
             )}
             {activeTab === 'calendar' && (
-              <ErrorBoundary fallbackTitle="Unable to load Calendar" onReset={() => navigateToTab('schedule')}>
+              <ErrorBoundary fallbackTitle="Calendar" onGoBack={handleBackTab} onReset={() => navigateToTab('schedule')}>
                 <CalendarPage />
               </ErrorBoundary>
             )}
             {activeTab === 'jeep' && (
-              <ErrorBoundary fallbackTitle="Unable to load Jeepney Transit" onReset={() => navigateToTab('schedule')}>
+              <ErrorBoundary fallbackTitle="Jeepney Transit" onGoBack={handleBackTab} onReset={() => navigateToTab('schedule')}>
                 <JeepRouteFinder 
                   onNavigateToBus={() => navigateToTab('dcbus')} 
                   onFullScreenChange={setIsJeepMapFullScreen}
@@ -993,12 +1001,12 @@ export function App() {
               </ErrorBoundary>
             )}
             {activeTab === 'dcbus' && (
-              <ErrorBoundary fallbackTitle="Unable to load Davao City Bus" onReset={() => navigateToTab('schedule')}>
+              <ErrorBoundary fallbackTitle="Davao City Bus" onGoBack={handleBackTab} onReset={() => navigateToTab('schedule')}>
                 <DcBusPage onNavigateToJeep={() => navigateToTab('jeep')} />
               </ErrorBoundary>
             )}
             {activeTab === 'announcements' && (
-              <ErrorBoundary fallbackTitle="Unable to load Announcements" onReset={() => navigateToTab('schedule')}>
+              <ErrorBoundary fallbackTitle="Announcements" onGoBack={handleBackTab} onReset={() => navigateToTab('schedule')}>
                 <AnnouncementBoard 
                   userSession={userSession} 
                   onNavigateToCommunity={() => navigateToTab('community')} 
@@ -1006,7 +1014,7 @@ export function App() {
               </ErrorBoundary>
             )}
             {activeTab === 'community' && (
-              <ErrorBoundary fallbackTitle="Unable to load Community Discussions" onReset={() => navigateToTab('schedule')}>
+              <ErrorBoundary fallbackTitle="Community Discussions" onGoBack={handleBackTab} onReset={() => navigateToTab('schedule')}>
                 <CommunityPostsPage 
                   userSession={userSession} 
                   onOpenAuth={() => setIsOnboardingOpen(true)} 
@@ -1014,7 +1022,7 @@ export function App() {
               </ErrorBoundary>
             )}
             {activeTab === 'chat' && (
-              <ErrorBoundary fallbackTitle="Unable to load Community Chat" onReset={() => navigateToTab('schedule')}>
+              <ErrorBoundary fallbackTitle="Community Chat" onGoBack={handleBackTab} onReset={() => navigateToTab('schedule')}>
                 <StudentCommunityChat 
                   userSession={userSession} 
                   onBack={handleBackTab}
@@ -1023,22 +1031,22 @@ export function App() {
               </ErrorBoundary>
             )}
             {activeTab === 'spots' && (
-              <ErrorBoundary fallbackTitle="Unable to load Study Spots" onReset={() => navigateToTab('schedule')}>
+              <ErrorBoundary fallbackTitle="Study Spots" onGoBack={handleBackTab} onReset={() => navigateToTab('schedule')}>
                 <StudySpotFinder />
               </ErrorBoundary>
             )}
             {activeTab === 'budget' && (
-              <ErrorBoundary fallbackTitle="Unable to load Budget Tracker" onReset={() => navigateToTab('schedule')}>
+              <ErrorBoundary fallbackTitle="Budget Tracker" onGoBack={handleBackTab} onReset={() => navigateToTab('schedule')}>
                 <BudgetTracker />
               </ErrorBoundary>
             )}
             {activeTab === 'emergency' && (
-              <ErrorBoundary fallbackTitle="Unable to load Emergency Directory" onReset={() => navigateToTab('schedule')}>
+              <ErrorBoundary fallbackTitle="Emergency Directory" onGoBack={handleBackTab} onReset={() => navigateToTab('schedule')}>
                 <EmergencyDirectory />
               </ErrorBoundary>
             )}
             {activeTab === 'about' && (
-              <ErrorBoundary fallbackTitle="Unable to load About page" onReset={() => navigateToTab('schedule')}>
+              <ErrorBoundary fallbackTitle="About" onGoBack={handleBackTab} onReset={() => navigateToTab('schedule')}>
                 <AboutPage 
                   onBack={() => navigateToTab('schedule')} 
                   onOpenChangelog={() => navigateToView('changelog')} 
@@ -1046,7 +1054,7 @@ export function App() {
               </ErrorBoundary>
             )}
             {activeTab === 'weather' && (
-              <ErrorBoundary fallbackTitle="Unable to load Weather" onReset={() => navigateToTab('schedule')}>
+              <ErrorBoundary fallbackTitle="Weather" onGoBack={handleBackTab} onReset={() => navigateToTab('schedule')}>
                 <WeatherPage onBack={() => navigateToTab('schedule')} />
               </ErrorBoundary>
             )}
@@ -1066,7 +1074,11 @@ export function App() {
   };
 
   return (
-    <ErrorBoundary fallbackTitle="Application Shell">
+    <ErrorBoundary 
+      fallbackTitle="Application Shell" 
+      onGoBack={() => { setCurrentView('main'); setActiveTab('schedule'); }}
+      onReset={() => { setCurrentView('main'); setActiveTab('schedule'); }}
+    >
       {/* Global Interactive Screen Tap Particle Effect (Mounted Globally at Root) */}
       <ScreenTapEffect />
 

@@ -17,10 +17,40 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.3.4',
+    releaseDate: 'November 5, 2026',
+    title: 'Settings Render Fix & Diagnostic Error Reporting',
+    isLatest: true,
+    tagline: 'Resolved initialization order causing Settings page to crash on open and introduced Go Back navigation and in-app Diagnostic Error Reporting.',
+    highlights: [
+      'Resolved Settings page render crash caused by state initialization ordering',
+      'Added Go Back button to error screens for instant one-tap recovery to safe view',
+      'Integrated in-app Error Reporting modal allowing commuters to describe what happened before a crash',
+      'Isolated view error boundaries across Settings, About, Changelog, and Feedback'
+    ],
+    items: [
+      {
+        type: 'fix',
+        title: 'Settings Page Initialization Fix',
+        description: 'Corrected profile modal state ordering before back-handler registration, eliminating runtime ReferenceError crash on open.'
+      },
+      {
+        type: 'improvement',
+        title: 'Interactive Crash Diagnostic Reporting',
+        description: 'Added Go Back and Report buttons to error screens to capture context, user explanation, and stack trace.'
+      },
+      {
+        type: 'improvement',
+        title: 'Isolated Subview Error Boundaries',
+        description: 'Wrapped all main views in individual ErrorBoundary containers to prevent subpage errors from impacting the Application Shell.'
+      }
+    ]
+  },
+  {
     version: '1.11.3.3',
     releaseDate: 'November 5, 2026',
     title: 'Campus Selection Scroll Lock Fix',
-    isLatest: true,
+    isLatest: false,
     tagline: 'Fixed vertical scroll lock across all pages after selecting or updating campus by introducing a reference-counted body scroll lock manager.',
     highlights: [
       'Fixed vertical scrolling freeze occurring after selecting or updating university campus in Settings or onboarding',

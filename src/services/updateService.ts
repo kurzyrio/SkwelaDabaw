@@ -5,8 +5,8 @@
 
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 
-export const CURRENT_APP_VERSION = "1.11.3.3";
-export const CURRENT_VERSION_CODE = 115;
+export const CURRENT_APP_VERSION = "1.11.3.4";
+export const CURRENT_VERSION_CODE = 116;
 
 export interface AppVersionManifest {
   version: string;
