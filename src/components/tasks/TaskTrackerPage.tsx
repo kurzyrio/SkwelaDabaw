@@ -7,11 +7,6 @@ import {
   Trash2, 
   Clock, 
   ListTodo, 
-  Play, 
-  Pause, 
-  RotateCcw, 
-  Volume2, 
-  VolumeX, 
   Flame, 
   Check, 
   Coffee,
@@ -24,10 +19,6 @@ import {
 import { db } from '../../db';
 import { TaskItem } from '../../types';
 import { playEagleSound } from '../../utils/audio';
-import { 
-  updateFocusTimerNotification, 
-  cancelFocusTimerNotification
-} from '../../services/notificationService';
 import { 
   toggleTaskDone, 
   createTask, 
@@ -102,14 +93,7 @@ export const TaskTrackerPage: React.FC = () => {
     setEditingTask(null);
   }, BackPriority.MODAL, 'task_edit_modal');
 
-  // Pomodoro Focus Timer State
-  const [pomodoroMode, setPomodoroMode] = useState<'focus' | 'shortBreak' | 'longBreak'>('focus');
-  const [timerSeconds, setTimerSeconds] = useState<number>(25 * 60);
-  const [isTimerRunning, setIsTimerRunning] = useState<boolean>(false);
-  const [completedPomodoros, setCompletedPomodoros] = useState<number>(() => {
-    return parseInt(localStorage.getItem('skweladabaw_daily_pomodoros') || '0', 10);
-  });
-  const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
+
 
   useEffect(() => {
     if (enrolledSubjects.length > 0 && !taskSubject) {
@@ -131,60 +115,7 @@ export const TaskTrackerPage: React.FC = () => {
     }
   }, [tasks]);
 
-  // Pomodoro Interval Timer Effect
-  useEffect(() => {
-    let interval: any = null;
-    if (isTimerRunning && timerSeconds > 0) {
-      interval = setInterval(() => {
-        setTimerSeconds(prev => prev - 1);
-      }, 1000);
-    } else if (timerSeconds === 0 && isTimerRunning) {
-      setIsTimerRunning(false);
 
-      if (pomodoroMode === 'focus') {
-        playEagleSound('success');
-        const nextCount = completedPomodoros + 1;
-        setCompletedPomodoros(nextCount);
-        localStorage.setItem('skweladabaw_daily_pomodoros', String(nextCount));
-        confetti({ particleCount: 60, spread: 70 });
-        alert('Focus session complete! Take a 5-minute break.');
-        setPomodoroMode('shortBreak');
-        setTimerSeconds(5 * 60);
-      } else {
-        playEagleSound('sleepy');
-        alert('Break is over! Ready for your next focus session?');
-        setPomodoroMode('focus');
-        setTimerSeconds(25 * 60);
-      }
-    }
-    return () => clearInterval(interval);
-  }, [isTimerRunning, timerSeconds, pomodoroMode, completedPomodoros, soundEnabled]);
-
-  const handleSwitchPomodoroMode = (mode: 'focus' | 'shortBreak' | 'longBreak') => {
-    setIsTimerRunning(false);
-    setPomodoroMode(mode);
-    if (mode === 'focus') setTimerSeconds(25 * 60);
-    else if (mode === 'shortBreak') setTimerSeconds(5 * 60);
-    else if (mode === 'longBreak') setTimerSeconds(15 * 60);
-    cancelFocusTimerNotification();
-  };
-
-  // Sync ongoing focus timer notification with status bar
-  useEffect(() => {
-    if (isTimerRunning && timerSeconds > 0) {
-      updateFocusTimerNotification(
-        timerSeconds,
-        true,
-        pomodoroMode === 'focus' ? 'Study Sprint' : 'Study Break'
-      );
-    } else {
-      cancelFocusTimerNotification();
-    }
-
-    return () => {
-      cancelFocusTimerNotification();
-    };
-  }, [isTimerRunning, timerSeconds, pomodoroMode]);
 
   const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -323,100 +254,8 @@ export const TaskTrackerPage: React.FC = () => {
     return true;
   });
 
-  const formatTimer = (secs: number) => {
-    const m = Math.floor(secs / 60);
-    const s = secs % 60;
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  };
-
   return (
     <div className="space-y-4 pb-24 animate-fade-in">
-      {/* POMODORO TIMER INSET CARD */}
-      <div className="p-6 rounded-3xl bg-[var(--card-bg)] border border-[var(--card-border)] text-[var(--text-primary)] space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] text-[var(--text-primary)] flex items-center justify-center font-bold">
-              <Clock className="w-5 h-5 text-[var(--text-primary)]" />
-            </div>
-            <div>
-              <h3 className="font-bold text-base text-[var(--text-primary)]">
-                Study Focus Timer
-              </h3>
-              <p className="text-xs text-[var(--text-secondary)]">
-                Pomodoro sprint interval with audio feedback
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setSoundEnabled(!soundEnabled)}
-            className="p-2 rounded-xl bg-[var(--nested-bg)] border border-[var(--card-border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-          >
-            {soundEnabled ? <Volume2 className="w-4 h-4 text-[var(--text-primary)]" /> : <VolumeX className="w-4 h-4 opacity-50" />}
-          </button>
-        </div>
-
-        {/* Mode Segmented Controls */}
-        <div className="flex items-center gap-1 p-1 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] max-w-sm mx-auto">
-          <button
-            type="button"
-            onClick={() => handleSwitchPomodoroMode('focus')}
-            className={`flex-1 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-              pomodoroMode === 'focus' ? 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] font-bold shadow-xs' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-            }`}
-          >
-            Focus (25m)
-          </button>
-          <button
-            type="button"
-            onClick={() => handleSwitchPomodoroMode('shortBreak')}
-            className={`flex-1 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-              pomodoroMode === 'shortBreak' ? 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] font-bold shadow-xs' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-            }`}
-          >
-            Break (5m)
-          </button>
-          <button
-            type="button"
-            onClick={() => handleSwitchPomodoroMode('longBreak')}
-            className={`flex-1 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-              pomodoroMode === 'longBreak' ? 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] font-bold shadow-xs' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-            }`}
-          >
-            Long (15m)
-          </button>
-        </div>
-
-        {/* Timer Display */}
-        <div className="text-center space-y-3 py-2">
-          <div className="text-5xl sm:text-6xl font-bold font-mono tracking-tight text-[var(--text-primary)]">
-            {formatTimer(timerSeconds)}
-          </div>
-          <div className="flex items-center justify-center gap-3">
-            <button
-              type="button"
-              onClick={() => setIsTimerRunning(!isTimerRunning)}
-              className="px-6 py-2.5 rounded-full bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] font-bold text-xs shadow-sm flex items-center gap-2 pressable"
-            >
-              {isTimerRunning ? <Pause className="w-4 h-4 text-[var(--btn-primary-text)]" /> : <Play className="w-4 h-4 fill-current text-[var(--btn-primary-text)]" />}
-              <span>{isTimerRunning ? 'Pause Sprint' : 'Start Focus Sprint'}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSwitchPomodoroMode(pomodoroMode)}
-              className="p-2.5 rounded-full bg-[var(--nested-bg)] border border-[var(--card-border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-            >
-              <RotateCcw className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-center gap-2 text-xs font-medium pt-2 text-[var(--text-secondary)] border-t border-[var(--card-border)]">
-          <Flame className="w-4 h-4 text-[var(--text-primary)]" />
-          <span>Today's Completed Sprints: <strong className="text-[var(--text-primary)]">{completedPomodoros} Sessions</strong></span>
-        </div>
-      </div>
 
       {/* TASK LIST HEADER & ACTIONS */}
       <div className="p-5 sm:p-6 rounded-3xl bg-[var(--card-bg)] border border-[var(--card-border)] space-y-4">

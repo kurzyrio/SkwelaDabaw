@@ -86,7 +86,6 @@ import {
 } from '../../services/userService';
 import { syncLocalDataToCloud, queueCloudSync, syncCloudDataBiDirectional, LAST_SYNC_KEY } from '../../services/cloudSyncService';
 import { AccountLinkSyncModal } from '../auth/AccountLinkSyncModal';
-import { CampusPickerModal } from '../common/CampusPickerModal';
 import { ProcessingOverlay } from '../common/ProcessingOverlay';
 import { EagleBuddy } from '../common/EagleBuddy';
 import { ScheduleImportModal } from '../schedule/ScheduleImportModal';
@@ -261,7 +260,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     synced: 0
   });
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
-  const [isCampusPickerOpen, setIsCampusPickerOpen] = useState<boolean>(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState<boolean>(false);
   const [isResetModalOpen, setIsResetModalOpen] = useState<boolean>(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
@@ -363,7 +361,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   // Hardware Back Button Interception for Settings Sub-pages & Modals
   useBackHandler(Boolean(activeCategory), () => setActiveCategory(null), BackPriority.SUBVIEW, 'settings_subpage');
   useBackHandler(isAccountLinkSyncModalOpen, () => setIsAccountLinkSyncModalOpen(false), BackPriority.MODAL, 'settings_account_link_sync');
-  useBackHandler(isCampusPickerOpen, () => setIsCampusPickerOpen(false), BackPriority.MODAL, 'settings_campus');
   useBackHandler(isEditProfileOpen, () => setIsEditProfileOpen(false), BackPriority.MODAL, 'settings_edit_profile');
   useBackHandler(isLogoutModalOpen, () => setIsLogoutModalOpen(false), BackPriority.MODAL, 'settings_logout');
   useBackHandler(isResetModalOpen, () => setIsResetModalOpen(false), BackPriority.MODAL, 'settings_reset');
@@ -372,7 +369,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   useBackHandler(isEditingUsername, () => setIsEditingUsername(false), BackPriority.MODAL, 'settings_edit_username');
 
   // Background Scroll Lock safely managed via reference counting
-  // CampusPickerModal encapsulates its own lock; isEditingUsername is an inline card (not a modal)
+  // isEditingUsername is an inline card (not a modal)
   const isAnyModalActive = Boolean(
     isLogoutModalOpen ||
     isResetModalOpen ||
@@ -1380,15 +1377,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 >
                   <UserCheck className="w-3.5 h-3.5" />
                   <span>Change Username</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setIsCampusPickerOpen(true)}
-                  className="px-4 py-2 rounded-xl bg-[var(--nested-bg)] border border-[var(--card-border)] text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5 hover:border-[var(--card-hover-border)] pressable cursor-pointer"
-                >
-                  <School className="w-3.5 h-3.5" />
-                  <span>Change Campus</span>
                 </button>
               </div>
             </div>
@@ -2636,27 +2624,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           </div>
         )}
       </main>
-
-      {/* University Picker Modal */}
-      <CampusPickerModal
-        isOpen={isCampusPickerOpen}
-        onClose={() => setIsCampusPickerOpen(false)}
-        selectedCampusId={userSession.campusId}
-        onSelectCampus={async (newCampusId) => {
-          const updated: UserSession = { ...userSession, campusId: newCampusId };
-          saveSession(updated);
-          onUpdateSession(updated);
-          localStorage.setItem('skweladabaw_profile_dirty', 'true');
-          localStorage.setItem('skweladabaw_profile_updated_at', String(Date.now()));
-          if (userSession.uid) {
-            updateUserProfileFields(userSession.uid, { campusId: newCampusId }).catch(() => {});
-          }
-          queueCloudSync(updated);
-          syncLocalDataToCloud(updated).catch(() => {});
-          setProfileSuccessToast('Campus updated successfully!');
-          setTimeout(() => setProfileSuccessToast(null), 3000);
-        }}
-      />
 
       {/* Comprehensive Edit Profile Modal */}
       {isEditProfileOpen && createPortal(

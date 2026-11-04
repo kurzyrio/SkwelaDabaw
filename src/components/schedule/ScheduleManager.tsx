@@ -13,7 +13,6 @@ import {
   X, 
   CalendarCheck, 
   AlertCircle,
-  Calculator,
   ListTodo,
   Upload,
   Bell,
@@ -29,7 +28,6 @@ import {
 } from 'lucide-react';
 import { db } from '../../db';
 import { ClassSchedule, DayOfWeek } from '../../types';
-import { GradeCalculator } from './GradeCalculator';
 import { DayReminderManager } from './DayReminderManager';
 import { PageIntroGuide } from '../common/PageIntroGuide';
 import { ScheduleImportModal } from './ScheduleImportModal';
@@ -82,7 +80,7 @@ interface ScheduleManagerProps {
 }
 
 export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'today' | 'weekly' | 'grades' | 'reminders'>(() => {
+  const [activeSubTab, setActiveSubTab] = useState<'today' | 'weekly' | 'reminders'>(() => {
     const pref = localStorage.getItem('skweladabaw_default_view');
     if (pref === 'grid' || pref === 'weekly') return 'weekly';
     return 'today';
@@ -587,7 +585,7 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
         title="Class Schedule &amp; Timetable"
         description="Manage lecture periods, room assignments, weekly schedules, and semester unit loads."
         tips={[
-          'Switch between Today, Weekly Timetable, GWA Calculator, and Day Reminders.',
+          'Switch between Today, Weekly Timetable, and Day Routine Reminders.',
           'Schedule data is stored solely for easily porting between devices and lecture alarms.'
         ]}
       />
@@ -633,20 +631,6 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
 
           <button
             type="button"
-            onClick={() => setActiveSubTab('grades')}
-            className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all pressable ${
-              activeSubTab === 'grades'
-                ? 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] font-bold shadow-sm'
-                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-            }`}
-            title="GWA Calculator"
-          >
-            <Calculator className="w-3.5 h-3.5 shrink-0" />
-            <span>GPA</span>
-          </button>
-
-          <button
-            type="button"
             onClick={() => setActiveSubTab('reminders')}
             className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all pressable ${
               activeSubTab === 'reminders'
@@ -662,29 +646,7 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
 
         {/* Action Buttons Toolbar */}
         {(activeSubTab === 'today' || activeSubTab === 'weekly') && (
-          <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap relative">
-            {/* Share QR Schedule */}
-            <button
-              type="button"
-              onClick={() => setIsShareModalOpen(true)}
-              className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-[var(--card-border)] bg-[var(--nested-bg)] hover:bg-[var(--card-bg)] text-[var(--text-primary)] text-xs font-semibold pressable transition-all shadow-2xs"
-              title="Share Timetable via High-Density QR"
-            >
-              <QrCode className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-              <span>Share QR</span>
-            </button>
-
-            {/* Import Schedule */}
-            <button
-              type="button"
-              onClick={handleTriggerImport}
-              className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-[var(--card-border)] bg-[var(--nested-bg)] hover:bg-[var(--card-bg)] text-[var(--text-primary)] text-xs font-semibold pressable transition-all shadow-2xs"
-              title="Import Schedule"
-            >
-              <Upload className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-              <span>Import</span>
-            </button>
-
+          <div className="flex items-center gap-1.5 self-end sm:self-auto relative">
             {/* Primary Add Class Button */}
             <button
               type="button"
@@ -696,7 +658,7 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
               <span>Add Class</span>
             </button>
 
-            {/* More Options Dropdown (Widgets, Cloud Sync, Delete All) */}
+            {/* More Options Dropdown (Share, Import, Widgets, Cloud Sync, Delete All) */}
             <div className="relative">
               <button
                 type="button"
@@ -719,6 +681,30 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
                     onClick={() => setIsMoreMenuOpen(false)} 
                   />
                   <div className="absolute right-0 top-full mt-1.5 z-40 w-52 p-1.5 rounded-2xl bg-[var(--card-bg)]/95 backdrop-blur-xl border border-[var(--card-border)] shadow-xl animate-fade-in space-y-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsMoreMenuOpen(false);
+                        setIsShareModalOpen(true);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--nested-bg)] transition-colors text-left pressable"
+                    >
+                      <QrCode className="w-4 h-4 text-blue-500 shrink-0" />
+                      <span>Share QR Schedule</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsMoreMenuOpen(false);
+                        handleTriggerImport();
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--nested-bg)] transition-colors text-left pressable"
+                    >
+                      <Upload className="w-4 h-4 text-amber-500 shrink-0" />
+                      <span>Import Schedule</span>
+                    </button>
+
                     <button
                       type="button"
                       onClick={() => {
@@ -771,9 +757,6 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
           <span>{cloudSyncFeedback}</span>
         </div>
       )}
-
-      {/* RENDER GRADES SUBTAB */}
-      {activeSubTab === 'grades' && <GradeCalculator />}
 
       {/* RENDER DAY ROUTINE REMINDERS SUBTAB */}
       {activeSubTab === 'reminders' && <DayReminderManager />}

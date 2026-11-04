@@ -17,10 +17,40 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.3.5',
+    releaseDate: 'November 5, 2026',
+    title: 'Timetable, Tasks & Profile UI Streamlining',
+    isLatest: true,
+    tagline: 'Streamlined Timetable toolbar navigation, focused the Tasks page purely on assignments and due dates, and consolidated university campus selection.',
+    highlights: [
+      'Removed redundant GPA button from Timetable subtabs in favor of the dedicated GPA & QPI Calculator page',
+      'Streamlined Timetable toolbar with a prominent Add Class button and consolidated More Options menu',
+      'Removed Pomodoro focus timer card to give immediate prominence to assignment deliverables and due dates',
+      'Consolidated campus changing inside Edit Profile, removing the duplicate Change Campus button'
+    ],
+    items: [
+      {
+        type: 'ui',
+        title: 'Timetable Toolbar Streamlining',
+        description: 'Cleaned up timetable navigation by removing the duplicate GPA button and nesting secondary actions cleanly in the More menu.'
+      },
+      {
+        type: 'ui',
+        title: 'Focused Tasks Tracker',
+        description: 'Removed the focus timer card, allowing commuters to immediately view and manage pending assignments, quizzes, and deadlines.'
+      },
+      {
+        type: 'ui',
+        title: 'Consolidated Campus Selection',
+        description: 'Cleaned up the Profile overview card by removing the redundant campus button while preserving full campus customization in Edit Profile.'
+      }
+    ]
+  },
+  {
     version: '1.11.3.4',
     releaseDate: 'November 5, 2026',
     title: 'Settings Render Fix & Diagnostic Error Reporting',
-    isLatest: true,
+    isLatest: false,
     tagline: 'Resolved initialization order causing Settings page to crash on open and introduced Go Back navigation and in-app Diagnostic Error Reporting.',
     highlights: [
       'Resolved Settings page render crash caused by state initialization ordering',
