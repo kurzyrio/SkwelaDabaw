@@ -27,9 +27,9 @@ export interface CloudSyncResult {
 }
 
 /**
- * Get current user Firebase Auth ID token across Native Android & Web
+ * Helper to fetch raw token from Native or Web Firebase SDK
  */
-export async function getFirebaseIdToken(): Promise<string | null> {
+async function fetchRawFirebaseToken(): Promise<string | null> {
   // 0. Check for SkwelaDabaw Phone Auth session token
   const localToken = localStorage.getItem('skweladabaw_auth_token');
   if (localToken) {
@@ -70,6 +70,20 @@ export async function getFirebaseIdToken(): Promise<string | null> {
     } catch (_) {}
   }
 
+  return null;
+}
+
+/**
+ * Get current user Firebase Auth ID token across Native Android & Web with retry
+ */
+export async function getFirebaseIdToken(): Promise<string | null> {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const token = await fetchRawFirebaseToken();
+    if (token) return token;
+    if (attempt < 3) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
   return null;
 }
 
@@ -194,6 +208,41 @@ export async function restoreUserData(
 
       // 2. Restore Schedules into Dexie with account isolation
       let scheduleCount = 0;
+      const dayAbbrevMap: Record<string, string> = {
+        'm': 'Monday', 'mon': 'Monday', 'monday': 'Monday',
+        't': 'Tuesday', 'tue': 'Tuesday', 'tues': 'Tuesday', 'tuesday': 'Tuesday',
+        'w': 'Wednesday', 'wed': 'Wednesday', 'wednesday': 'Wednesday',
+        'th': 'Thursday', 'thu': 'Thursday', 'thur': 'Thursday', 'thurs': 'Thursday', 'thursday': 'Thursday',
+        'f': 'Friday', 'fri': 'Friday', 'friday': 'Friday',
+        's': 'Saturday', 'sat': 'Saturday', 'saturday': 'Saturday',
+        'su': 'Sunday', 'sun': 'Sunday', 'sunday': 'Sunday',
+        'everyday': 'Everyday'
+      };
+
+      const parseDays = (raw: any): any[] => {
+        if (!raw) return ['Monday', 'Wednesday', 'Friday'];
+        let items: string[] = [];
+        if (Array.isArray(raw)) {
+          items = raw.map(x => String(x).trim());
+        } else if (typeof raw === 'string') {
+          items = raw.split(',').map(x => x.trim());
+        }
+        const mapped: string[] = [];
+        for (const item of items) {
+          const key = item.toLowerCase();
+          if (dayAbbrevMap[key]) {
+            if (!mapped.includes(dayAbbrevMap[key])) {
+              mapped.push(dayAbbrevMap[key]);
+            }
+          } else if (['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday', 'Everyday'].includes(item)) {
+            if (!mapped.includes(item)) {
+              mapped.push(item);
+            }
+          }
+        }
+        return mapped.length > 0 ? mapped : ['Monday', 'Wednesday', 'Friday'];
+      };
+
       if (Array.isArray(responseData.schedules) && responseData.schedules.length > 0) {
         const mappedSchedules: ClassSchedule[] = responseData.schedules.map((s: any, idx: number) => ({
           id: s.id ? Number(s.id) : idx + 1,
@@ -201,7 +250,7 @@ export async function restoreUserData(
           subjectCode: s.subject_code || 'SUBJ',
           subjectName: s.subject_name || s.subject_code || 'Subject',
           room: s.room || '',
-          days: s.days ? s.days.split(',') : ['M', 'W', 'F'],
+          days: parseDays(s.days),
           startTime: s.start_time || '07:30',
           endTime: s.end_time || '09:00',
           color: s.color || '#0284c7',
@@ -593,7 +642,10 @@ export async function syncLocalDataToCloud(session?: StudentAuthSession): Promis
       }
     } catch {}
 
-    const payload = {
+    const isExplicitEmptySchedules = typeof window !== 'undefined' && localStorage.getItem('skweladabaw_explicit_empty_schedules') === 'true';
+    const isExplicitEmptyTasks = typeof window !== 'undefined' && localStorage.getItem('skweladabaw_explicit_empty_tasks') === 'true';
+
+    const payload: any = {
       profile: {
         username: currentSession.username,
         displayName: currentSession.name,
@@ -605,8 +657,11 @@ export async function syncLocalDataToCloud(session?: StudentAuthSession): Promis
         age: currentSession.age,
         gender: currentSession.gender,
         isSetupComplete: hasCompletedOnboarding()
-      },
-      schedules: localSchedules.map((s) => ({
+      }
+    };
+
+    if (localSchedules.length > 0 || isExplicitEmptySchedules) {
+      payload.schedules = localSchedules.map((s) => ({
         ofrCode: s.ofrCode,
         subjectCode: s.subjectCode,
         subjectName: s.subjectName,
@@ -617,8 +672,11 @@ export async function syncLocalDataToCloud(session?: StudentAuthSession): Promis
         color: s.color,
         section: s.ofrCode || '',
         instructor: s.instructor
-      })),
-      tasks: localTasks.map((t) => ({
+      }));
+    }
+
+    if (localTasks.length > 0 || isExplicitEmptyTasks) {
+      payload.tasks = localTasks.map((t) => ({
         title: t.title,
         description: t.notes || '',
         dueDate: t.dueDate,
@@ -626,28 +684,40 @@ export async function syncLocalDataToCloud(session?: StudentAuthSession): Promis
         priority: t.priority,
         completed: t.completed ? 1 : 0,
         subjectCode: t.subjectCode
-      })),
-      routines: localRoutines.map((r) => ({
+      }));
+    }
+
+    if (localRoutines.length > 0) {
+      payload.routines = localRoutines.map((r) => ({
         title: r.title,
         dayOfWeek: r.dayOfWeek,
         time: r.time,
         enabled: r.enabled ? 1 : 0
-      })),
-      expenses: localExpenses.map((e) => ({
+      }));
+    }
+
+    if (localExpenses.length > 0) {
+      payload.expenses = localExpenses.map((e) => ({
         amount: e.amount,
         category: e.category,
         note: e.note || '',
         date: e.date
-      })),
-      savedTransit: Array.isArray(savedTransitRoutes) ? savedTransitRoutes.map((st) => ({
+      }));
+    }
+
+    if (Array.isArray(savedTransitRoutes) && savedTransitRoutes.length > 0) {
+      payload.savedTransit = savedTransitRoutes.map((st) => ({
         routeId: st.id || '',
         routeName: st.name || '',
         origin: st.origin || '',
         destination: st.destination || '',
         fare: st.fare || null,
         notes: st.notes || ''
-      })) : [],
-      grades: localGrades.map((g) => ({
+      }));
+    }
+
+    if (localGrades.length > 0) {
+      payload.grades = localGrades.map((g) => ({
         subjectCode: g.subjectCode,
         subjectName: g.subjectName,
         units: g.units,
@@ -658,17 +728,25 @@ export async function syncLocalDataToCloud(session?: StudentAuthSession): Promis
         rawAverage: g.rawAverage,
         transmutedGrade: g.transmutedGrade,
         gradingScale: g.gradingScale
-      })),
-      savedPlaces: Array.isArray(savedPlacesList) ? savedPlacesList.map((p) => ({
+      }));
+    }
+
+    if (Array.isArray(savedPlacesList) && savedPlacesList.length > 0) {
+      payload.savedPlaces = savedPlacesList.map((p) => ({
         id: p.id,
         type: p.type,
         name: p.name,
         address: p.address || '',
         lat: p.lat,
         lng: p.lng
-      })) : [],
-      bookmarkedBulletins: Array.isArray(bookmarkedBulletinsList) ? bookmarkedBulletinsList : [],
-      settings: {
+      }));
+    }
+
+    if (Array.isArray(bookmarkedBulletinsList) && bookmarkedBulletinsList.length > 0) {
+      payload.bookmarkedBulletins = bookmarkedBulletinsList;
+    }
+
+    payload.settings = {
         baonBudget: Number(localStorage.getItem('skweladabaw_baon_budget') || 150),
         baonFrequency: localStorage.getItem('skweladabaw_baon_frequency') || 'daily',
         defaultView: localStorage.getItem('skweladabaw_default_view') || 'daily',
@@ -684,8 +762,7 @@ export async function syncLocalDataToCloud(session?: StudentAuthSession): Promis
         tapFxStyle: localStorage.getItem('skweladabaw_tap_fx_style') || 'ripple',
         tapFxSpeed: localStorage.getItem('skweladabaw_tap_fx_speed') || 'normal',
         soundEnabled: localStorage.getItem('skweladabaw_sound_enabled') !== 'false' ? 1 : 0
-      }
-    };
+      };
 
     const postUrl = `${SYNC_API_URL}?token=${encodeURIComponent(token)}`;
 
@@ -778,11 +855,19 @@ export async function syncCloudDataBiDirectional(): Promise<{
   notifySyncStatus('syncing');
 
   try {
-    // Step 1: Push local state to cloud
-    const pushSuccess = await syncLocalDataToCloud(session);
-
-    // Step 2: Hydrate latest state from cloud
+    // Step 1: Hydrate latest authoritative state from cloud first
     const pullResult = await restoreUserData(session.uid);
+
+    // Step 2: Push local state to cloud if pending changes exist
+    let pushSuccess = true;
+    if (
+      typeof window !== 'undefined' &&
+      (localStorage.getItem(PENDING_SYNC_KEY) === 'true' ||
+       localStorage.getItem('skweladabaw_pending_sync') === 'true' ||
+       localStorage.getItem('skweladabaw_profile_dirty') === 'true')
+    ) {
+      pushSuccess = await syncLocalDataToCloud(session);
+    }
 
     const now = new Date().toISOString();
     if (typeof window !== 'undefined') {
@@ -792,7 +877,7 @@ export async function syncCloudDataBiDirectional(): Promise<{
     }
 
     return {
-      success: pushSuccess || pullResult.restored,
+      success: pullResult.restored || pushSuccess,
       message: 'Timetable and commuter data fully synchronized with cloud.',
       scheduleCount: pullResult.scheduleCount,
       taskCount: pullResult.taskCount,

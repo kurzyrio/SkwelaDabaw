@@ -62,7 +62,7 @@ import {
   StudentAuthSession,
   signOutUser
 } from './services/authService';
-import { restoreUserData, syncLocalDataToCloud, queueCloudSync } from './services/cloudSyncService';
+import { restoreUserData, syncLocalDataToCloud, queueCloudSync, syncCloudDataBiDirectional } from './services/cloudSyncService';
 import { verifyProfileIntegrity, ProfileVerificationState, saveLocalUserRecord } from './services/userService';
 import { requestNotificationPermission, notifyAppUpdateAvailable } from './services/notificationService';
 import { useScheduleAlarm } from './hooks/useScheduleAlarm';
@@ -775,7 +775,11 @@ export function App() {
     setUserSession(session);
     saveSession(session);
     if (session.isLoggedIn && session.uid) {
-      queueCloudSync(session);
+      if (!wasLoggedIn) {
+        syncCloudDataBiDirectional().catch(() => {});
+      } else {
+        queueCloudSync(session);
+      }
     }
     if (!wasLoggedIn && session.isLoggedIn) {
       if (Capacitor.isNativePlatform() && typeof localStorage !== 'undefined' && localStorage.getItem('skwela_eagle_overlay_prompted') !== 'true') {

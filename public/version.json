@@ -1,6 +1,6 @@
 {
-  "version": "1.11.3.5",
-  "versionCode": 117,
+  "version": "1.11.3.6",
+  "versionCode": 118,
   "releaseDate": "2026-11-05",
   "versionScheme": {
     "digit1": "App Version",
@@ -13,15 +13,15 @@
   "forceUpdate": false,
   "developer": "Kurzyrio",
   "supportEmail": "jerriviencenatad@gmail.com",
-  "title": "Timetable, Tasks & Profile UI Streamlining",
+  "title": "Timetable Auto-Sync & Single-Row Topbar",
   "releaseNotes": [
-    "Cleaned Up Timetable Toolbar: Removed redundant GPA subtab button in favor of the dedicated GPA page and streamlined action options into the More menu.",
-    "Simplified Tasks Tracker: Removed the focus timer card to focus directly on assignment tracking, due dates, and reminders.",
-    "Consolidated Campus Selection: Removed duplicate campus button from Profile card, keeping university selection cohesive inside Edit Profile."
+    "Automated Timetable Login Sync: Classes and coursework automatically restore from cloud backup immediately upon logging in or switching accounts.",
+    "Guest Schedule Preservation: Guest local schedules are safely preserved during sign-in transitions, preventing accidental data loss.",
+    "Single-Row Timetable Topbar: Cleanly unified Today, Weekly, Routines, Add Class, and More Options across a single organized topbar row."
   ],
   "downloadUrl": "https://skweladabaw.kurzyrio.site/download",
-  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.3.5.apk",
-  "sizeBytes": 26580628,
-  "sizeFormatted": "25.3 MB",
-  "sha256": "c4a59b944157579053cb1df0c6e060e5918f8cba5b1d0079bb9603f93ebc70b1"
+  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.3.6.apk",
+  "sizeBytes": 26582319,
+  "sizeFormatted": "25.4 MB",
+  "sha256": "ed2b92d6361fac99ae360add8941fc3ec1e7e1d60871c33fc1d03343a61e9fcc"
 }

@@ -744,6 +744,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     setIsLoggingIn(true);
     setLoginErrorToast(null);
     try {
+      const isFromGuest = !userSession.isLoggedIn;
+      let guestSchedCount = 0;
+      try {
+        guestSchedCount = await db.schedules.count();
+      } catch (_) {}
+
       const googleSession = await signInWithGoogle(userSession.campusId);
       if (!googleSession) {
         setIsLoggingIn(false);
@@ -760,18 +766,66 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
          existingCloud.isSetupComplete)
       );
 
+      // Read any pending guest schedules preserved during switchAccountSchedules
+      const pendingGuestSchedRaw = localStorage.getItem('skweladabaw_pending_guest_schedules');
+      const pendingGuestScheds: ClassSchedule[] = pendingGuestSchedRaw ? JSON.parse(pendingGuestSchedRaw) : [];
+      const hasGuestSchedules = isFromGuest && (guestSchedCount > 0 || pendingGuestScheds.length > 0);
+
       if (hasCloudData && existingCloud) {
-        // Existing account detected! Count local schedules and prompt user for resolution
-        const count = await db.schedules.count();
-        setPendingCloudUser(existingCloud);
-        setPendingGoogleSession(googleSession);
-        setPendingScheduleCount(count);
-        setIsAccountLinkSyncModalOpen(true);
-        setIsLoggingIn(false);
-        return;
+        if (hasGuestSchedules) {
+          // Existing account AND guest had local schedules -> prompt student to choose
+          setPendingCloudUser(existingCloud);
+          setPendingGoogleSession(googleSession);
+          setPendingScheduleCount(pendingGuestScheds.length || guestSchedCount);
+          setIsAccountLinkSyncModalOpen(true);
+          setIsLoggingIn(false);
+          return;
+        } else {
+          // Existing account and guest had NO schedules -> auto-restore cloud data immediately without modal!
+          localStorage.removeItem('skweladabaw_pending_guest_schedules');
+          localStorage.removeItem('skweladabaw_pending_guest_tasks');
+          await syncCloudDataBiDirectional();
+          const restoredSession: StudentAuthSession = {
+            isLoggedIn: true,
+            uid: existingCloud.uid || googleSession.uid,
+            name: existingCloud.displayName || googleSession.name,
+            username: existingCloud.username || googleSession.username,
+            email: existingCloud.email || googleSession.email,
+            avatar: existingCloud.avatar || googleSession.avatar,
+            campusId: existingCloud.campusId || userSession.campusId,
+            course: existingCloud.course || userSession.course || 'Enrolled Student',
+            yearLevel: existingCloud.yearLevel || userSession.yearLevel || 'College Student',
+            role: existingCloud.role || 'student',
+            age: existingCloud.age,
+            gender: existingCloud.gender
+          };
+          saveSession(restoredSession);
+          saveLocalUserRecord(existingCloud);
+          sessionStorage.setItem('skwela_session_checked', 'true');
+          onUpdateSession(restoredSession);
+          setIsLoggingIn(false);
+          return;
+        }
       }
 
       // If new account or no cloud data conflict, adopt guest profile into the account
+      if (hasGuestSchedules && pendingGuestScheds.length > 0) {
+        await db.schedules.clear();
+        await db.schedules.bulkAdd(pendingGuestScheds);
+        localStorage.removeItem('skweladabaw_pending_guest_schedules');
+      }
+      const pendingGuestTasksRaw = localStorage.getItem('skweladabaw_pending_guest_tasks');
+      if (pendingGuestTasksRaw) {
+        try {
+          const tasks = JSON.parse(pendingGuestTasksRaw);
+          if (Array.isArray(tasks) && tasks.length > 0) {
+            await db.tasks.clear();
+            await db.tasks.bulkAdd(tasks);
+          }
+        } catch (_) {}
+        localStorage.removeItem('skweladabaw_pending_guest_tasks');
+      }
+
       const merged: StudentAuthSession = {
         ...googleSession,
         campusId: userSession.campusId,
@@ -814,7 +868,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       saveSession(restored);
       saveLocalUserRecord(pendingCloudUser);
       sessionStorage.setItem('skwela_session_checked', 'true');
-      await syncUserSchedules(pendingCloudUser.uid);
+      localStorage.removeItem('skweladabaw_pending_guest_schedules');
+      localStorage.removeItem('skweladabaw_pending_guest_tasks');
+      await syncCloudDataBiDirectional();
       onUpdateSession(restored);
       setIsAccountLinkSyncModalOpen(false);
     } catch (e) {
@@ -828,6 +884,30 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     if (!pendingCloudUser || !pendingGoogleSession) return;
     setIsResolvingSyncConflict(true);
     try {
+      // Restore pending guest schedules into Dexie before pushing to cloud
+      const pendingGuestSchedRaw = localStorage.getItem('skweladabaw_pending_guest_schedules');
+      if (pendingGuestSchedRaw) {
+        try {
+          const scheds = JSON.parse(pendingGuestSchedRaw);
+          if (Array.isArray(scheds) && scheds.length > 0) {
+            await db.schedules.clear();
+            await db.schedules.bulkAdd(scheds);
+          }
+        } catch (_) {}
+        localStorage.removeItem('skweladabaw_pending_guest_schedules');
+      }
+      const pendingGuestTasksRaw = localStorage.getItem('skweladabaw_pending_guest_tasks');
+      if (pendingGuestTasksRaw) {
+        try {
+          const tasks = JSON.parse(pendingGuestTasksRaw);
+          if (Array.isArray(tasks) && tasks.length > 0) {
+            await db.tasks.clear();
+            await db.tasks.bulkAdd(tasks);
+          }
+        } catch (_) {}
+        localStorage.removeItem('skweladabaw_pending_guest_tasks');
+      }
+
       const merged: StudentAuthSession = {
         isLoggedIn: true,
         // CRITICAL RULE: Display Name and Username remain strictly locked to existing account database values

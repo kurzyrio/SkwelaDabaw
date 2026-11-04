@@ -579,11 +579,25 @@ export async function backupSchedulesToCloud(
 export async function switchAccountSchedules(
   oldUid?: string, 
   newUid?: string,
-  session?: StudentAuthSession
+  session?: StudentAuthSession,
+  token?: string
 ): Promise<void> {
-  // 1. Back up old account's current schedules, tasks, routines to that account's own cache & cloud
+  // 1. Back up or preserve previous schedules and tasks
   try {
-    if (oldUid && session && session.uid === oldUid && session.isLoggedIn) {
+    if (!oldUid) {
+      // Switching from guest mode: preserve local schedules and tasks in pending guest storage
+      const [currentSchedules, currentTasks] = await Promise.all([
+        db.schedules.toArray(),
+        db.tasks.toArray()
+      ]);
+      if (currentSchedules.length > 0) {
+        localStorage.setItem('skweladabaw_pending_guest_schedules', JSON.stringify(currentSchedules));
+      }
+      if (currentTasks.length > 0) {
+        localStorage.setItem('skweladabaw_pending_guest_tasks', JSON.stringify(currentTasks));
+      }
+    } else if (session && session.uid === oldUid && session.isLoggedIn) {
+      // Switching from registered user: save to that account's specific cache and cloud
       const [currentSchedules, currentTasks, currentRoutines, currentExpenses] = await Promise.all([
         db.schedules.toArray(),
         db.tasks.toArray(),
@@ -674,7 +688,7 @@ export async function switchAccountSchedules(
 
   // Then fetch latest authoritative data from MySQL cloud
   try {
-    await restoreUserData(newUid);
+    await restoreUserData(newUid, token);
   } catch (err) {
     console.warn('MySQL cloud sync on account switch note:', err);
   }

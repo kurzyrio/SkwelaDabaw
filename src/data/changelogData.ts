@@ -17,10 +17,40 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.3.6',
+    releaseDate: 'November 5, 2026',
+    title: 'Timetable Auto-Sync & Single-Row Topbar',
+    isLatest: true,
+    tagline: 'Automated timetable cloud restoration upon login or account switch with guest schedule preservation, and unified the Schedule header into a crisp single row.',
+    highlights: [
+      'Automated timetable cloud restoration immediately upon account login or switch without requiring manual sync',
+      'Preserved guest local schedules during login transitions, intelligently offering account merge or cloud restoration',
+      'Unified the Timetable topbar into a compact single row (Row 1 Only), eliminating awkward multi-row line breaks',
+      'Added normalized weekday parser ensuring all saved day abbreviations correctly display in daily class views'
+    ],
+    items: [
+      {
+        type: 'fix',
+        title: 'Automated Timetable Login Sync',
+        description: 'Schedules and coursework now automatically restore from cloud backup immediately upon logging in or switching accounts.'
+      },
+      {
+        type: 'improvement',
+        title: 'Guest Schedule Preservation',
+        description: 'Local schedules created in guest mode are safely preserved during account sign-in, preventing accidental data loss.'
+      },
+      {
+        type: 'ui',
+        title: 'Single-Row Timetable Topbar',
+        description: 'Consolidated Today, Weekly, Routines, Add Class, and More Options cleanly across a single unified topbar row.'
+      }
+    ]
+  },
+  {
     version: '1.11.3.5',
     releaseDate: 'November 5, 2026',
     title: 'Timetable, Tasks & Profile UI Streamlining',
-    isLatest: true,
+    isLatest: false,
     tagline: 'Streamlined Timetable toolbar navigation, focused the Tasks page purely on assignments and due dates, and consolidated university campus selection.',
     highlights: [
       'Removed redundant GPA button from Timetable subtabs in favor of the dedicated GPA & QPI Calculator page',

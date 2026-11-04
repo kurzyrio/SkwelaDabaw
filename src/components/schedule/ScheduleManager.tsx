@@ -371,6 +371,7 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
       }
       await db.schedules.clear();
 
+      localStorage.setItem('skweladabaw_explicit_empty_schedules', 'true');
       const userSession = getSavedSession();
       const cacheKey = userSession.isLoggedIn && userSession.uid
         ? `skweladabaw_cached_schedules_${userSession.uid}`
@@ -420,6 +421,14 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
       syncScheduleToWidgets(schedules);
     }
   }, [schedules]);
+
+  // Auto-sync schedules from cloud if user is logged in and schedules are currently empty
+  useEffect(() => {
+    const userSession = getSavedSession();
+    if (userSession.isLoggedIn && userSession.uid && schedules.length === 0) {
+      syncCloudDataBiDirectional().catch(() => {});
+    }
+  }, [schedules.length]);
 
   // Determine current day of week
   useEffect(() => {
@@ -590,20 +599,19 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
         ]}
       />
 
-      {/* Header & Inset Subtabs */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[var(--card-border)]">
-        
+      {/* Header & Inset Subtabs - Row 1 Only */}
+      <div className="flex items-center justify-between gap-1.5 pb-2.5 border-b border-[var(--card-border)] overflow-x-auto no-scrollbar">
         {/* iOS Segmented Subtabs */}
-        <div className="flex items-center gap-1 p-1 bg-[var(--nested-bg)] border border-[var(--card-border)] rounded-xl overflow-x-auto">
+        <div className="flex items-center gap-1 p-1 bg-[var(--nested-bg)] border border-[var(--card-border)] rounded-xl shrink-0">
           <button
             type="button"
             onClick={() => {
               setActiveSubTab('today');
               localStorage.setItem('skweladabaw_default_view', 'today');
             }}
-            className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all pressable ${
+            className={`flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-lg text-xs font-semibold transition-all pressable ${
               activeSubTab === 'today'
-                ? 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] font-bold shadow-sm'
+                ? 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] font-bold shadow-xs'
                 : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
             }`}
             title="Today's Classes"
@@ -618,9 +626,9 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
               setActiveSubTab('weekly');
               localStorage.setItem('skweladabaw_default_view', 'weekly');
             }}
-            className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all pressable ${
+            className={`flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-lg text-xs font-semibold transition-all pressable ${
               activeSubTab === 'weekly'
-                ? 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] font-bold shadow-sm'
+                ? 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] font-bold shadow-xs'
                 : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
             }`}
             title="Weekly Timetable"
@@ -632,9 +640,9 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
           <button
             type="button"
             onClick={() => setActiveSubTab('reminders')}
-            className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all pressable ${
+            className={`flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-lg text-xs font-semibold transition-all pressable ${
               activeSubTab === 'reminders'
-                ? 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] font-bold shadow-sm'
+                ? 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] font-bold shadow-xs'
                 : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
             }`}
             title="Weekly Day Routine Alarms"
@@ -644,111 +652,110 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
           </button>
         </div>
 
-        {/* Action Buttons Toolbar */}
-        {(activeSubTab === 'today' || activeSubTab === 'weekly') && (
-          <div className="flex items-center gap-1.5 self-end sm:self-auto relative">
-            {/* Primary Add Class Button */}
+        {/* Action Buttons Toolbar - Compact and in Row 1 */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {(activeSubTab === 'today' || activeSubTab === 'weekly') && (
             <button
               type="button"
               onClick={openAddModal}
-              className="px-3.5 py-2 rounded-xl bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] text-xs font-bold flex items-center justify-center gap-1.5 pressable shadow-xs transition-all"
+              className="px-3 py-1.5 rounded-xl bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] text-xs font-bold flex items-center justify-center gap-1.5 pressable shadow-xs transition-all whitespace-nowrap"
               title="Add Course"
             >
               <Plus className="w-3.5 h-3.5 text-[var(--btn-primary-text)]" />
               <span>Add Class</span>
             </button>
+          )}
 
-            {/* More Options Dropdown (Share, Import, Widgets, Cloud Sync, Delete All) */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setIsMoreMenuOpen(prev => !prev)}
-                className={`p-2 rounded-xl border text-xs font-bold transition-all pressable ${
-                  isMoreMenuOpen 
-                    ? 'border-[var(--card-hover-border)] bg-[var(--card-bg)] text-[var(--text-primary)]' 
-                    : 'border-[var(--card-border)] bg-[var(--nested-bg)] hover:bg-[var(--card-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                }`}
-                title="More Schedule Options"
-                aria-label="More Schedule Options"
-              >
-                <MoreHorizontal className="w-4 h-4" />
-              </button>
+          {/* More Options Dropdown (Share, Import, Widgets, Cloud Sync, Delete All) */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsMoreMenuOpen(prev => !prev)}
+              className={`p-1.5 rounded-xl border text-xs font-bold transition-all pressable ${
+                isMoreMenuOpen 
+                  ? 'border-[var(--card-hover-border)] bg-[var(--card-bg)] text-[var(--text-primary)]' 
+                  : 'border-[var(--card-border)] bg-[var(--nested-bg)] hover:bg-[var(--card-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              }`}
+              title="More Schedule Options"
+              aria-label="More Schedule Options"
+            >
+              <MoreHorizontal className="w-4 h-4" />
+            </button>
 
-              {isMoreMenuOpen && (
-                <>
-                  <div 
-                    className="fixed inset-0 z-30" 
-                    onClick={() => setIsMoreMenuOpen(false)} 
-                  />
-                  <div className="absolute right-0 top-full mt-1.5 z-40 w-52 p-1.5 rounded-2xl bg-[var(--card-bg)]/95 backdrop-blur-xl border border-[var(--card-border)] shadow-xl animate-fade-in space-y-1">
+            {isMoreMenuOpen && (
+              <>
+                <div 
+                  className="fixed inset-0 z-30" 
+                  onClick={() => setIsMoreMenuOpen(false)} 
+                />
+                <div className="absolute right-0 top-full mt-1.5 z-40 w-52 p-1.5 rounded-2xl bg-[var(--card-bg)]/95 backdrop-blur-xl border border-[var(--card-border)] shadow-xl animate-fade-in space-y-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMoreMenuOpen(false);
+                      setIsShareModalOpen(true);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--nested-bg)] transition-colors text-left pressable"
+                  >
+                    <QrCode className="w-4 h-4 text-blue-500 shrink-0" />
+                    <span>Share QR Schedule</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMoreMenuOpen(false);
+                      handleTriggerImport();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--nested-bg)] transition-colors text-left pressable"
+                  >
+                    <Upload className="w-4 h-4 text-amber-500 shrink-0" />
+                    <span>Import Schedule</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMoreMenuOpen(false);
+                      setIsWidgetModalOpen(true);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--nested-bg)] transition-colors text-left pressable"
+                  >
+                    <Smartphone className="w-4 h-4 text-emerald-500 shrink-0" />
+                    <span>Home Screen Widgets</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMoreMenuOpen(false);
+                      handleManualCloudSync();
+                    }}
+                    disabled={isSyncingCloud}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--nested-bg)] transition-colors text-left pressable disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-4 h-4 text-blue-500 shrink-0 ${isSyncingCloud ? 'animate-spin' : ''}`} />
+                    <span>{isSyncingCloud ? 'Syncing...' : 'Sync to Cloud Backup'}</span>
+                  </button>
+
+                  {schedules.length > 0 && (
                     <button
                       type="button"
                       onClick={() => {
                         setIsMoreMenuOpen(false);
-                        setIsShareModalOpen(true);
+                        setIsDeleteAllModalOpen(true);
                       }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--nested-bg)] transition-colors text-left pressable"
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-500 hover:bg-rose-500/10 transition-colors text-left pressable border-t border-[var(--card-border)]/50 pt-2"
                     >
-                      <QrCode className="w-4 h-4 text-blue-500 shrink-0" />
-                      <span>Share QR Schedule</span>
+                      <Trash2 className="w-4 h-4 shrink-0 text-rose-500" />
+                      <span>Delete All Classes</span>
                     </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsMoreMenuOpen(false);
-                        handleTriggerImport();
-                      }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--nested-bg)] transition-colors text-left pressable"
-                    >
-                      <Upload className="w-4 h-4 text-amber-500 shrink-0" />
-                      <span>Import Schedule</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsMoreMenuOpen(false);
-                        setIsWidgetModalOpen(true);
-                      }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--nested-bg)] transition-colors text-left pressable"
-                    >
-                      <Smartphone className="w-4 h-4 text-emerald-500 shrink-0" />
-                      <span>Home Screen Widgets</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsMoreMenuOpen(false);
-                        handleManualCloudSync();
-                      }}
-                      disabled={isSyncingCloud}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--nested-bg)] transition-colors text-left pressable disabled:opacity-50"
-                    >
-                      <RefreshCw className={`w-4 h-4 text-blue-500 shrink-0 ${isSyncingCloud ? 'animate-spin' : ''}`} />
-                      <span>{isSyncingCloud ? 'Syncing...' : 'Sync to Cloud Backup'}</span>
-                    </button>
-
-                    {schedules.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsMoreMenuOpen(false);
-                          setIsDeleteAllModalOpen(true);
-                        }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-500 hover:bg-rose-500/10 transition-colors text-left pressable border-t border-[var(--card-border)]/50 pt-2"
-                      >
-                        <Trash2 className="w-4 h-4 shrink-0 text-rose-500" />
-                        <span>Delete All Classes</span>
-                      </button>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
-        )}
+        </div>
       </div>
 
       {/* Cloud Sync Status Feedback */}

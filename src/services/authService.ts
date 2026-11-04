@@ -210,7 +210,8 @@ const performGoogleSignIn = async (currentCampusId: string): Promise<StudentAuth
           const prevUid = prevSession.isLoggedIn ? prevSession.uid : undefined;
           saveSession(session);
           try {
-            await switchAccountSchedules(prevUid, firebaseUser.uid, prevSession.isLoggedIn ? prevSession : undefined);
+            const idToken = nativeResult.idToken || (await firebaseUser.getIdToken(false).catch(() => undefined));
+            await switchAccountSchedules(prevUid, firebaseUser.uid, prevSession.isLoggedIn ? prevSession : undefined, idToken);
           } catch (_) {}
           return session;
         } catch (syncErr: any) {
@@ -233,7 +234,7 @@ const performGoogleSignIn = async (currentCampusId: string): Promise<StudentAuth
           const prevUid = prevSession.isLoggedIn ? prevSession.uid : undefined;
           saveSession(session);
           try {
-            await switchAccountSchedules(prevUid, uid, prevSession.isLoggedIn ? prevSession : undefined);
+            await switchAccountSchedules(prevUid, uid, prevSession.isLoggedIn ? prevSession : undefined, nativeResult.idToken);
           } catch (_) {}
           return session;
         }
@@ -251,7 +252,12 @@ const performGoogleSignIn = async (currentCampusId: string): Promise<StudentAuth
           yearLevel: 'College Student',
           role: 'student'
         };
+        const prevSession = getSavedSession();
+        const prevUid = prevSession.isLoggedIn ? prevSession.uid : undefined;
         saveSession(session);
+        try {
+          await switchAccountSchedules(prevUid, session.uid, prevSession.isLoggedIn ? prevSession : undefined, nativeResult.idToken);
+        } catch (_) {}
         return session;
       }
     }
@@ -278,7 +284,8 @@ const performGoogleSignIn = async (currentCampusId: string): Promise<StudentAuth
     const prevUid = prevSession.isLoggedIn ? prevSession.uid : undefined;
     saveSession(session);
     try {
-      await switchAccountSchedules(prevUid, user.uid, prevSession.isLoggedIn ? prevSession : undefined);
+      const idToken = await user.getIdToken(false).catch(() => undefined);
+      await switchAccountSchedules(prevUid, user.uid, prevSession.isLoggedIn ? prevSession : undefined, idToken);
     } catch (_) {}
     return session;
   }
