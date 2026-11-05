@@ -17,10 +17,39 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.4.1',
+    releaseDate: 'November 6, 2026',
+    title: 'Accurate Network Detection & Dismissible Offline Banner',
+    isLatest: true,
+    tagline: 'Resolved persistent offline banner display by connecting native Android network monitoring and added session dismissal.',
+    highlights: [
+      'Accurate online status detection via native Android ConnectivityManager interface monitoring',
+      'Instant session dismissal option on the offline banner to reclaim vertical screen space',
+      'Real-time connectivity reactivity: successful cloud sync and API responses immediately clear offline alerts'
+    ],
+    items: [
+      {
+        type: 'fix',
+        title: 'Persistent Offline Banner Resolution',
+        description: 'Fixed an issue where the offline warning remained visible despite an active internet connection.'
+      },
+      {
+        type: 'improvement',
+        title: 'Native Network State Monitoring',
+        description: 'Integrated Android system-level connectivity checks to accurately track Wi-Fi and mobile data availability.'
+      },
+      {
+        type: 'ui',
+        title: 'Dismissible Offline Banner',
+        description: 'Added a one-tap close button allowing commuters to dismiss the offline notice for the active session.'
+      }
+    ]
+  },
+  {
     version: '1.11.4.0',
     releaseDate: 'November 6, 2026',
     title: 'Diagnostics & Privacy Settings and Commuter Data Protection',
-    isLatest: true,
+    isLatest: false,
     tagline: 'Added dedicated Diagnostics & Privacy controls, Wi-Fi data-saver guardrails, and transparent stability reporting.',
     highlights: [
       'Dedicated Diagnostics & Privacy page in App Settings to manage telemetry preferences, view local sync status, and clear diagnostic logs',

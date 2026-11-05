@@ -12,6 +12,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.net.NetworkInfo;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
@@ -701,6 +705,70 @@ public class WidgetBridgePlugin extends Plugin {
                     call.reject("Failed to request location: " + e.getMessage());
                 }
             }
+        }
+    }
+
+    @PluginMethod
+    public void getNetworkStatus(PluginCall call) {
+        JSObject ret = new JSObject();
+        try {
+            ConnectivityManager cm = (ConnectivityManager) getContext().getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm == null) {
+                ret.put("connected", false);
+                ret.put("connectionType", "none");
+                call.resolve(ret);
+                return;
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                Network activeNetwork = cm.getActiveNetwork();
+                if (activeNetwork != null) {
+                    NetworkCapabilities caps = cm.getNetworkCapabilities(activeNetwork);
+                    if (caps != null && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
+                        boolean validated = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED);
+                        String type = "unknown";
+                        if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                            type = "wifi";
+                        } else if (caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
+                            type = "cellular";
+                        } else if (caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) {
+                            type = "ethernet";
+                        }
+
+                        ret.put("connected", true);
+                        ret.put("validated", validated);
+                        ret.put("connectionType", type);
+                        call.resolve(ret);
+                        return;
+                    }
+                }
+            } else {
+                @SuppressWarnings("deprecation")
+                NetworkInfo activeNetworkInfo = cm.getActiveNetworkInfo();
+                if (activeNetworkInfo != null && activeNetworkInfo.isConnected()) {
+                    String type = "unknown";
+                    if (activeNetworkInfo.getType() == ConnectivityManager.TYPE_WIFI) {
+                        type = "wifi";
+                    } else if (activeNetworkInfo.getType() == ConnectivityManager.TYPE_MOBILE) {
+                        type = "cellular";
+                    }
+                    ret.put("connected", true);
+                    ret.put("validated", true);
+                    ret.put("connectionType", type);
+                    call.resolve(ret);
+                    return;
+                }
+            }
+
+            ret.put("connected", false);
+            ret.put("validated", false);
+            ret.put("connectionType", "none");
+            call.resolve(ret);
+        } catch (Exception e) {
+            ret.put("connected", false);
+            ret.put("error", e.getMessage());
+            ret.put("connectionType", "none");
+            call.resolve(ret);
         }
     }
 }

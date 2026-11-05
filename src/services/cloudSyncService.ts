@@ -138,6 +138,9 @@ export async function restoreUserData(
     }
 
     if (responseData && responseData.success && responseData.exists && responseData.user) {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('skwela_network_activity', { detail: { isOnline: true } }));
+      }
       const u = responseData.user;
       const currentSaved = getSavedSession();
       const hasPendingSync = typeof window !== 'undefined' && (
@@ -521,6 +524,11 @@ let isLifecycleInitialized = false;
 function notifySyncStatus(status: SyncStatusState, timestamp?: string): void {
   if (typeof window === 'undefined') return;
   try {
+    if (status === 'synced' || status === 'syncing') {
+      window.dispatchEvent(new CustomEvent('skwela_network_activity', {
+        detail: { isOnline: true }
+      }));
+    }
     window.dispatchEvent(new CustomEvent('skweladabaw_sync_status_changed', {
       detail: {
         status,

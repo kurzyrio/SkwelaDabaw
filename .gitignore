@@ -84,6 +84,7 @@ admin-desktop/
 admin-android/
 decompiled_routeapps/
 scripts/
+animation-preview/
 
 # 8. Internal Documentation, Tracking & AI Prompt Files
 .agents/

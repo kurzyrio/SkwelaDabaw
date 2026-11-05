@@ -10,8 +10,11 @@
  * - Zero PII (no personal info, student names, IDs, or passwords).
  */
 
+import { CURRENT_APP_VERSION } from './updateService';
+
 export interface TelemetryLogEntry {
   id: string; // OFFLINE_ERR_* or ONLINE_ERR_*
+  deviceId?: string;
   type: 'online' | 'offline';
   message: string;
   stack?: string;
@@ -42,8 +45,24 @@ const STORAGE_KEYS = {
   ONLINE_LOGS: 'skwela_logs_online',
   ONLINE_LAST_SENT: 'skwela_logs_online_last_sent',
   ENABLED: 'skwela_telemetry_enabled',
-  ALLOW_CELLULAR: 'skwela_telemetry_allow_cellular'
+  ALLOW_CELLULAR: 'skwela_telemetry_allow_cellular',
+  DEVICE_ID: 'skwela_device_id'
 } as const;
+
+export function getOrCreateDeviceId(): string {
+  try {
+    let id = localStorage.getItem(STORAGE_KEYS.DEVICE_ID);
+    if (!id) {
+      const rand = Math.random().toString(36).substring(2, 9);
+      const time = Date.now().toString(36);
+      id = `dev_${rand}_${time}`;
+      localStorage.setItem(STORAGE_KEYS.DEVICE_ID, id);
+    }
+    return id;
+  } catch {
+    return 'dev_default';
+  }
+}
 
 const API_ENDPOINT = 'https://skweladabaw.kurzyrio.site/api/logs.php';
 const MAX_QUEUE_LIMIT = 50;
@@ -224,6 +243,7 @@ export function recordError(
 
     const newEntry: TelemetryLogEntry = {
       id,
+      deviceId: getOrCreateDeviceId(),
       type,
       message,
       stack,
@@ -235,7 +255,7 @@ export function recordError(
       lastSeen: nowIso,
       deviceInfo: getDeviceInfoSnapshot(getNetworkConnectionType()),
       appTelemetry: {
-        version: '1.11.4.0',
+        version: CURRENT_APP_VERSION,
         sessionUptimeSeconds: Math.floor((Date.now() - sessionStartTime) / 1000),
         currentUrl: typeof window !== 'undefined' ? window.location.href : 'N/A'
       }
@@ -272,6 +292,8 @@ export async function flushOfflineLogs(): Promise<boolean> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         type: 'offline',
+        deviceId: getOrCreateDeviceId(),
+        deviceInfo: getDeviceInfoSnapshot(getNetworkConnectionType()),
         logs: queue
       })
     });
@@ -312,6 +334,8 @@ export async function checkAndFlushOnlineLogs(force = false): Promise<boolean> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         type: 'online',
+        deviceId: getOrCreateDeviceId(),
+        deviceInfo: getDeviceInfoSnapshot(getNetworkConnectionType()),
         logs: queue
       })
     });

@@ -25,9 +25,39 @@ export interface WidgetBridgePluginType {
   getCurrentLocation(): Promise<{ lat: number; lng: number; accuracy?: number }>;
   openLocationSettings(options?: { type?: 'location' | 'permission' }): Promise<{ success: boolean }>;
   checkLocationStatus?(): Promise<{ isPermitted: boolean; isGpsEnabled: boolean }>;
+  getNetworkStatus?(): Promise<{
+    connected: boolean;
+    validated?: boolean;
+    connectionType: 'wifi' | 'cellular' | 'ethernet' | 'none' | 'unknown';
+    error?: string;
+  }>;
 }
 
 export const WidgetBridge = registerPlugin<WidgetBridgePluginType>('WidgetBridge');
+
+/**
+ * Check device network connectivity via native Android ConnectivityManager when available
+ */
+export async function checkDeviceNetworkStatus(): Promise<{
+  connected: boolean;
+  connectionType: string;
+}> {
+  if (Capacitor.isNativePlatform() && WidgetBridge.getNetworkStatus) {
+    try {
+      const res = await WidgetBridge.getNetworkStatus();
+      return {
+        connected: !!res.connected,
+        connectionType: res.connectionType || 'unknown',
+      };
+    } catch {
+      // Fallback below
+    }
+  }
+  return {
+    connected: typeof navigator !== 'undefined' ? navigator.onLine : true,
+    connectionType: 'unknown',
+  };
+}
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
