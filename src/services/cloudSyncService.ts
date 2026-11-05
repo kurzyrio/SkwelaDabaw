@@ -95,6 +95,11 @@ export async function restoreUserData(
   uid?: string,
   providedToken?: string
 ): Promise<CloudSyncResult> {
+  // STRICT OFFLINE GUARD: Never attempt network fetch or risk touching local storage when offline
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return { restored: false, scheduleCount: 0, taskCount: 0, message: 'Device is offline' };
+  }
+
   const token = providedToken || (await getFirebaseIdToken());
   if (!token) {
     return { restored: false, scheduleCount: 0, taskCount: 0, message: 'No auth token available' };
@@ -269,30 +274,36 @@ export async function restoreUserData(
         } catch (_) {}
       } else {
         // Cloud has 0 schedules for this user.
-        // Check if user has an existing account-specific cache for their own UID
-        const userCacheRaw = localStorage.getItem(`skweladabaw_cached_schedules_${uid}`);
-        if (userCacheRaw) {
+        // ANTI-WIPE PROTECTION: Check local device Dexie database first!
+        const existingLocalSchedules = await db.schedules.toArray();
+        if (existingLocalSchedules.length > 0) {
+          // Keep local schedules! Never wipe local data if cloud returns 0.
+          scheduleCount = existingLocalSchedules.length;
+          localStorage.setItem(`skweladabaw_cached_schedules_${uid}`, JSON.stringify(existingLocalSchedules));
+          // Auto-heal cloud by uploading the student's local schedules
+          queueCloudSync(restoredSession);
           try {
-            const userScheds = JSON.parse(userCacheRaw);
-            if (Array.isArray(userScheds) && userScheds.length > 0) {
-              await db.schedules.clear();
-              await db.schedules.bulkAdd(userScheds);
-              scheduleCount = userScheds.length;
-              queueCloudSync(restoredSession);
-              await scheduleAllClassSchedulesReminders(userScheds);
-              await refreshUnremovableClassNotification(userScheds);
-              syncScheduleToWidgets(userScheds);
-            } else {
-              await db.schedules.clear();
-              syncScheduleToWidgets([]);
-            }
-          } catch (_) {
-            await db.schedules.clear();
-            syncScheduleToWidgets([]);
-          }
+            await scheduleAllClassSchedulesReminders(existingLocalSchedules);
+            await refreshUnremovableClassNotification(existingLocalSchedules);
+            syncScheduleToWidgets(existingLocalSchedules);
+          } catch (_) {}
         } else {
-          await db.schedules.clear();
-          syncScheduleToWidgets([]);
+          // Local Dexie is also empty. Check if user has an existing account-specific cache
+          const userCacheRaw = localStorage.getItem(`skweladabaw_cached_schedules_${uid}`);
+          if (userCacheRaw) {
+            try {
+              const userScheds = JSON.parse(userCacheRaw);
+              if (Array.isArray(userScheds) && userScheds.length > 0) {
+                await db.schedules.clear();
+                await db.schedules.bulkAdd(userScheds);
+                scheduleCount = userScheds.length;
+                queueCloudSync(restoredSession);
+                await scheduleAllClassSchedulesReminders(userScheds);
+                await refreshUnremovableClassNotification(userScheds);
+                syncScheduleToWidgets(userScheds);
+              }
+            } catch (_) {}
+          }
         }
       }
 
@@ -316,26 +327,27 @@ export async function restoreUserData(
         localStorage.setItem(`skweladabaw_cached_tasks_${uid}`, JSON.stringify(mappedTasks));
         syncTasksToWidgets(mappedTasks);
       } else {
-        const userTasksRaw = localStorage.getItem(`skweladabaw_cached_tasks_${uid}`);
-        if (userTasksRaw) {
-          try {
-            const userTasks = JSON.parse(userTasksRaw);
-            if (Array.isArray(userTasks) && userTasks.length > 0) {
-              await db.tasks.clear();
-              await db.tasks.bulkAdd(userTasks);
-              taskCount = userTasks.length;
-              queueCloudSync(restoredSession);
-            } else {
-              await db.tasks.clear();
-              syncTasksToWidgets([]);
-            }
-          } catch (_) {
-            await db.tasks.clear();
-            syncTasksToWidgets([]);
-          }
+        // ANTI-WIPE PROTECTION: Check local device Dexie tasks first!
+        const existingLocalTasks = (await db.tasks.toArray()).filter((t) => t.sync_status !== 'pending_delete');
+        if (existingLocalTasks.length > 0) {
+          taskCount = existingLocalTasks.length;
+          localStorage.setItem(`skweladabaw_cached_tasks_${uid}`, JSON.stringify(existingLocalTasks));
+          queueCloudSync(restoredSession);
+          syncTasksToWidgets(existingLocalTasks);
         } else {
-          await db.tasks.clear();
-          syncTasksToWidgets([]);
+          const userTasksRaw = localStorage.getItem(`skweladabaw_cached_tasks_${uid}`);
+          if (userTasksRaw) {
+            try {
+              const userTasks = JSON.parse(userTasksRaw);
+              if (Array.isArray(userTasks) && userTasks.length > 0) {
+                await db.tasks.clear();
+                await db.tasks.bulkAdd(userTasks);
+                taskCount = userTasks.length;
+                queueCloudSync(restoredSession);
+                syncTasksToWidgets(userTasks);
+              }
+            } catch (_) {}
+          }
         }
       }
 
@@ -353,21 +365,22 @@ export async function restoreUserData(
         await db.dayReminders.bulkAdd(mappedRoutines);
         localStorage.setItem(`skweladabaw_cached_routines_${uid}`, JSON.stringify(mappedRoutines));
       } else {
-        const userRoutinesRaw = localStorage.getItem(`skweladabaw_cached_routines_${uid}`);
-        if (userRoutinesRaw) {
-          try {
-            const userRoutines = JSON.parse(userRoutinesRaw);
-            if (Array.isArray(userRoutines) && userRoutines.length > 0) {
-              await db.dayReminders.clear();
-              await db.dayReminders.bulkAdd(userRoutines);
-            } else {
-              await db.dayReminders.clear();
-            }
-          } catch (_) {
-            await db.dayReminders.clear();
-          }
+        // ANTI-WIPE PROTECTION: Check local device routines first!
+        const existingLocalRoutines = await db.dayReminders.toArray();
+        if (existingLocalRoutines.length > 0) {
+          localStorage.setItem(`skweladabaw_cached_routines_${uid}`, JSON.stringify(existingLocalRoutines));
+          queueCloudSync(restoredSession);
         } else {
-          await db.dayReminders.clear();
+          const userRoutinesRaw = localStorage.getItem(`skweladabaw_cached_routines_${uid}`);
+          if (userRoutinesRaw) {
+            try {
+              const userRoutines = JSON.parse(userRoutinesRaw);
+              if (Array.isArray(userRoutines) && userRoutines.length > 0) {
+                await db.dayReminders.clear();
+                await db.dayReminders.bulkAdd(userRoutines);
+              }
+            } catch (_) {}
+          }
         }
       }
       db.dayReminders.toArray().then(syncRoutinesToWidgets).catch(() => {});

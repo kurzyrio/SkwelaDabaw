@@ -17,10 +17,45 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.3.9',
+    releaseDate: 'November 5, 2026',
+    title: 'Offline Schedule Retention & Real-Time Background Notification',
+    isLatest: true,
+    tagline: 'Preserved offline timetable schedules with zero-loss protection and connected unremovable status card to background minute ticks.',
+    highlights: [
+      'Guaranteed offline timetable persistence: schedules, tasks, and routines are permanently preserved even when offline',
+      'Fixed unremovable status bar notification to update dynamically every minute in the background as class periods transition',
+      'Connected status bar notification directly to native Android background execution and weather wake-up loop',
+      'Eliminated schedule page offline freezing and premature empty-cloud sync triggers'
+    ],
+    items: [
+      {
+        type: 'fix',
+        title: 'Offline Timetable Retention',
+        description: 'Prevented cloud synchronization from wiping local class schedules when offline or on empty cloud responses.'
+      },
+      {
+        type: 'feature',
+        title: 'Autonomous Background Status Bar Ticks',
+        description: 'Hooked ongoing timetable card into native Android time ticks to transition active lectures automatically.'
+      },
+      {
+        type: 'improvement',
+        title: 'Background Loop Integration',
+        description: 'Synchronized ongoing status bar notification and home screen widgets with the native 5-minute background service.'
+      },
+      {
+        type: 'fix',
+        title: 'Schedule Page Offline Stability',
+        description: 'Fixed timetable loading glitches when launching the app without an internet connection.'
+      }
+    ]
+  },
+  {
     version: '1.11.3.8',
     releaseDate: 'November 5, 2026',
     title: 'Schedule Menu Polish, Legal Unification & Campus Sync Protection',
-    isLatest: true,
+    isLatest: false,
     tagline: 'Cleaned up schedule menu interaction, streamlined settings, unified legal policies, and strengthened student campus synchronization.',
     highlights: [
       'Fixed the timetable 3-dots options menu to open without screen darkening or containing box borders',

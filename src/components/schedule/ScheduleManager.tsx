@@ -435,13 +435,23 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
     }
   }, [schedules]);
 
-  // Auto-sync schedules from cloud if user is logged in and schedules are currently empty
+  // One-time safe mount check: If user is logged in, device is online, and Dexie is truly empty
   useEffect(() => {
-    const userSession = getSavedSession();
-    if (userSession.isLoggedIn && userSession.uid && schedules.length === 0) {
-      syncCloudDataBiDirectional().catch(() => {});
-    }
-  }, [schedules.length]);
+    let isCancelled = false;
+    const checkInitialSync = async () => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+      const userSession = getSavedSession();
+      if (!userSession.isLoggedIn || !userSession.uid) return;
+      try {
+        const count = await db.schedules.count();
+        if (count === 0 && !isCancelled) {
+          await syncCloudDataBiDirectional().catch(() => {});
+        }
+      } catch (_) {}
+    };
+    checkInitialSync();
+    return () => { isCancelled = true; };
+  }, []);
 
   // Determine current day of week
   useEffect(() => {
@@ -591,9 +601,20 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
     }
   };
 
+  const matchesDay = (days: any, targetDay: DayOfWeek): boolean => {
+    if (!days) return false;
+    if (Array.isArray(days)) {
+      return days.some((d) => String(d).toLowerCase() === targetDay.toLowerCase());
+    }
+    if (typeof days === 'string') {
+      return days.split(',').some((d) => d.trim().toLowerCase() === targetDay.toLowerCase());
+    }
+    return false;
+  };
+
   // Filter schedules for the selected day
   const todaySchedules = schedules
-    .filter((s) => s.days.includes(selectedDay))
+    .filter((s) => matchesDay(s.days, selectedDay))
     .sort((a, b) => a.startTime.localeCompare(b.startTime));
 
   // Calculate total enrolled units
@@ -806,7 +827,7 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
           <div className="flex items-center gap-2 overflow-x-auto pb-1">
             {DAYS.map((day) => {
               const isSelected = selectedDay === day;
-              const dayClassesCount = schedules.filter((s) => s.days.includes(day)).length;
+              const dayClassesCount = schedules.filter((s) => matchesDay(s.days, day)).length;
               return (
                 <button
                   key={day}
@@ -976,7 +997,7 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
               {/* Day Header Row (Sticky) */}
               <div className="grid grid-cols-7 gap-3 pb-3 border-b border-[var(--card-border)] sticky top-0 z-20 bg-[var(--modal-bg)]/95 backdrop-blur-md pt-1">
                 {DAYS.map((day) => {
-                  const dayCount = schedules.filter((s) => s.days.includes(day)).length;
+                  const dayCount = schedules.filter((s) => matchesDay(s.days, day)).length;
                   return (
                     <div 
                       key={day} 
@@ -997,7 +1018,7 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
               <div className="grid grid-cols-7 gap-3 pt-3 min-h-[420px]">
                 {DAYS.map((day) => {
                   const dayItems = schedules
-                    .filter((s) => s.days.includes(day))
+                    .filter((s) => matchesDay(s.days, day))
                     .sort((a, b) => a.startTime.localeCompare(b.startTime));
 
                   return (

@@ -64,7 +64,7 @@ import {
 } from './services/authService';
 import { restoreUserData, syncLocalDataToCloud, queueCloudSync, syncCloudDataBiDirectional } from './services/cloudSyncService';
 import { verifyProfileIntegrity, ProfileVerificationState, saveLocalUserRecord } from './services/userService';
-import { requestNotificationPermission, notifyAppUpdateAvailable } from './services/notificationService';
+import { requestNotificationPermission, notifyAppUpdateAvailable, refreshUnremovableClassNotification } from './services/notificationService';
 import { useScheduleAlarm } from './hooks/useScheduleAlarm';
 import { useBackHandler } from './hooks/useBackHandler';
 import { useAntiSnooperEasterEgg } from './hooks/useAntiSnooperEasterEgg';
@@ -270,6 +270,14 @@ export function App() {
         console.warn('Initial notification permission request:', err);
       });
     }
+
+    // Immediate 0ms offline startup synchronization for unremovable notification & widgets
+    db.schedules.toArray().then((scheds) => {
+      if (scheds && scheds.length > 0) {
+        refreshUnremovableClassNotification(scheds).catch(console.warn);
+        syncScheduleToWidgets(scheds).catch(console.warn);
+      }
+    }).catch(console.warn);
   }, []);
 
   // ─── STRICT 4-STATE PROFILE VERIFICATION FLOW ─────────────────────────────
@@ -652,10 +660,11 @@ export function App() {
         await Promise.all([
           syncScheduleToWidgets(allSchedules),
           syncTasksToWidgets(allTasks),
-          syncRoutinesToWidgets(allRoutines)
+          syncRoutinesToWidgets(allRoutines),
+          refreshUnremovableClassNotification(allSchedules)
         ]);
       } catch (err) {
-        console.warn('Widget resume sync error:', err);
+        console.warn('Widget & notification resume sync error:', err);
       }
     };
 

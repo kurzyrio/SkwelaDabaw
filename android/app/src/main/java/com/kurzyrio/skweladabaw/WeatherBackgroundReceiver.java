@@ -53,7 +53,23 @@ public class WeatherBackgroundReceiver extends BroadcastReceiver {
         // Run fetch and threshold evaluation on background thread
         executor.execute(() -> {
             try {
-                fetchAndEvaluateWeather(context.getApplicationContext());
+                Context appContext = context.getApplicationContext();
+                fetchAndEvaluateWeather(appContext);
+
+                // Also trigger background widget & ongoing timetable notification synchronization
+                try {
+                    WidgetScheduleHelper.evaluateAndUpdateAllWidgets(appContext);
+                    SharedPreferences ongoingPrefs = appContext.getSharedPreferences("skweladabaw_ongoing_service_prefs", Context.MODE_PRIVATE);
+                    if (ongoingPrefs.getBoolean("pref_is_active", false)) {
+                        Intent serviceIntent = new Intent(appContext, SkwelaOngoingService.class);
+                        serviceIntent.setAction(SkwelaOngoingService.ACTION_UPDATE);
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            appContext.startForegroundService(serviceIntent);
+                        } else {
+                            appContext.startService(serviceIntent);
+                        }
+                    }
+                } catch (Exception ignored) {}
             } catch (Exception e) {
                 Log.w(TAG, "Error evaluating background weather", e);
             } finally {

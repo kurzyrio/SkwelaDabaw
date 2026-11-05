@@ -46,6 +46,8 @@ import {
 } from '../../services/aiScheduleScanner';
 import { backupSchedulesToCloud } from '../../services/userService';
 import { getSavedSession } from '../../services/authService';
+import { scheduleAllClassSchedulesReminders, refreshUnremovableClassNotification } from '../../services/notificationService';
+import { syncScheduleToWidgets } from '../../services/widgetService';
 import { Copy, CheckCheck, ExternalLink, ShieldAlert, AlertTriangle, Edit3, QrCode } from 'lucide-react';
 import { playEagleSound } from '../../utils/audio';
 import confetti from 'canvas-confetti';
@@ -790,14 +792,19 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
       // Atomic bulk addition
       await db.schedules.bulkAdd(cleanItems as any);
 
-      // Background cloud backup for this user account
+      // Background cloud backup and local cache update for this user account
       const currentSession = getSavedSession();
-      if (currentSession.uid && currentSession.isLoggedIn) {
-        const userUid = currentSession.uid;
-        db.schedules.toArray().then((allClasses) => {
-          backupSchedulesToCloud(userUid, allClasses, false, currentSession);
-        });
-      }
+      db.schedules.toArray().then((allClasses) => {
+        scheduleAllClassSchedulesReminders(allClasses).catch(console.warn);
+        syncScheduleToWidgets(allClasses).catch(console.warn);
+        refreshUnremovableClassNotification(allClasses).catch(console.warn);
+        if (currentSession.uid && currentSession.isLoggedIn) {
+          localStorage.setItem(`skweladabaw_cached_schedules_${currentSession.uid}`, JSON.stringify(allClasses));
+          backupSchedulesToCloud(currentSession.uid, allClasses, false, currentSession);
+        } else {
+          localStorage.setItem('skweladabaw_cached_schedules_guest', JSON.stringify(allClasses));
+        }
+      }).catch(console.warn);
 
       confetti({
         particleCount: 80,

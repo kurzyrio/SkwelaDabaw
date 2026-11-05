@@ -5,8 +5,10 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.ServiceInfo;
 import android.graphics.Color;
@@ -66,19 +68,80 @@ public class SkwelaOngoingService extends Service {
     private static final String PREF_THEME_BORDER = "pref_theme_border";
     private static final String PREF_THEME_TEXT = "pref_theme_text";
 
+    private BroadcastReceiver timeTickReceiver = null;
+
+    private void registerTimeTickReceiver() {
+        if (timeTickReceiver == null) {
+            timeTickReceiver = new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    if (intent == null) return;
+                    String action = intent.getAction();
+                    if (Intent.ACTION_TIME_TICK.equals(action) ||
+                        Intent.ACTION_TIME_CHANGED.equals(action) ||
+                        Intent.ACTION_TIMEZONE_CHANGED.equals(action) ||
+                        "com.kurzyrio.skweladabaw.ACTION_SCHEDULE_WIDGET_UPDATE".equals(action)) {
+                        updateNotificationFromLocalSchedule();
+                    }
+                }
+            };
+            IntentFilter filter = new IntentFilter();
+            filter.addAction(Intent.ACTION_TIME_TICK);
+            filter.addAction(Intent.ACTION_TIME_CHANGED);
+            filter.addAction(Intent.ACTION_TIMEZONE_CHANGED);
+            filter.addAction("com.kurzyrio.skweladabaw.ACTION_SCHEDULE_WIDGET_UPDATE");
+            try {
+                registerReceiver(timeTickReceiver, filter);
+            } catch (Exception ignored) {}
+        }
+    }
+
+    private void unregisterTimeTickReceiver() {
+        if (timeTickReceiver != null) {
+            try {
+                unregisterReceiver(timeTickReceiver);
+            } catch (Exception ignored) {}
+            timeTickReceiver = null;
+        }
+    }
+
+    public void updateNotificationFromLocalSchedule() {
+        try {
+            SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            if (!prefs.getBoolean(PREF_IS_ACTIVE, true)) {
+                return;
+            }
+            refreshScheduleFromStorage(prefs);
+            Notification notification = buildRemoteViewsNotification(null, prefs);
+            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null) {
+                nm.notify(ONGOING_NOTIFICATION_ID, notification);
+            }
+        } catch (Exception ignored) {}
+    }
+
     @Override
     public void onCreate() {
         super.onCreate();
         createNotificationChannel();
+        registerTimeTickReceiver();
+    }
+
+    @Override
+    public void onDestroy() {
+        unregisterTimeTickReceiver();
+        super.onDestroy();
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        registerTimeTickReceiver();
 
         if (intent != null) {
             String action = intent.getAction();
             if (ACTION_STOP.equals(action)) {
+                unregisterTimeTickReceiver();
                 prefs.edit().putBoolean(PREF_IS_ACTIVE, false).apply();
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                     stopForeground(STOP_FOREGROUND_REMOVE);
@@ -204,6 +267,8 @@ public class SkwelaOngoingService extends Service {
             nextTime = intent.getStringExtra(EXTRA_NEXT_TIME);
             statusState = intent.getStringExtra(EXTRA_STATUS_STATE);
         } else {
+            // Always evaluate dynamically from local storage on background ticks & alarms
+            refreshScheduleFromStorage(prefs);
             currentClass = prefs.getString(PREF_CURRENT_CLASS, "");
             currentRoom = prefs.getString(PREF_CURRENT_ROOM, "");
             currentTime = prefs.getString(PREF_CURRENT_TIME, "");
@@ -211,19 +276,6 @@ public class SkwelaOngoingService extends Service {
             nextRoom = prefs.getString(PREF_NEXT_ROOM, "");
             nextTime = prefs.getString(PREF_NEXT_TIME, "");
             statusState = prefs.getString(PREF_STATUS_STATE, "");
-
-            // If preferences or intent has no active/next class info, evaluate dynamically from all_schedules_json
-            if ((currentClass == null || currentClass.trim().isEmpty()) && 
-                (nextClass == null || nextClass.trim().isEmpty())) {
-                refreshScheduleFromStorage(prefs);
-                currentClass = prefs.getString(PREF_CURRENT_CLASS, "");
-                currentRoom = prefs.getString(PREF_CURRENT_ROOM, "");
-                currentTime = prefs.getString(PREF_CURRENT_TIME, "");
-                nextClass = prefs.getString(PREF_NEXT_CLASS, "");
-                nextRoom = prefs.getString(PREF_NEXT_ROOM, "");
-                nextTime = prefs.getString(PREF_NEXT_TIME, "");
-                statusState = prefs.getString(PREF_STATUS_STATE, "");
-            }
         }
 
         String currentBadgeText;
@@ -498,6 +550,15 @@ public class SkwelaOngoingService extends Service {
                 allSchedulesJson = customPrefs.getString("all_schedules_json", null);
             }
             if (allSchedulesJson == null || allSchedulesJson.trim().isEmpty()) {
+                prefs.edit()
+                    .putString(PREF_CURRENT_CLASS, "")
+                    .putString(PREF_CURRENT_ROOM, "")
+                    .putString(PREF_CURRENT_TIME, "")
+                    .putString(PREF_NEXT_CLASS, "")
+                    .putString(PREF_NEXT_ROOM, "")
+                    .putString(PREF_NEXT_TIME, "")
+                    .putString(PREF_STATUS_STATE, "empty")
+                    .apply();
                 return;
             }
 
@@ -532,7 +593,7 @@ public class SkwelaOngoingService extends Service {
                     }
                 }
 
-                if (item.days.contains(todayName)) {
+                if (WidgetScheduleHelper.matchesDay(item.days, todayName)) {
                     todayClasses.add(item);
                 }
             }

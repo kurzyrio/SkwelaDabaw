@@ -1,6 +1,6 @@
 {
-  "version": "1.11.3.8",
-  "versionCode": 120,
+  "version": "1.11.3.9",
+  "versionCode": 121,
   "releaseDate": "2026-11-05",
   "versionScheme": {
     "digit1": "App Version",
@@ -13,17 +13,16 @@
   "forceUpdate": false,
   "developer": "Kurzyrio",
   "supportEmail": "jerriviencenatad@gmail.com",
-  "title": "Schedule Menu Polish, Legal Unification & Campus Sync Protection",
+  "title": "Offline Schedule Retention & Real-Time Background Notification",
   "releaseNotes": [
-    "Schedule Options Menu Fix: Eliminated the screen dimming and containing border artifact on the 3-dots schedule dropdown.",
-    "Settings Menu Streamlining: Removed the obsolete onboarding guide replay button from About & System settings.",
-    "Unified Legal & Privacy Center: Merged separate Terms of Service and Privacy Policy pages into a single tabbed dialog with direct web access.",
-    "Permanent Campus Sync Protection: Eradicated lingering backend default fallbacks in SMS, chat, feedback, and share endpoints to prevent campus reversion.",
-    "Graceful Campus State: Display 'Select Campus' instead of defaulting unassigned students to ACQ College of Ministries."
+    "Offline Timetable Retention: Guaranteed permanent local persistence for class schedules, tasks, and routines with zero-loss protection against empty cloud sync responses.",
+    "Autonomous Background Status Bar Ticks: Hooked unremovable timetable status bar card directly into native Android time ticks to transition classes every minute without app interaction.",
+    "Background Service Loop Integration: Connected timetable status notification and home screen widgets to native background execution and weather wake-up loop.",
+    "Schedule Page Offline Stability: Eliminated timetable loading glitches and premature network sync triggers when launching offline."
   ],
   "downloadUrl": "https://skweladabaw.kurzyrio.site/download",
-  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.3.8.apk",
-  "sizeBytes": 26598054,
+  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.3.9.apk",
+  "sizeBytes": 26599492,
   "sizeFormatted": "25.4 MB",
-  "sha256": "66b76d4bb422c1b413bc5a92ef2b0c9fbb675b28f6b05ebfd44a6d08dc821f9a"
+  "sha256": "97a3de0379ce80d21ed769abcd1aa357f76ee488ea01f7f8eaf25a923dec5188"
 }

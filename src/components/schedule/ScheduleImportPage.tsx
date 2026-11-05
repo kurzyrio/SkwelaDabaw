@@ -651,13 +651,16 @@ export const ScheduleImportPage: React.FC<ScheduleImportPageProps> = ({
       confetti({ particleCount: 80, spread: 70 });
       playEagleSound('success');
 
-      // Schedule background notifications and widget sync without blocking the UI
+      // Schedule background notifications, widget sync, and account cache without blocking the UI
       db.schedules.toArray().then((allClasses) => {
         scheduleAllClassSchedulesReminders(allClasses).catch(console.warn);
         syncScheduleToWidgets(allClasses).catch(console.warn);
         refreshUnremovableClassNotification(allClasses).catch(console.warn);
         if (session.uid && session.isLoggedIn) {
+          localStorage.setItem(`skweladabaw_cached_schedules_${session.uid}`, JSON.stringify(allClasses));
           backupSchedulesToCloud(session.uid, allClasses, false, session).catch(console.warn);
+        } else {
+          localStorage.setItem('skweladabaw_cached_schedules_guest', JSON.stringify(allClasses));
         }
       });
 

@@ -885,8 +885,25 @@ export async function refreshUnremovableClassNotification(
   themeKey?: string
 ): Promise<void> {
   try {
-    const resolvedSchedules = schedules || (await db.schedules.toArray());
-    await syncScheduleToWidgets(resolvedSchedules);
+    let resolvedSchedules = schedules;
+    if (!resolvedSchedules || resolvedSchedules.length === 0) {
+      try {
+        resolvedSchedules = await db.schedules.toArray();
+      } catch (_) {}
+    }
+    if (!resolvedSchedules || resolvedSchedules.length === 0) {
+      try {
+        const rawJson = localStorage.getItem('skweladabaw_all_schedules_json');
+        if (rawJson) {
+          const parsed = JSON.parse(rawJson);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            resolvedSchedules = parsed;
+          }
+        }
+      } catch (_) {}
+    }
+
+    await syncScheduleToWidgets(resolvedSchedules || []);
 
     const isEnabled = localStorage.getItem('skweladabaw_persistent_next_class') === 'true';
     if (!isEnabled) {
@@ -898,7 +915,19 @@ export async function refreshUnremovableClassNotification(
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const todayName = dayNames[now.getDay()];
 
-    const todayClasses = (resolvedSchedules || []).filter((s) => s.days && s.days.includes(todayName as any));
+    const matchesDay = (days: any, targetDay: string): boolean => {
+      if (!days) return false;
+      const lowerTarget = targetDay.toLowerCase();
+      if (Array.isArray(days)) {
+        return days.some((d) => String(d).toLowerCase() === lowerTarget);
+      }
+      if (typeof days === 'string') {
+        return days.split(',').some((d) => d.trim().toLowerCase() === lowerTarget);
+      }
+      return false;
+    };
+
+    const todayClasses = (resolvedSchedules || []).filter((s) => matchesDay(s.days, todayName));
     todayClasses.sort((a, b) => a.startTime.localeCompare(b.startTime));
 
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
@@ -928,6 +957,22 @@ export async function refreshUnremovableClassNotification(
   } catch (err) {
     console.warn('Error refreshing unremovable class notification:', err);
   }
+}
+
+let ongoingNotificationInterval: any = null;
+
+export function initOngoingNotificationLoop(): void {
+  if (typeof window === 'undefined') return;
+  if (ongoingNotificationInterval) return;
+
+  ongoingNotificationInterval = setInterval(() => {
+    refreshUnremovableClassNotification().catch(console.warn);
+  }, 60000);
+}
+
+// Auto-start on module evaluation in browser/native
+if (typeof window !== 'undefined') {
+  initOngoingNotificationLoop();
 }
 
 /**
