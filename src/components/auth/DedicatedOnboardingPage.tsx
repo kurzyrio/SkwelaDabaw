@@ -147,6 +147,9 @@ export const DedicatedOnboardingPage: React.FC<DedicatedOnboardingPageProps> = (
   const [baonAmount, setBaonAmount] = useState<number>(150);
   const [baonInput, setBaonInput] = useState<string>('150');
 
+  // Step 8: Telemetry & Crash Reporting Consent
+  const [telemetryConsent, setTelemetryConsent] = useState<boolean>(true);
+
   // Username validation state
   const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
   const [usernameMessage, setUsernameMessage] = useState<string>('');
@@ -508,6 +511,8 @@ export const DedicatedOnboardingPage: React.FC<DedicatedOnboardingPageProps> = (
       localStorage.setItem('skweladabaw_baon_frequency', baonFrequency);
       localStorage.setItem('skweladabaw_default_view', preferredLayout);
       localStorage.setItem('skweladabaw_reminder_timing', String(reminderTiming));
+      localStorage.setItem('skwela_telemetry_enabled', String(telemetryConsent));
+      localStorage.setItem('skwela_telemetry_allow_cellular', 'false');
     } catch {}
 
     const finalSession: StudentAuthSession = {
@@ -1521,6 +1526,30 @@ export const DedicatedOnboardingPage: React.FC<DedicatedOnboardingPageProps> = (
               </h4>
               <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
                 SkwelaDabaw includes a 1-tap beacon to transmit emergency coordinates to Davao Central 911 hotlines.
+              </p>
+            </div>
+
+            {/* Anonymous Diagnostics & Stability Consent Card */}
+            <div className="p-4 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] text-left space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span className="font-bold text-xs text-[var(--text-primary)]">
+                    Anonymous Stability Reports
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={telemetryConsent}
+                  onChange={(e) => setTelemetryConsent(e.target.checked)}
+                  className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-500"
+                />
+              </div>
+              <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                No user personal information or data is used to improve the app.
+              </p>
+              <p className="text-[10px] text-[var(--text-secondary)] leading-relaxed">
+                Transmitted over Wi-Fi only (no mobile data used). Helps the developer catch bugs and crashes.
               </p>
             </div>
 

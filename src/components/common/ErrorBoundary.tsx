@@ -1,6 +1,7 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { RotateCw, AlertTriangle, ChevronDown, ChevronUp, ArrowLeft, Bug, Send, X, CheckCircle2, Loader2 } from 'lucide-react';
 import { db } from '../../db';
+import { recordError } from '../../services/errorTelemetryService';
 
 interface Props {
   children: ReactNode;
@@ -39,6 +40,14 @@ export class ErrorBoundary extends Component<Props, State> {
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('[ErrorBoundary] Caught unhandled error:', error, errorInfo);
     this.setState({ errorInfo });
+
+    try {
+      recordError(error, {
+        componentStack: errorInfo.componentStack,
+        context: `ErrorBoundary: ${this.props.fallbackTitle || 'Component View'}`,
+        source: 'React.ErrorBoundary'
+      });
+    } catch {}
   }
 
   private handleReset = () => {

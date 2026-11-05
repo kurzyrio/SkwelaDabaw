@@ -17,10 +17,45 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.4.0',
+    releaseDate: 'November 6, 2026',
+    title: 'Diagnostics & Privacy Settings and Commuter Data Protection',
+    isLatest: true,
+    tagline: 'Added dedicated Diagnostics & Privacy controls, Wi-Fi data-saver guardrails, and transparent stability reporting.',
+    highlights: [
+      'Dedicated Diagnostics & Privacy page in App Settings to manage telemetry preferences, view local sync status, and clear diagnostic logs',
+      'Commuter mobile data protection: error reporting is set to Wi-Fi only by default to preserve cellular allowances',
+      'Transparent developer assurance guarantee: zero personal information or student data is used to improve the app',
+      'First-time onboarding consent prompt for anonymous crash and stability reporting'
+    ],
+    items: [
+      {
+        type: 'feature',
+        title: 'Diagnostics & Privacy Settings',
+        description: 'Added dedicated controls in App Settings to manage diagnostic preferences and view local sync status.'
+      },
+      {
+        type: 'improvement',
+        title: 'Cellular Data Saver Guardrail',
+        description: 'Configured crash diagnostics to transmit over Wi-Fi only by default, preserving commuter mobile data.'
+      },
+      {
+        type: 'security',
+        title: 'Transparent Privacy Assurance',
+        description: 'Added explicit privacy guarantees ensuring zero user personal information or data is collected.'
+      },
+      {
+        type: 'feature',
+        title: 'Onboarding Privacy Prompt',
+        description: 'Integrated an optional stability reporting step during initial student setup.'
+      }
+    ]
+  },
+  {
     version: '1.11.3.9',
     releaseDate: 'November 5, 2026',
     title: 'Offline Schedule Retention & Real-Time Background Notification',
-    isLatest: true,
+    isLatest: false,
     tagline: 'Preserved offline timetable schedules with zero-loss protection and connected unremovable status card to background minute ticks.',
     highlights: [
       'Guaranteed offline timetable persistence: schedules, tasks, and routines are permanently preserved even when offline',

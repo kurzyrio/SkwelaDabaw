@@ -1,7 +1,7 @@
 {
-  "version": "1.11.3.9",
-  "versionCode": 121,
-  "releaseDate": "2026-11-05",
+  "version": "1.11.4.0",
+  "versionCode": 122,
+  "releaseDate": "2026-11-06",
   "versionScheme": {
     "digit1": "App Version",
     "digit2": "Major Features added",
@@ -13,16 +13,16 @@
   "forceUpdate": false,
   "developer": "Kurzyrio",
   "supportEmail": "jerriviencenatad@gmail.com",
-  "title": "Offline Schedule Retention & Real-Time Background Notification",
+  "title": "Diagnostics & Privacy Settings and Commuter Data Protection",
   "releaseNotes": [
-    "Offline Timetable Retention: Guaranteed permanent local persistence for class schedules, tasks, and routines with zero-loss protection against empty cloud sync responses.",
-    "Autonomous Background Status Bar Ticks: Hooked unremovable timetable status bar card directly into native Android time ticks to transition classes every minute without app interaction.",
-    "Background Service Loop Integration: Connected timetable status notification and home screen widgets to native background execution and weather wake-up loop.",
-    "Schedule Page Offline Stability: Eliminated timetable loading glitches and premature network sync triggers when launching offline."
+    "Diagnostics & Privacy Settings: Dedicated section in App Settings to manage telemetry preferences, view local sync status, and clear diagnostic logs.",
+    "Cellular Data Saver: Configured crash diagnostics to transmit over Wi-Fi only by default to preserve commuter mobile data allowances.",
+    "Transparent Privacy Assurance: Prominent developer assurance guarantee ensuring zero user personal information or data is collected.",
+    "Onboarding Privacy Step: Added an optional stability reporting preference check during initial student setup."
   ],
   "downloadUrl": "https://skweladabaw.kurzyrio.site/download",
-  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.3.9.apk",
-  "sizeBytes": 26599492,
+  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.4.0.apk",
+  "sizeBytes": 26603846,
   "sizeFormatted": "25.4 MB",
-  "sha256": "97a3de0379ce80d21ed769abcd1aa357f76ee488ea01f7f8eaf25a923dec5188"
+  "sha256": "1f15bb3eba7b2ddafc938b91df11ac3ab1052355cecabe72993b617a375e9c9d"
 }

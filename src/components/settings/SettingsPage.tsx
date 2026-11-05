@@ -139,6 +139,7 @@ export type SettingsCategory =
   | 'sync'
   | 'tasks'
   | 'general'
+  | 'diagnostics'
   | 'about';
 
 export interface CategoryOption {
@@ -192,6 +193,12 @@ export const SETTINGS_CATEGORIES: CategoryOption[] = [
     icon: CheckSquare
   },
   {
+    id: 'diagnostics',
+    label: 'Diagnostics & Privacy',
+    description: 'Anonymous crash logs, Wi-Fi data saver & developer assurance',
+    icon: Shield
+  },
+  {
     id: 'about',
     label: 'About & System',
     description: 'App version, update checker & database reset',
@@ -226,6 +233,8 @@ const TAP_SPEED_OPTIONS: { id: 'snappy' | 'normal' | 'gentle'; name: string; des
   { id: 'normal', name: 'Normal', desc: '0.55s balanced drift' },
   { id: 'gentle', name: 'Gentle', desc: '0.85s slow float' },
 ];
+
+import { DiagnosticsSettingsView } from './DiagnosticsSettingsView';
 
 interface SettingsPageProps {
   userSession: UserSession;
@@ -1312,6 +1321,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 </div>
                 <div className="rounded-3xl bg-[var(--card-bg)] border border-[var(--card-border)] overflow-hidden divide-y divide-[var(--card-border)] shadow-xs">
                   {[
+                    SETTINGS_CATEGORIES.find(c => c.id === 'diagnostics')!,
                     SETTINGS_CATEGORIES.find(c => c.id === 'about')!
                   ].map((cat) => {
                     const Icon = cat.icon;
@@ -2489,6 +2499,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               )}
             </div>
           </div>
+        )}
+
+        {/* CATEGORY: DIAGNOSTICS & PRIVACY */}
+        {activeCategory === 'diagnostics' && (
+          <DiagnosticsSettingsView />
         )}
 
         {/* CATEGORY 6: ABOUT & SYSTEM */}
