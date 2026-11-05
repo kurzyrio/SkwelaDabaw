@@ -17,10 +17,51 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.3.8',
+    releaseDate: 'November 5, 2026',
+    title: 'Schedule Menu Polish, Legal Unification & Campus Sync Protection',
+    isLatest: true,
+    tagline: 'Cleaned up schedule menu interaction, streamlined settings, unified legal policies, and strengthened student campus synchronization.',
+    highlights: [
+      'Fixed the timetable 3-dots options menu to open without screen darkening or containing box borders',
+      'Streamlined settings by removing the redundant onboarding guide replay button',
+      'Unified Terms of Service and Privacy Policy into a single tabbed dialog with instant web access',
+      'Fixed campus persistence across cloud synchronization, preventing profile resets to AdDU Jacinto',
+      'Improved campus display so unassigned students cleanly see "Select Campus" instead of default ACQ'
+    ],
+    items: [
+      {
+        type: 'fix',
+        title: 'Schedule Options Dropdown Polish',
+        description: 'Eliminated screen dimming and rectangular clipped borders when opening the schedule options menu.'
+      },
+      {
+        type: 'improvement',
+        title: 'Settings Menu Streamlining',
+        description: 'Cleaned up the About & System section by removing the obsolete onboarding replay button.'
+      },
+      {
+        type: 'feature',
+        title: 'Unified Legal & Privacy Center',
+        description: 'Merged Terms of Service and Privacy Policy into a single comprehensive dialog with one-tap web viewing.'
+      },
+      {
+        type: 'fix',
+        title: 'Campus Sync Reversion Protection',
+        description: 'Prevented student campus preferences from automatically reverting to AdDU Jacinto during account sync.'
+      },
+      {
+        type: 'improvement',
+        title: 'Unassigned Campus State',
+        description: 'Display "Select Campus" rather than defaulting unassigned student profiles to ACQ College of Ministries.'
+      }
+    ]
+  },
+  {
     version: '1.11.3.7',
     releaseDate: 'November 5, 2026',
     title: 'Widget Polish, Routines & Tasks Widgets, and Campus Persistence',
-    isLatest: true,
+    isLatest: false,
     tagline: 'Fixed schedule widget outline clipping, added new Day Routines and Tasks List home screen widgets, theme-adaptive Eagle Overlay, and permanent campus persistence.',
     highlights: [
       'Eliminated border and corner outline clipping across schedule cards in home screen widgets',

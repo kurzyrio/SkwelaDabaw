@@ -34,9 +34,26 @@ export const MaintenanceScreen: React.FC<MaintenanceScreenProps> = ({
     }
   };
 
-  const handlePasscodeSubmit = (e: React.FormEvent) => {
+  const sha256Hex = async (text: string): Promise<string> => {
+    try {
+      const enc = new TextEncoder().encode(text);
+      const buf = await crypto.subtle.digest('SHA-256', enc);
+      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+    } catch {
+      return '';
+    }
+  };
+
+  const handlePasscodeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (adminPass.trim().toLowerCase() === 'kurzyrio' || adminPass.trim() === 'skweladabaw2026') {
+    const inputVal = adminPass.trim().toLowerCase();
+    const hash = await sha256Hex(inputVal);
+    const validBypassHashes = [
+      '83830cfc3bbc4e02d2c9124163aa7d9934c4abb94e63b6243de6465906024f16',
+      '0d4f619b0f57113220da5e6916fdf2748b8c9bc29fb86cd86041effb7f767461'
+    ];
+
+    if (validBypassHashes.includes(hash)) {
       localStorage.setItem('skweladabaw_admin_bypass', 'true');
       if (onAdminBypass) onAdminBypass();
     } else {

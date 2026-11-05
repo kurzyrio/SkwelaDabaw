@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { 
@@ -98,6 +98,19 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
   };
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown cleanly on click outside with zero screen dimming or containing box borders
+  useEffect(() => {
+    if (!isMoreMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+        setIsMoreMenuOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', handleClickOutside);
+    return () => document.removeEventListener('pointerdown', handleClickOutside);
+  }, [isMoreMenuOpen]);
   const [editingSchedule, setEditingSchedule] = useState<ClassSchedule | null>(null);
   const [scheduleToDelete, setScheduleToDelete] = useState<ClassSchedule | null>(null);
   const [timePickerTarget, setTimePickerTarget] = useState<'start' | 'end' | null>(null);
@@ -667,7 +680,7 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
           )}
 
           {/* More Options Dropdown (Share, Import, Widgets, Cloud Sync, Delete All) */}
-          <div className="relative">
+          <div ref={moreMenuRef} className="relative">
             <button
               type="button"
               onClick={() => setIsMoreMenuOpen(prev => !prev)}
@@ -683,12 +696,7 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
             </button>
 
             {isMoreMenuOpen && (
-              <>
-                <div 
-                  className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[1px]" 
-                  onClick={() => setIsMoreMenuOpen(false)} 
-                />
-                <div className="absolute right-0 top-full mt-1.5 z-50 w-52 p-1.5 rounded-2xl bg-[var(--card-bg)] border border-[var(--card-border)] shadow-2xl animate-fade-in space-y-1">
+              <div className="absolute right-0 top-full mt-1.5 z-50 w-52 p-1.5 rounded-2xl bg-[var(--card-bg)] border border-[var(--card-border)] shadow-2xl animate-fade-in space-y-1">
                   <button
                     type="button"
                     onClick={() => {
@@ -752,7 +760,6 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
                     </button>
                   )}
                 </div>
-              </>
             )}
           </div>
         </div>

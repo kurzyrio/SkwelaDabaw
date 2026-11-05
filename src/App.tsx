@@ -837,10 +837,6 @@ export function App() {
               onBack={handleBackView}
               onOpenAbout={() => navigateToView('about')}
               onOpenChangelog={() => navigateToView('changelog')}
-              onReplayOnboarding={() => {
-                navigateToView('main');
-                setIsOnboardingOpen(true);
-              }}
               onOpenFeedback={() => navigateToView('feedback')}
             />
           </ErrorBoundary>

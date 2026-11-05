@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
+import { Capacitor } from '@capacitor/core';
 import { X, ShieldCheck, Scale, FileText, ExternalLink, ShieldAlert, Users, Bus, Smartphone, Calendar, Lock } from 'lucide-react';
 import { useBackHandler, BackPriority } from '../../hooks/useBackHandler';
 
@@ -15,6 +16,22 @@ export const LegalModal: React.FC<LegalModalProps> = ({
   initialTab = 'terms'
 }) => {
   const [activeTab, setActiveTab] = useState<'terms' | 'privacy'>(initialTab);
+
+  const handleOpenWeb = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const url = activeTab === 'terms'
+      ? 'https://skweladabaw.kurzyrio.site/terms.php'
+      : 'https://skweladabaw.kurzyrio.site/privacy.php';
+    if (Capacitor.isNativePlatform()) {
+      try {
+        window.open(url, '_system');
+      } catch {
+        window.open(url, '_blank');
+      }
+    } else {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  };
 
   // Dismiss modal on Android back press
   useBackHandler(isOpen, onClose, BackPriority.MODAL);
@@ -208,12 +225,13 @@ export const LegalModal: React.FC<LegalModalProps> = ({
         <div className="px-5 py-3 border-t border-[var(--card-border)] bg-[var(--card-bg)] flex items-center justify-between shrink-0">
           <a
             href={activeTab === 'terms' ? 'https://skweladabaw.kurzyrio.site/terms.php' : 'https://skweladabaw.kurzyrio.site/privacy.php'}
+            onClick={handleOpenWeb}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center gap-1"
+            className="text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center gap-1.5 pressable cursor-pointer"
           >
             <span>View web version</span>
-            <ExternalLink className="w-3 h-3" />
+            <ExternalLink className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
           </a>
           <button
             type="button"

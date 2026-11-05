@@ -1,6 +1,6 @@
 {
-  "version": "1.11.3.7",
-  "versionCode": 119,
+  "version": "1.11.3.8",
+  "versionCode": 120,
   "releaseDate": "2026-11-05",
   "versionScheme": {
     "digit1": "App Version",
@@ -13,17 +13,17 @@
   "forceUpdate": false,
   "developer": "Kurzyrio",
   "supportEmail": "jerriviencenatad@gmail.com",
-  "title": "Widget Polish, Routines & Tasks Widgets, and Campus Persistence",
+  "title": "Schedule Menu Polish, Legal Unification & Campus Sync Protection",
   "releaseNotes": [
-    "Widget Outline & Layout Polish: Fixed outline and border clipping on schedule cards across home screen widgets.",
-    "New Routines & Tasks Widgets: Added dedicated home screen widgets for day routine alarms and scrollable tasks.",
-    "Adaptive Theme Eagle Overlay: The floating Eagle companion bubble and quick glance card now match your equipped app theme.",
-    "Permanent Campus Persistence: Resolved an issue where selected campuses reverted to default after app restarts.",
-    "Timetable Options Menu Fix: Resolved the 3-dot options dropdown on the timetable header so options open cleanly."
+    "Schedule Options Menu Fix: Eliminated the screen dimming and containing border artifact on the 3-dots schedule dropdown.",
+    "Settings Menu Streamlining: Removed the obsolete onboarding guide replay button from About & System settings.",
+    "Unified Legal & Privacy Center: Merged separate Terms of Service and Privacy Policy pages into a single tabbed dialog with direct web access.",
+    "Permanent Campus Sync Protection: Eradicated lingering backend default fallbacks in SMS, chat, feedback, and share endpoints to prevent campus reversion.",
+    "Graceful Campus State: Display 'Select Campus' instead of defaulting unassigned students to ACQ College of Ministries."
   ],
   "downloadUrl": "https://skweladabaw.kurzyrio.site/download",
-  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.3.7.apk",
-  "sizeBytes": 26598245,
+  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.3.8.apk",
+  "sizeBytes": 26598054,
   "sizeFormatted": "25.4 MB",
-  "sha256": "19637f2fd18321c79f3a670b270b80e9d9330c752a8d5def31aa54822c4956d1"
+  "sha256": "66b76d4bb422c1b413bc5a92ef2b0c9fbb675b28f6b05ebfd44a6d08dc821f9a"
 }

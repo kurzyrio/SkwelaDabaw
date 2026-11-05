@@ -154,7 +154,7 @@ export const DedicatedOnboardingPage: React.FC<DedicatedOnboardingPageProps> = (
   // Notification test state
   const [notificationTestStatus, setNotificationTestStatus] = useState<'idle' | 'sending' | 'success' | 'failed'>('idle');
 
-  const selectedCampus = DAVAO_CAMPUSES.find(c => c.id === campusId) || DAVAO_CAMPUSES[0];
+  const selectedCampus = DAVAO_CAMPUSES.find(c => c.id === campusId) || null;
 
   // Step navigation with slide direction tracking
   const goToStep = (newStep: number) => {
@@ -1015,10 +1015,10 @@ export const DedicatedOnboardingPage: React.FC<DedicatedOnboardingPageProps> = (
                 className="w-full p-3 rounded-xl bg-[var(--nested-bg)] border border-[var(--nested-border)] text-left flex items-center justify-between text-[var(--text-primary)]"
               >
                 <div className="min-w-0 pr-2">
-                  <span className="font-bold text-xs block truncate">{selectedCampus.name}</span>
-                  <span className="text-[11px] text-[var(--text-secondary)] block truncate">{selectedCampus.address}</span>
+                  <span className="font-bold text-xs block truncate">{selectedCampus ? selectedCampus.name : 'Select Your Campus'}</span>
+                  <span className="text-[11px] text-[var(--text-secondary)] block truncate">{selectedCampus ? selectedCampus.address : 'Tap here to choose your college or university'}</span>
                 </div>
-                <span className="text-xs text-[var(--text-primary)] font-semibold shrink-0">Change</span>
+                <span className="text-xs text-[var(--text-primary)] font-semibold shrink-0">{selectedCampus ? 'Change' : 'Choose'}</span>
               </button>
             </div>
 

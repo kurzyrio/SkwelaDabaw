@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { checkForAppUpdate, CURRENT_APP_VERSION, UpdateCheckResult } from '../../services/updateService';
 import { AppUpdateModal } from '../common/AppUpdateModal';
+import { LegalModal } from '../common/LegalModal';
 import { useBackHandler, BackPriority } from '../../hooks/useBackHandler';
 
 interface AboutPageProps {
@@ -28,13 +29,15 @@ interface AboutPageProps {
   onOpenChangelog?: () => void;
 }
 
-type AboutView = 'hub' | 'app' | 'developer' | 'sources' | 'terms' | 'privacy';
+type AboutView = 'hub' | 'app' | 'developer' | 'sources';
 
 export const AboutPage: React.FC<AboutPageProps> = ({ onBack, onOpenChangelog }) => {
   const [currentView, setCurrentView] = useState<AboutView>('hub');
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<string | null>(null);
   const [foundUpdate, setFoundUpdate] = useState<UpdateCheckResult | null>(null);
+  const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
+  const [legalModalInitialTab, setLegalModalInitialTab] = useState<'terms' | 'privacy'>('terms');
 
   // Return to About Hub on Android back press when in a sub-view
   useBackHandler(currentView !== 'hub', () => setCurrentView('hub'), BackPriority.SUBVIEW, 'about_subview');
@@ -80,18 +83,11 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onBack, onOpenChangelog })
       badge: 'Transparency'
     },
     {
-      id: 'terms' as AboutView,
-      title: 'Terms of Service',
-      desc: 'Simple community rules, safe spaces, and student fare discounts',
+      id: 'legal' as const,
+      title: 'Legal & Privacy Policies',
+      desc: 'Terms of Service, Data Privacy Act R.A. 10173, and student rights',
       icon: Scale,
-      badge: 'Rules'
-    },
-    {
-      id: 'privacy' as AboutView,
-      title: 'Privacy Policy',
-      desc: 'Google Login, secure MySQL database host, and student privacy',
-      icon: ShieldCheck,
-      badge: 'Protected'
+      badge: 'Compliance'
     }
   ];
 
@@ -120,8 +116,6 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onBack, onOpenChangelog })
                 {currentView === 'app' && 'The App'}
                 {currentView === 'developer' && 'The Developer'}
                 {currentView === 'sources' && 'Data Sources'}
-                {currentView === 'terms' && 'Terms of Service'}
-                {currentView === 'privacy' && 'Privacy Policy'}
               </h1>
               <p className="text-xs text-[var(--text-secondary)]">
                 {currentView === 'hub' ? 'SkwelaDabaw Information' : 'About SkwelaDabaw'}
@@ -199,7 +193,14 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onBack, onOpenChangelog })
                     <button
                       key={item.id}
                       type="button"
-                      onClick={() => setCurrentView(item.id)}
+                      onClick={() => {
+                        if (item.id === 'legal') {
+                          setLegalModalInitialTab('terms');
+                          setIsLegalModalOpen(true);
+                        } else {
+                          setCurrentView(item.id as AboutView);
+                        }
+                      }}
                       className="p-4 rounded-3xl bg-[var(--card-bg)] border border-[var(--card-border)] hover:border-[var(--card-hover-border)] text-left transition-all duration-200 pressable flex items-center justify-between group shadow-xs cursor-pointer"
                     >
                       <div className="flex items-center gap-3.5">
@@ -447,126 +448,14 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onBack, onOpenChangelog })
             </div>
           </div>
         )}
-
-        {/* ==================== TERMS OF SERVICE SUB-VIEW ==================== */}
-        {currentView === 'terms' && (
-          <div className="space-y-4 animate-fade-in">
-            <div className="p-6 rounded-3xl bg-[var(--card-bg)] border border-[var(--card-border)] space-y-4">
-              <div>
-                <h2 className="text-lg font-bold text-[var(--text-primary)]">
-                  Terms of Service
-                </h2>
-                <p className="text-xs text-[var(--text-secondary)] mt-1">
-                  Simple, everyday rules for using SkwelaDabaw.
-                </p>
-              </div>
-
-              <div className="space-y-3 text-xs text-[var(--text-secondary)] leading-relaxed">
-                <div className="p-3.5 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] space-y-1">
-                  <h3 className="font-bold text-[var(--text-primary)]">1. Independent Student Utility</h3>
-                  <p className="text-[11px]">
-                    SkwelaDabaw is an independent student tool built by Kurzyrio for Davao City students. It is free to use for personal academic scheduling and transit planning.
-                  </p>
-                </div>
-
-                <div className="p-3.5 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] space-y-1">
-                  <h3 className="font-bold text-[var(--text-primary)]">2. 20% Student Fare Discount (R.A. 11314)</h3>
-                  <p className="text-[11px]">
-                    Under Republic Act 11314, students are entitled to a 20% fare discount on Davao City public jeepneys and buses upon presenting a valid student ID. The fare estimates in this app are based on official LTFRB guidelines.
-                  </p>
-                </div>
-
-                <div className="p-3.5 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] space-y-1">
-                  <h3 className="font-bold text-[var(--text-primary)]">3. Anti-Bullying &amp; Safe Spaces (R.A. 10627 &amp; R.A. 11313)</h3>
-                  <p className="text-[11px]">
-                    Zero tolerance for cyberbullying, stalking, threats, doxxing, or hate speech in campus chat. Violations result in immediate permanent device and account expulsion under the Anti-Bullying Act, Safe Spaces Act, and Davao Anti-Discrimination Ordinance.
-                  </p>
-                </div>
-
-                <div className="p-3.5 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] space-y-1">
-                  <h3 className="font-bold text-[var(--text-primary)]">4. Zero Tolerance for Impersonation (R.A. 10175 &amp; Art. 177 RPC)</h3>
-                  <p className="text-[11px]">
-                    Impersonating school deans, university officials, student council officers, faculty, fellow students, or SkwelaDabaw staff is strictly forbidden. Falsely representing university authority or student identities results in immediate permanent termination and potential referral to campus disciplinary boards or law enforcement.
-                  </p>
-                </div>
-
-                <div className="p-3.5 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] space-y-1">
-                  <h3 className="font-bold text-[var(--text-primary)]">5. Emergency Calls &amp; Dispatch</h3>
-                  <p className="text-[11px]">
-                    Emergency buttons trigger standard speed dials to Davao Central 911 through your phone's native dialer. SkwelaDabaw does not replace emergency dispatch services.
-                  </p>
-                </div>
-              </div>
-
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={() => setCurrentView('hub')}
-                  className="w-full py-2.5 rounded-xl bg-[var(--nested-bg)] border border-[var(--card-border)] text-xs font-semibold text-[var(--text-primary)] hover:border-[var(--card-hover-border)] pressable cursor-pointer"
-                >
-                  &larr; Back to About
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ==================== PRIVACY POLICY SUB-VIEW ==================== */}
-        {currentView === 'privacy' && (
-          <div className="space-y-4 animate-fade-in">
-            <div className="p-6 rounded-3xl bg-[var(--card-bg)] border border-[var(--card-border)] space-y-4">
-              <div>
-                <h2 className="text-lg font-bold text-[var(--text-primary)]">
-                  Privacy Policy
-                </h2>
-                <p className="text-xs text-[var(--text-secondary)] mt-1">
-                  How we protect your data under Republic Act No. 10173 (Data Privacy Act).
-                </p>
-              </div>
-
-              <div className="space-y-3 text-xs text-[var(--text-secondary)] leading-relaxed">
-                <div className="p-3.5 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] space-y-1">
-                  <h3 className="font-bold text-[var(--text-primary)]">Google Login is the Only External Provider</h3>
-                  <p className="text-[11px]">
-                    Google Sign-In is the only third-party service connected to SkwelaDabaw. We use it solely to verify your student account so nobody else can take your username or profile.
-                  </p>
-                </div>
-
-                <div className="p-3.5 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] space-y-1">
-                  <h3 className="font-bold text-[var(--text-primary)]">Schedules &amp; User Data on Secure MySQL</h3>
-                  <p className="text-[11px]">
-                    Your timetable, tasks, saved jeep routes, and account details are safely stored on our secure MySQL host at <span className="font-semibold text-[var(--text-primary)]">kurzyrio.site</span>. This ensures your schedule is preserved when switching to a new phone or tablet.
-                  </p>
-                </div>
-
-                <div className="p-3.5 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] space-y-1">
-                  <h3 className="font-bold text-[var(--text-primary)]">Local-First Storage on Your Phone</h3>
-                  <p className="text-[11px]">
-                    A complete copy of your timetable, grades, and baon expenses is kept locally on your phone (IndexedDB). You can view your classes and routes anytime with zero internet.
-                  </p>
-                </div>
-
-                <div className="p-3.5 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] space-y-1">
-                  <h3 className="font-bold text-[var(--text-primary)]">Zero Data Selling &amp; Total Erasure</h3>
-                  <p className="text-[11px]">
-                    We never sell, rent, or trade your personal data. You can delete or reset all your saved schedules and account records anytime from the settings page.
-                  </p>
-                </div>
-              </div>
-
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={() => setCurrentView('hub')}
-                  className="w-full py-2.5 rounded-xl bg-[var(--nested-bg)] border border-[var(--card-border)] text-xs font-semibold text-[var(--text-primary)] hover:border-[var(--card-hover-border)] pressable cursor-pointer"
-                >
-                  &larr; Back to About
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </main>
+
+      {/* Unified Legal & Privacy Modal */}
+      <LegalModal
+        isOpen={isLegalModalOpen}
+        onClose={() => setIsLegalModalOpen(false)}
+        initialTab={legalModalInitialTab}
+      />
 
       {/* In-App Update Modal */}
       {foundUpdate && (

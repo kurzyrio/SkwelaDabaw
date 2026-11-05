@@ -33,12 +33,18 @@ export interface ScheduleExtractionResult {
 }
 
 export const AVAILABLE_OCR_MODELS = [
-  { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash-Lite', badge: 'Ultra Fast & High Accuracy' },
-  { id: 'gemini-flash-lite-latest', name: 'Gemini Flash-Lite Latest', badge: 'Fast & Resilient' }
+  { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', badge: 'Ultra Fast & High Accuracy' },
+  { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', badge: 'Resilient Standard' }
 ];
 
 export function getPreferredOcrModel(): string {
-  return 'gemini-3.5-flash-lite';
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem(STORAGE_KEY_OCR_MODEL);
+    if (saved && AVAILABLE_OCR_MODELS.some(m => m.id === saved)) {
+      return saved;
+    }
+  }
+  return 'gemini-2.0-flash';
 }
 
 export function setPreferredOcrModel(modelId: string): void {

@@ -235,7 +235,6 @@ interface SettingsPageProps {
   onBack: () => void;
   onOpenAbout?: () => void;
   onOpenChangelog?: () => void;
-  onReplayOnboarding?: () => void;
   onOpenFeedback?: () => void;
   initialCategory?: SettingsCategory;
 }
@@ -248,7 +247,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   onBack,
   onOpenAbout,
   onOpenChangelog,
-  onReplayOnboarding,
   onOpenFeedback,
   initialCategory
 }) => {
@@ -634,7 +632,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     }
   };
 
-  const currentCampus = DAVAO_CAMPUSES.find((c) => c.id === userSession.campusId) || DAVAO_CAMPUSES[0];
+  const currentCampus = DAVAO_CAMPUSES.find((c) => c.id === userSession.campusId) || null;
 
   // Calculate 7-day cooldown
   const lastChange = userSession.lastUsernameChange;
@@ -942,9 +940,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     const reset = await signOutUser();
     setOnboardingCompleted(false);
     onUpdateSession(reset);
-    if (onReplayOnboarding) {
-      onReplayOnboarding();
-    }
   };
 
   const handleSaveUsername = async () => {
@@ -1178,7 +1173,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     @{userSession.username || 'student_user'}
                   </p>
                   <p className="text-[11px] text-[var(--text-secondary)] truncate mt-0.5 opacity-80">
-                    {currentCampus.shortName} • {userSession.course || 'Enrolled Student'}
+                    {currentCampus ? currentCampus.shortName : 'No Campus Selected'} • {userSession.course || 'Enrolled Student'}
                   </p>
                 </div>
               </div>
@@ -1413,7 +1408,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 {/* Campus Badge */}
                 <span className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
                   <School className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
-                  <span>{currentCampus.shortName} • {currentCampus.name}</span>
+                  <span>{currentCampus ? `${currentCampus.shortName} • ${currentCampus.name}` : 'No Campus Selected'}</span>
                 </span>
 
                 {/* Course or Year */}
@@ -2642,20 +2637,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     <span className="flex items-center gap-2">
                       <Info className="w-4 h-4 text-indigo-500" />
                       <span>About SkwelaDabaw</span>
-                    </span>
-                    <ChevronRight className="w-4 h-4 text-[var(--text-secondary)]" />
-                  </button>
-                )}
-
-                {onReplayOnboarding && (
-                  <button
-                    type="button"
-                    onClick={onReplayOnboarding}
-                    className="py-2.5 px-4 rounded-xl bg-[var(--nested-bg)] hover:border-[var(--card-hover-border)] border border-[var(--card-border)] text-xs font-semibold text-[var(--text-primary)] flex items-center justify-between pressable cursor-pointer"
-                  >
-                    <span className="flex items-center gap-2">
-                      <School className="w-4 h-4 text-emerald-500" />
-                      <span>Replay Onboarding Guide</span>
                     </span>
                     <ChevronRight className="w-4 h-4 text-[var(--text-secondary)]" />
                   </button>
