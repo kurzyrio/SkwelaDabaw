@@ -17,10 +17,39 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.4.2',
+    releaseDate: 'November 6, 2026',
+    title: 'Enhanced Diagnostics Partitioning & Device Crash Synchronization',
+    isLatest: true,
+    tagline: 'Upgraded crash reporting with partitioned error queues, anonymous device diagnostics, and seamless reconnection sync.',
+    highlights: [
+      'Partitioned error telemetry isolating offline render exceptions from regular runtime diagnostics',
+      'Anonymous device diagnostics ensuring error logs are uniquely tracked for rapid bug resolution without compromising commuter privacy',
+      'Automated background sync for queued crash reports upon network reconnection'
+    ],
+    items: [
+      {
+        type: 'improvement',
+        title: 'Partitioned Diagnostics Queue',
+        description: 'Offline render crashes and online runtime errors are now stored in separate queues for faster recovery and transmission.'
+      },
+      {
+        type: 'improvement',
+        title: 'Anonymous Device Token',
+        description: 'Added anonymous non-PII device identifiers to error reports so developers can pinpoint device-specific crashes.'
+      },
+      {
+        type: 'fix',
+        title: 'Reconnection Crash Sync',
+        description: 'Ensured unsent offline crash reports reliably upload the moment an active internet connection is re-established.'
+      }
+    ]
+  },
+  {
     version: '1.11.4.1',
     releaseDate: 'November 6, 2026',
     title: 'Accurate Network Detection & Dismissible Offline Banner',
-    isLatest: true,
+    isLatest: false,
     tagline: 'Resolved persistent offline banner display by connecting native Android network monitoring and added session dismissal.',
     highlights: [
       'Accurate online status detection via native Android ConnectivityManager interface monitoring',
