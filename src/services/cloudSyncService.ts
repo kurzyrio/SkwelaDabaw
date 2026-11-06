@@ -88,6 +88,117 @@ export async function getFirebaseIdToken(): Promise<string | null> {
 }
 
 /**
+ * Helper to reconcile remote cloud schedules with local Dexie schedules.
+ * Performs differential matching by OFR code or (subjectCode + days + startTime).
+ * Updates modified fields while strictly preserving local reminderMinutes, notes, and local IDs.
+ */
+async function reconcileSchedulesWithCloud(
+  remoteSchedules: ClassSchedule[],
+  uid: string
+): Promise<{ changed: boolean; count: number; schedules: ClassSchedule[] }> {
+  const localSchedules = await db.schedules.toArray();
+  const defaultReminder = Number(localStorage.getItem('skweladabaw_reminder_timing') || 10);
+
+  // If local database is empty, directly bulk add remote schedules
+  if (localSchedules.length === 0) {
+    const withDefaults = remoteSchedules.map((r, idx) => ({
+      ...r,
+      id: r.id || idx + 1,
+      reminderMinutes: (r.reminderMinutes !== undefined && r.reminderMinutes !== null)
+        ? Number(r.reminderMinutes)
+        : defaultReminder
+    }));
+    await db.schedules.bulkAdd(withDefaults);
+    return { changed: true, count: withDefaults.length, schedules: withDefaults };
+  }
+
+  // If remote is empty, preserve local schedules (Anti-Wipe Guard)
+  if (remoteSchedules.length === 0) {
+    return { changed: false, count: localSchedules.length, schedules: localSchedules };
+  }
+
+  let hasChanged = false;
+  const matchedLocalIds = new Set<number>();
+
+  const areDaysEqual = (d1: string[], d2: string[]) => {
+    if (!Array.isArray(d1) || !Array.isArray(d2)) return false;
+    if (d1.length !== d2.length) return false;
+    const s1 = [...d1].sort().join(',');
+    const s2 = [...d2].sort().join(',');
+    return s1.toLowerCase() === s2.toLowerCase();
+  };
+
+  for (const remote of remoteSchedules) {
+    // 1. Find matching local schedule
+    const match = localSchedules.find((local) => {
+      if (local.id && matchedLocalIds.has(local.id)) return false;
+      // Match Priority 1: Exact OFR Code
+      if (remote.ofrCode && local.ofrCode && remote.ofrCode.trim() === local.ofrCode.trim()) {
+        return true;
+      }
+      // Match Priority 2: Subject code + Start time + Days
+      const codeMatch = remote.subjectCode.trim().toUpperCase() === local.subjectCode.trim().toUpperCase();
+      const timeMatch = (remote.startTime || '').trim() === (local.startTime || '').trim();
+      const daysMatch = areDaysEqual(remote.days, local.days);
+      return codeMatch && timeMatch && daysMatch;
+    });
+
+    if (match && match.id) {
+      matchedLocalIds.add(match.id);
+
+      // Check if remote core fields differ from local
+      const isCoreDiff =
+        match.subjectName !== remote.subjectName ||
+        match.room !== remote.room ||
+        match.building !== remote.building ||
+        match.instructor !== remote.instructor ||
+        match.endTime !== remote.endTime ||
+        match.color !== remote.color;
+
+      // Determine reminderMinutes: preserve local student setting if valid, or adopt remote if local was not set
+      const resolvedReminder = (match.reminderMinutes !== undefined && match.reminderMinutes !== null)
+        ? match.reminderMinutes
+        : ((remote.reminderMinutes !== undefined && remote.reminderMinutes !== null) ? Number(remote.reminderMinutes) : defaultReminder);
+
+      if (isCoreDiff || match.reminderMinutes !== resolvedReminder) {
+        hasChanged = true;
+        await db.schedules.update(match.id, {
+          subjectName: remote.subjectName,
+          room: remote.room,
+          building: remote.building,
+          instructor: remote.instructor,
+          endTime: remote.endTime,
+          color: remote.color,
+          reminderMinutes: resolvedReminder
+        });
+      }
+    } else {
+      // New remote schedule not found locally: add it
+      hasChanged = true;
+      const newSchedule: ClassSchedule = {
+        ...remote,
+        reminderMinutes: (remote.reminderMinutes !== undefined && remote.reminderMinutes !== null)
+          ? Number(remote.reminderMinutes)
+          : defaultReminder
+      };
+      await db.schedules.add(newSchedule);
+    }
+  }
+
+  // Check for local schedules that no longer exist on remote
+  for (const local of localSchedules) {
+    if (local.id && !matchedLocalIds.has(local.id)) {
+      // Remote returned a valid non-empty set of classes, but this class was removed remotely: delete it
+      hasChanged = true;
+      await db.schedules.delete(local.id);
+    }
+  }
+
+  const finalSchedules = await db.schedules.toArray();
+  return { changed: hasChanged, count: finalSchedules.length, schedules: finalSchedules };
+}
+
+/**
  * Restore user profile, timetable schedules, tasks, and settings from MySQL
  * Hydrates local Dexie.js database for instant 0ms offline access.
  */
@@ -262,18 +373,22 @@ export async function restoreUserData(
           startTime: s.start_time || '07:30',
           endTime: s.end_time || '09:00',
           color: s.color || '#0284c7',
-          instructor: s.instructor || ''
+          instructor: s.instructor || '',
+          reminderMinutes: (s.reminder_minutes !== undefined && s.reminder_minutes !== null)
+            ? Number(s.reminder_minutes)
+            : (s.reminderMinutes !== undefined && s.reminderMinutes !== null ? Number(s.reminderMinutes) : undefined)
         }));
 
-        await db.schedules.clear();
-        await db.schedules.bulkAdd(mappedSchedules);
-        scheduleCount = mappedSchedules.length;
-        localStorage.setItem(`skweladabaw_cached_schedules_${uid}`, JSON.stringify(mappedSchedules));
+        const reconciliation = await reconcileSchedulesWithCloud(mappedSchedules, uid);
+        scheduleCount = reconciliation.count;
+        localStorage.setItem(`skweladabaw_cached_schedules_${uid}`, JSON.stringify(reconciliation.schedules));
 
         try {
-          await scheduleAllClassSchedulesReminders(mappedSchedules);
-          await refreshUnremovableClassNotification(mappedSchedules);
-          syncScheduleToWidgets(mappedSchedules);
+          if (reconciliation.changed) {
+            await scheduleAllClassSchedulesReminders(reconciliation.schedules);
+            await refreshUnremovableClassNotification(reconciliation.schedules);
+            syncScheduleToWidgets(reconciliation.schedules);
+          }
         } catch (_) {}
       } else {
         // Cloud has 0 schedules for this user.
@@ -693,7 +808,10 @@ export async function syncLocalDataToCloud(session?: StudentAuthSession): Promis
         endTime: s.endTime,
         color: s.color,
         section: s.ofrCode || '',
-        instructor: s.instructor
+        instructor: s.instructor,
+        reminderMinutes: (s.reminderMinutes !== undefined && s.reminderMinutes !== null)
+          ? s.reminderMinutes
+          : Number(localStorage.getItem('skweladabaw_reminder_timing') || 10)
       }));
     }
 

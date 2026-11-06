@@ -41,6 +41,7 @@ public class WidgetScheduleHelper {
         public List<String> days = new ArrayList<>();
         public int startMinutes;
         public int endMinutes;
+        public int reminderMinutes = 10;
     }
 
     public static class RoutineItem {
@@ -138,6 +139,7 @@ public class WidgetScheduleHelper {
                     item.endTime = obj.optString("endTime", obj.optString("e", ""));
                     item.startMinutes = parseMinutes(item.startTime);
                     item.endMinutes = parseMinutes(item.endTime);
+                    item.reminderMinutes = obj.optInt("reminderMinutes", obj.optInt("reminder_minutes", 10));
 
                     JSONArray daysArr = obj.optJSONArray("days");
                     if (daysArr == null) {

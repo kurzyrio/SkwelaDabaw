@@ -17,10 +17,39 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.4.3',
+    releaseDate: 'November 6, 2026',
+    title: 'Non-Destructive Schedule Sync & Native Class Reminder Engine',
+    isLatest: true,
+    tagline: 'Implemented smart differential schedule reconciliation to protect customized reminder settings and connected native background class alerts.',
+    highlights: [
+      'Intelligent differential schedule sync updating only modified server fields while permanently preserving your custom reminder minutes and notes',
+      'Reliable heads-up class reminders powered by the native background service with sound and vibration alerts before classes start',
+      'System-wide preservation guaranteeing zero disruption to the unremovable notification, home screen widgets, and task tracking'
+    ],
+    items: [
+      {
+        type: 'fix',
+        title: 'Class Reminder Delivery Resolution',
+        description: 'Fixed an issue where class reminder notifications failed to sound or vibrate by correcting notification channel audio and connecting native background evaluation.'
+      },
+      {
+        type: 'improvement',
+        title: 'Differential Schedule Sync',
+        description: 'Cloud sync now compares local and remote schedules to update only necessary changes, preventing accidental loss of custom alarm settings.'
+      },
+      {
+        type: 'improvement',
+        title: 'Settings Fallback Protection',
+        description: 'Classes without custom per-card alarms now automatically adopt your default reminder timing from App Settings.'
+      }
+    ]
+  },
+  {
     version: '1.11.4.2',
     releaseDate: 'November 6, 2026',
     title: 'Enhanced Diagnostics Partitioning & Device Crash Synchronization',
-    isLatest: true,
+    isLatest: false,
     tagline: 'Upgraded crash reporting with partitioned error queues, anonymous device diagnostics, and seamless reconnection sync.',
     highlights: [
       'Partitioned error telemetry isolating offline render exceptions from regular runtime diagnostics',

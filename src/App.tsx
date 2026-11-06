@@ -64,7 +64,7 @@ import {
 } from './services/authService';
 import { restoreUserData, syncLocalDataToCloud, queueCloudSync, syncCloudDataBiDirectional } from './services/cloudSyncService';
 import { verifyProfileIntegrity, ProfileVerificationState, saveLocalUserRecord } from './services/userService';
-import { requestNotificationPermission, notifyAppUpdateAvailable, refreshUnremovableClassNotification } from './services/notificationService';
+import { requestNotificationPermission, notifyAppUpdateAvailable, refreshUnremovableClassNotification, scheduleAllClassSchedulesReminders } from './services/notificationService';
 import { useScheduleAlarm } from './hooks/useScheduleAlarm';
 import { useBackHandler } from './hooks/useBackHandler';
 import { useAntiSnooperEasterEgg } from './hooks/useAntiSnooperEasterEgg';
@@ -271,9 +271,10 @@ export function App() {
       });
     }
 
-    // Immediate 0ms offline startup synchronization for unremovable notification & widgets
+    // Immediate 0ms offline startup synchronization for unremovable notification, widgets & reminders
     db.schedules.toArray().then((scheds) => {
       if (scheds && scheds.length > 0) {
+        scheduleAllClassSchedulesReminders(scheds).catch(console.warn);
         refreshUnremovableClassNotification(scheds).catch(console.warn);
         syncScheduleToWidgets(scheds).catch(console.warn);
       }

@@ -540,14 +540,14 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
     if (editingSchedule?.id) {
       await db.schedules.update(editingSchedule.id, data as any);
       if (reminderMinutes && reminderMinutes > 0) {
-        scheduleClassScheduleReminder({ ...data, id: editingSchedule.id });
+        await scheduleClassScheduleReminder({ ...data, id: editingSchedule.id });
       } else {
-        cancelScheduleReminder(editingSchedule.id);
+        await cancelScheduleReminder(editingSchedule.id);
       }
     } else {
       const id = await db.schedules.add(data);
       if (reminderMinutes && reminderMinutes > 0) {
-        scheduleClassScheduleReminder({ ...data, id: Number(id) });
+        await scheduleClassScheduleReminder({ ...data, id: Number(id) });
       }
     }
 
@@ -572,7 +572,7 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
   const handleConfirmDelete = async () => {
     if (!scheduleToDelete?.id) return;
     await db.schedules.delete(scheduleToDelete.id);
-    cancelScheduleReminder(scheduleToDelete.id);
+    await cancelScheduleReminder(scheduleToDelete.id);
     setScheduleToDelete(null);
 
     // Sync to account-scoped local cache & cloud

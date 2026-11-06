@@ -101,6 +101,15 @@ export async function initializeNotificationChannels(): Promise<void> {
   try {
     if (Capacitor.isNativePlatform()) {
       await purgeLegacyOrphanedNotifications();
+
+      // Reset legacy muted channel if needed to restore native system sound
+      try {
+        if (localStorage.getItem('skweladabaw_channel_audio_fixed_v2') !== 'true') {
+          await LocalNotifications.deleteChannel({ id: NOTIFICATION_CHANNEL_ID });
+          localStorage.setItem('skweladabaw_channel_audio_fixed_v2', 'true');
+        }
+      } catch (_) {}
+
       await LocalNotifications.createChannel({
         id: NOTIFICATION_CHANNEL_ID,
         name: 'Class & Study Reminders',
@@ -108,7 +117,7 @@ export async function initializeNotificationChannels(): Promise<void> {
         importance: 5,
         visibility: 1,
         vibration: true,
-        sound: 'default'
+        sound: undefined
       });
 
       await LocalNotifications.createChannel({
@@ -128,7 +137,7 @@ export async function initializeNotificationChannels(): Promise<void> {
         importance: 4,
         visibility: 1,
         vibration: true,
-        sound: 'default'
+        sound: undefined
       });
 
       await LocalNotifications.createChannel({
@@ -138,7 +147,7 @@ export async function initializeNotificationChannels(): Promise<void> {
         importance: 4,
         visibility: 1,
         vibration: true,
-        sound: 'default'
+        sound: undefined
       });
     }
   } catch (err) {
@@ -309,9 +318,10 @@ export function getClassReminderNotificationId(scheduleId: number, weekday: numb
 export async function scheduleClassScheduleReminder(schedule: ClassSchedule): Promise<void> {
   if (!schedule.id || !schedule.startTime || !schedule.days || schedule.days.length === 0) return;
 
+  const defaultTiming = Number(localStorage.getItem('skweladabaw_reminder_timing') || 10);
   const reminderMinutes = (schedule.reminderMinutes !== undefined && schedule.reminderMinutes !== null)
     ? schedule.reminderMinutes
-    : 0;
+    : defaultTiming;
 
   if (reminderMinutes <= 0) {
     // If set to None (0), ensure any prior alarm is canceled
@@ -399,6 +409,7 @@ export async function scheduleAllClassSchedulesReminders(schedules: ClassSchedul
     if (!Capacitor.isNativePlatform()) return;
     await initializeNotificationChannels();
 
+    const defaultTiming = Number(localStorage.getItem('skweladabaw_reminder_timing') || 10);
     const notificationsToSchedule: any[] = [];
 
     for (const schedule of schedules) {
@@ -406,7 +417,7 @@ export async function scheduleAllClassSchedulesReminders(schedules: ClassSchedul
 
       const rem = (schedule.reminderMinutes !== undefined && schedule.reminderMinutes !== null)
         ? schedule.reminderMinutes
-        : 0;
+        : defaultTiming;
 
       if (rem <= 0) continue;
 
