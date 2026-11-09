@@ -1,7 +1,7 @@
 {
-  "version": "1.11.4.3",
-  "versionCode": 125,
-  "releaseDate": "2026-11-06",
+  "version": "1.11.4.4",
+  "versionCode": 126,
+  "releaseDate": "2026-11-09",
   "versionScheme": {
     "digit1": "App Version",
     "digit2": "Major Features added",
@@ -13,15 +13,15 @@
   "forceUpdate": false,
   "developer": "Kurzyrio",
   "supportEmail": "jerriviencenatad@gmail.com",
-  "title": "Non-Destructive Schedule Sync & Native Class Reminder Engine",
+  "title": "Play Store Package Name Alignment & Ecosystem Sync",
   "releaseNotes": [
-    "Non-Destructive Schedule Sync: Upgraded cloud sync to compare and update only modified class fields, permanently preserving your reminder preferences and notes.",
-    "Reliable Class Reminders: Connected the native background engine to deliver audible and vibrating heads-up notifications before classes start.",
-    "Subsystem Stability: Guaranteed seamless real-time operation across the unremovable notification, home screen widgets, and task tracking."
+    "Play Store Package Alignment: Updated technical application identifier to com.kurzyrio.skweladabaw.app for Google Play Console compatibility.",
+    "Dual AssetLinks Sync: Configured verified deep links to seamlessly open class schedules and campus shares on both direct-install and Play Store builds.",
+    "Commuter Privacy & Continuity: Maintained full backwards compatibility with all saved local schedules, themes, and study routines."
   ],
   "downloadUrl": "https://skweladabaw.kurzyrio.site/download",
-  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.4.3.apk",
-  "sizeBytes": 26609537,
+  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.4.4.apk",
+  "sizeBytes": 26610039,
   "sizeFormatted": "25.4 MB",
-  "sha256": "6ffc4eb4853ea8d05182ee6d7f018385f5bc9322beef099bf5c869bec4f5be17"
+  "sha256": "2d88de43bf27a62d47b4fde64e47e8a7e4d5557cd985242382a3e1ee1cf20fed"
 }

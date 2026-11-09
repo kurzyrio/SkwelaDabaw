@@ -17,10 +17,39 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.4.4',
+    releaseDate: 'November 9, 2026',
+    title: 'Play Store Package Name Alignment & Ecosystem Sync',
+    isLatest: true,
+    tagline: 'Aligned technical application identifier to com.kurzyrio.skweladabaw.app for Google Play Store compatibility with verified dual deep-linking.',
+    highlights: [
+      'Configured official Android application ID com.kurzyrio.skweladabaw.app unlocking Google Play Store distribution',
+      'Dual-target Digital Asset Links ensuring schedule and class shares open smoothly on both direct-install and Play Store builds',
+      'Preserved complete commuter privacy, offline database state, and native class notification services'
+    ],
+    items: [
+      {
+        type: 'improvement',
+        title: 'Google Play Store Package Alignment',
+        description: 'Updated application ID to com.kurzyrio.skweladabaw.app for Google Play Console compatibility while preserving internal Java class structures.'
+      },
+      {
+        type: 'improvement',
+        title: 'Dual-Target Digital Asset Links',
+        description: 'Synchronized domain assetlinks to support deep-linking across both legacy direct installations and official Play Store editions.'
+      },
+      {
+        type: 'fix',
+        title: 'Ecosystem Configuration Sync',
+        description: 'Updated strings, manifest authorities, and web portal download displays to match new package specifications.'
+      }
+    ]
+  },
+  {
     version: '1.11.4.3',
     releaseDate: 'November 6, 2026',
     title: 'Non-Destructive Schedule Sync & Native Class Reminder Engine',
-    isLatest: true,
+    isLatest: false,
     tagline: 'Implemented smart differential schedule reconciliation to protect customized reminder settings and connected native background class alerts.',
     highlights: [
       'Intelligent differential schedule sync updating only modified server fields while permanently preserving your custom reminder minutes and notes',

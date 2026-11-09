@@ -5,6 +5,18 @@
     ],
     "target": {
       "namespace": "android_app",
+      "package_name": "com.kurzyrio.skweladabaw.app",
+      "sha256_cert_fingerprints": [
+        "87:17:94:C8:7D:D7:A1:44:AC:2D:34:89:1A:2D:00:11:0D:6B:D5:EB:C8:AE:82:4D:5E:7B:F5:BC:70:51:5F:94"
+      ]
+    }
+  },
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
       "package_name": "com.kurzyrio.skweladabaw",
       "sha256_cert_fingerprints": [
         "87:17:94:C8:7D:D7:A1:44:AC:2D:34:89:1A:2D:00:11:0D:6B:D5:EB:C8:AE:82:4D:5E:7B:F5:BC:70:51:5F:94"
