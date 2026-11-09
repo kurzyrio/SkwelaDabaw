@@ -1,7 +1,7 @@
 {
   "name": "skweladabaw",
   "private": true,
-  "version": "1.11.4.5",
+  "version": "1.11.4.6",
   "type": "module",
   "scripts": {
     "dev": "vite",

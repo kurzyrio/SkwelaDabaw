@@ -1,7 +1,7 @@
 {
-  "version": "1.11.4.5",
-  "versionCode": 127,
-  "releaseDate": "2026-11-09",
+  "version": "1.11.4.6",
+  "versionCode": 128,
+  "releaseDate": "2026-11-10",
   "versionScheme": {
     "digit1": "App Version",
     "digit2": "Major Features added",
@@ -13,15 +13,15 @@
   "forceUpdate": false,
   "developer": "Kurzyrio",
   "supportEmail": "jerriviencenatad@gmail.com",
-  "title": "Google Play Compliance & Account Deletion Framework",
+  "title": "Android 16 API 36 Target Alignment & Release Signing",
   "releaseNotes": [
-    "Google Play Compliance: Completely removed in-app update popups and external APK download prompts in accordance with Google Play Developer Policies.",
-    "Account & Data Deletion: Added a self-service account and cloud data deletion tool in Settings, paired with an official web request portal.",
-    "Permission Hardening: Streamlined Android permissions to exact alarm and battery guidelines while maintaining reliable timetable notifications."
+    "Android 16 API 36 Upgrade: Updated target and compile SDK to API 36 in accordance with Google Play security and platform requirements.",
+    "Production Release Signing: Configured cryptographically validated release signing certificate for Google Play Console distribution.",
+    "Platform Optimization: Maintained complete backwards compatibility for existing Davao student timetables and offline transit maps."
   ],
   "downloadUrl": "https://skweladabaw.kurzyrio.site/download",
-  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.4.5.apk",
-  "sizeBytes": 26607895,
+  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.4.6.apk",
+  "sizeBytes": 26608258,
   "sizeFormatted": "25.4 MB",
-  "sha256": "54b148b09ac4472d36d857318724b00942e4853e882e98a767337b63a4fb7191"
+  "sha256": "8500da80d98657f79ad0b92f509f9bf38975ec5e16bca235b2b8a317ebcbcfc9"
 }

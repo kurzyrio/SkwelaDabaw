@@ -17,10 +17,34 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.4.6',
+    releaseDate: 'November 10, 2026',
+    title: 'Android 16 API 36 Target Alignment & Release Signing',
+    isLatest: true,
+    tagline: 'Upgraded target SDK to API 36 (Android 16) and configured official release keystore signing for Google Play Store compliance.',
+    highlights: [
+      'Upgraded targetSdkVersion and compileSdkVersion to API 36 satisfying Google Play Console requirements',
+      'Configured production release keystore signing across all Gradle bundle and assembly workflows',
+      'Preserved offline-first local database stability, widget sync, and class reminder dispatching'
+    ],
+    items: [
+      {
+        type: 'improvement',
+        title: 'Android 16 (API 36) Target Upgrade',
+        description: 'Upgraded compile and target SDK to level 36 with Build Tools 36.0.0, ensuring optimal performance and platform security.'
+      },
+      {
+        type: 'security',
+        title: 'Production Release Signing Configuration',
+        description: 'Configured automated release keystore signing in Gradle to ensure all distributed App Bundles are cryptographically verified.'
+      }
+    ]
+  },
+  {
     version: '1.11.4.5',
     releaseDate: 'November 9, 2026',
     title: 'Google Play Compliance & Account Deletion Framework',
-    isLatest: true,
+    isLatest: false,
     tagline: 'Aligned client application with Google Play Store policies by removing out-of-store update prompts and providing comprehensive account deletion.',
     highlights: [
       'Removed all in-app update popups and external APK download prompts in compliance with Google Play Store policies',

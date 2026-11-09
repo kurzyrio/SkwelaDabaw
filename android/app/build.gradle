@@ -3,20 +3,29 @@ apply plugin: 'com.android.application'
 android {
     namespace "com.kurzyrio.skweladabaw"
     compileSdk rootProject.ext.compileSdkVersion
-    buildToolsVersion "34.0.0"
+    buildToolsVersion "36.0.0"
     defaultConfig {
         applicationId "com.kurzyrio.skweladabaw.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 127
-        versionName "1.11.4.5"
+        versionCode 128
+        versionName "1.11.4.6"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            storeFile file("skweladabaw-release.jks")
+            storePassword "skweladabaw2026"
+            keyAlias "skweladabaw"
+            keyPassword "skweladabaw2026"
+        }
+    }
     buildTypes {
         release {
+            signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
