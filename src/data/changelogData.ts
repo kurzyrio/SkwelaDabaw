@@ -17,10 +17,45 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.4.5',
+    releaseDate: 'November 9, 2026',
+    title: 'Google Play Compliance & Account Deletion Framework',
+    isLatest: true,
+    tagline: 'Aligned client application with Google Play Store policies by removing out-of-store update prompts and providing comprehensive account deletion.',
+    highlights: [
+      'Removed all in-app update popups and external APK download prompts in compliance with Google Play Store policies',
+      'Added in-app Account & Cloud Data Deletion in Settings with complete multi-table database purge',
+      'Streamlined exact alarm and battery optimization permissions for streamlined Google Play Console review',
+      'Established automated local Android App Bundle (.aab) packaging for Google Play distribution'
+    ],
+    items: [
+      {
+        type: 'improvement',
+        title: 'Google Play Update Policy Compliance',
+        description: 'Eliminated startup update popups and external APK downloading triggers, enabling seamless Google Play background updates.'
+      },
+      {
+        type: 'feature',
+        title: 'Permanent Account & Data Deletion',
+        description: 'Empowered students to permanently delete their cloud account, timetables, and profile data directly from Settings or via web portal.'
+      },
+      {
+        type: 'security',
+        title: 'Android Permission Streamlining',
+        description: 'Hardened exact alarm and battery optimization declarations in the Android manifest to satisfy Google Play audit requirements.'
+      },
+      {
+        type: 'fix',
+        title: 'TypeScript Compiler Resolution',
+        description: 'Resolved latent componentStack, ClassSchedule, and uid type mismatches ensuring clean TypeScript builds.'
+      }
+    ]
+  },
+  {
     version: '1.11.4.4',
     releaseDate: 'November 9, 2026',
     title: 'Play Store Package Name Alignment & Ecosystem Sync',
-    isLatest: true,
+    isLatest: false,
     tagline: 'Aligned technical application identifier to com.kurzyrio.skweladabaw.app for Google Play Store compatibility with verified dual deep-linking.',
     highlights: [
       'Configured official Android application ID com.kurzyrio.skweladabaw.app unlocking Google Play Store distribution',

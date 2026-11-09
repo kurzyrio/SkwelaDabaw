@@ -27,8 +27,6 @@ import { TaskTrackerPage } from './components/tasks/TaskTrackerPage';
 import { WeatherPage } from './components/weather/WeatherPage';
 import { StudentHubPage } from './components/layout/StudentHubPage';
 import { BayaniSplashScreen } from './components/common/BayaniSplashScreen';
-import { AppUpdateModal } from './components/common/AppUpdateModal';
-import { UpdateBannerPill } from './components/common/UpdateBannerPill';
 import { BatteryOptimizationModal } from './components/common/BatteryOptimizationModal';
 import { EagleOverlayOptInModal } from './components/common/EagleOverlayOptInModal';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
@@ -36,7 +34,7 @@ import { EagleOverlay } from './components/common/EagleOverlay';
 import { initOverlayLifecycle } from './services/eagleOverlayService';
 import { ExitToast } from './components/common/ExitToast';
 import { AnnouncementPopupModal } from './components/announcements/AnnouncementPopupModal';
-import { checkForAppUpdate, UpdateCheckResult } from './services/updateService';
+import { openGooglePlayStore } from './services/updateService';
 import { PopupAnnouncement, fetchActivePopupAnnouncement, isAnnouncementSnoozed } from './services/announcementService';
 import { fetchDavaoWeather } from './services/weatherService';
 import { db, initializeDatabaseWithSeedData } from './db';
@@ -64,7 +62,7 @@ import {
 } from './services/authService';
 import { restoreUserData, syncLocalDataToCloud, queueCloudSync, syncCloudDataBiDirectional } from './services/cloudSyncService';
 import { verifyProfileIntegrity, ProfileVerificationState, saveLocalUserRecord } from './services/userService';
-import { requestNotificationPermission, notifyAppUpdateAvailable, refreshUnremovableClassNotification, scheduleAllClassSchedulesReminders } from './services/notificationService';
+import { requestNotificationPermission, refreshUnremovableClassNotification, scheduleAllClassSchedulesReminders } from './services/notificationService';
 import { useScheduleAlarm } from './hooks/useScheduleAlarm';
 import { useBackHandler } from './hooks/useBackHandler';
 import { useAntiSnooperEasterEgg } from './hooks/useAntiSnooperEasterEgg';
@@ -78,8 +76,6 @@ export function App() {
   useAntiSnooperEasterEgg();
 
   const [showSplashScreen, setShowSplashScreen] = useState<boolean>(true);
-  const [pendingUpdate, setPendingUpdate] = useState<UpdateCheckResult | null>(null);
-  const [availableUpdatePill, setAvailableUpdatePill] = useState<UpdateCheckResult | null>(null);
   const [activeAnnouncement, setActiveAnnouncement] = useState<PopupAnnouncement | null>(null);
   const [activeTab, setActiveTab] = useState<NavigationTab>('schedule');
   const [tabHistory, setTabHistory] = useState<NavigationTab[]>(['schedule']);
@@ -191,7 +187,7 @@ export function App() {
   );
 
   useBackHandler(
-    currentView === 'main' && tabHistory.length <= 1 && activeTab === 'schedule' && !isOnboardingOpen && !pendingUpdate,
+    currentView === 'main' && tabHistory.length <= 1 && activeTab === 'schedule' && !isOnboardingOpen,
     () => {
       navigationManager.armExit(2000);
     },
@@ -206,15 +202,6 @@ export function App() {
     },
     BackPriority.MODAL,
     'app_onboarding'
-  );
-
-  useBackHandler(
-    Boolean(pendingUpdate),
-    () => {
-      setPendingUpdate(null);
-    },
-    BackPriority.MODAL,
-    'app_pending_update'
   );
 
   useBackHandler(
@@ -703,12 +690,7 @@ export function App() {
       LocalNotifications.addListener('localNotificationActionPerformed', (action) => {
         const extra = action.notification?.extra;
         if (extra?.type === 'app_update' || extra?.target_action === 'update') {
-          checkForAppUpdate().then((res) => {
-            if (res.hasUpdate) {
-              setPendingUpdate(res);
-              setAvailableUpdatePill(null);
-            }
-          });
+          openGooglePlayStore();
         }
       }).then((handle) => {
         notifSub = handle;
@@ -717,27 +699,6 @@ export function App() {
 
     const updateTimer = setTimeout(async () => {
       try {
-        const snoozedUntilStr = localStorage.getItem('skwela_update_snoozed_until');
-        const snoozedUntil = snoozedUntilStr ? parseInt(snoozedUntilStr, 10) : 0;
-        const snoozedVersion = localStorage.getItem('skwela_update_snoozed_version');
-
-        const result = await checkForAppUpdate();
-        if (result.hasUpdate) {
-          const isSnoozed = Date.now() < snoozedUntil && snoozedVersion === result.latestVersion;
-          if (result.isForceUpdate) {
-            // Mandatory required update: display modal
-            setPendingUpdate(result);
-            setAvailableUpdatePill(null);
-          } else if (!isSnoozed) {
-            // Optional update: display dismissible modal once per release/snooze
-            setPendingUpdate(result);
-            setAvailableUpdatePill(null);
-          } else {
-            // Snoozed optional update: keep as quiet top pill only
-            setAvailableUpdatePill(result);
-          }
-        }
-
         // Fetch on-launch active announcement popup (community relief drives, class advisories)
         const announcement = await fetchActivePopupAnnouncement();
         if (announcement && !isAnnouncementSnoozed(announcement.id)) {
@@ -1159,32 +1120,6 @@ export function App() {
           sessionStorage.setItem('skwela_session_checked', 'true');
         }}
       />
-
-      {/* Non-Intrusive Floating Update Pill */}
-      {availableUpdatePill && !pendingUpdate && (
-        <UpdateBannerPill
-          updateInfo={availableUpdatePill}
-          onOpenDetails={() => {
-            setPendingUpdate(availableUpdatePill);
-            setAvailableUpdatePill(null);
-          }}
-          onDismiss={() => {
-            setAvailableUpdatePill(null);
-            try {
-              localStorage.setItem('skwela_update_snoozed_until', (Date.now() + 24 * 60 * 60 * 1000).toString());
-              localStorage.setItem('skwela_update_snoozed_version', availableUpdatePill.latestVersion);
-            } catch (_) {}
-          }}
-        />
-      )}
-
-      {/* In-App Update Modal (Firebase Hosting) */}
-      {pendingUpdate && (
-        <AppUpdateModal
-          updateInfo={pendingUpdate}
-          onClose={() => setPendingUpdate(null)}
-        />
-      )}
 
       {/* On-Launch MySQL Announcement Popup Modal */}
       {activeAnnouncement && (

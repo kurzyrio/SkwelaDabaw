@@ -1,6 +1,6 @@
-import { StudentAuthSession, getSavedSession, saveSession } from './authService';
+import { StudentAuthSession, getSavedSession, saveSession, signOutUser } from './authService';
 import { ClassSchedule } from '../types';
-import { db } from '../db';
+import { db, initializeDatabaseWithSeedData } from '../db';
 import { queueCloudSync, syncLocalDataToCloud, restoreUserData, getFirebaseIdToken } from './cloudSyncService';
 import { cancelAllAccountReminders, scheduleAllClassSchedulesReminders, refreshUnremovableClassNotification } from './notificationService';
 import { syncScheduleToWidgets, syncTasksToWidgets } from './widgetService';
@@ -971,4 +971,48 @@ export async function updateUserProfileFields(
     console.warn('updateUserProfileFields note:', err);
   }
   return false;
+}
+
+/**
+ * Permanently deletes the student account and all cloud & local records
+ * in compliance with Google Play Store Account Deletion requirements.
+ */
+export async function deleteUserAccount(): Promise<{ success: boolean; message: string }> {
+  try {
+    const token = await getFirebaseIdToken();
+    if (token) {
+      const payload = { action: 'delete_account', idToken: token };
+      await httpPost(USER_API_URL, payload, token);
+    }
+
+    try {
+      await db.delete();
+      await db.open();
+      await initializeDatabaseWithSeedData();
+    } catch (e) {
+      console.warn('Local database purge error during account deletion:', e);
+    }
+
+    const keysToRemove = [
+      'skweladabaw_user_session',
+      'skweladabaw_registered_accounts',
+      'skweladabaw_user_profile_cache',
+      'skweladabaw_profile_dirty',
+      'skweladabaw_profile_updated_at',
+      'skweladabaw_pending_guest_schedules',
+      'skweladabaw_last_sync_timestamp'
+    ];
+    for (const key of keysToRemove) {
+      try { localStorage.removeItem(key); } catch (_) {}
+    }
+
+    try {
+      await signOutUser();
+    } catch (_) {}
+
+    return { success: true, message: 'Account and all data successfully deleted.' };
+  } catch (err: any) {
+    console.error('deleteUserAccount error:', err);
+    return { success: false, message: err?.message || 'Failed to complete deletion.' };
+  }
 }

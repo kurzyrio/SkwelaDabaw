@@ -379,9 +379,10 @@ export async function restoreUserData(
             : (s.reminderMinutes !== undefined && s.reminderMinutes !== null ? Number(s.reminderMinutes) : undefined)
         }));
 
-        const reconciliation = await reconcileSchedulesWithCloud(mappedSchedules, uid);
+        const targetUid = uid || '';
+        const reconciliation = await reconcileSchedulesWithCloud(mappedSchedules, targetUid);
         scheduleCount = reconciliation.count;
-        localStorage.setItem(`skweladabaw_cached_schedules_${uid}`, JSON.stringify(reconciliation.schedules));
+        localStorage.setItem(`skweladabaw_cached_schedules_${targetUid}`, JSON.stringify(reconciliation.schedules));
 
         try {
           if (reconciliation.changed) {

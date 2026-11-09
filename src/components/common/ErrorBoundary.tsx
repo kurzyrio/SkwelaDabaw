@@ -43,7 +43,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
     try {
       recordError(error, {
-        componentStack: errorInfo.componentStack,
+        componentStack: errorInfo.componentStack ?? undefined,
         context: `ErrorBoundary: ${this.props.fallbackTitle || 'Component View'}`,
         source: 'React.ErrorBoundary'
       });

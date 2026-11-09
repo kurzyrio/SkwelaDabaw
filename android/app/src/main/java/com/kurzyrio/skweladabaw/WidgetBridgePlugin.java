@@ -221,19 +221,18 @@ public class WidgetBridgePlugin extends Plugin {
                         boolean isIgnoring = pm != null && pm.isIgnoringBatteryOptimizations(packageName);
 
                         if (!isIgnoring) {
-                            // Tier 1: Direct OS Dialog Prompt
+                            // Launch System Battery Optimization Settings directly (Google Play compliant, zero permissions required)
                             try {
-                                Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
-                                intent.setData(Uri.parse("package:" + packageName));
-                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                                activity.startActivity(intent);
+                                Intent listIntent = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
+                                listIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                activity.startActivity(listIntent);
                                 opened = true;
                             } catch (Exception ex) {
-                                // Fallback Tier 2: System battery optimization list
                                 try {
-                                    Intent listIntent = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
-                                    listIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                                    activity.startActivity(listIntent);
+                                    Intent appIntent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                                    appIntent.setData(Uri.parse("package:" + packageName));
+                                    appIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                    activity.startActivity(appIntent);
                                     opened = true;
                                 } catch (Exception ignored) {}
                             }

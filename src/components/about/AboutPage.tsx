@@ -19,8 +19,7 @@ import {
   Bell, 
   ExternalLink 
 } from 'lucide-react';
-import { checkForAppUpdate, CURRENT_APP_VERSION, UpdateCheckResult } from '../../services/updateService';
-import { AppUpdateModal } from '../common/AppUpdateModal';
+import { CURRENT_APP_VERSION } from '../../services/updateService';
 import { LegalModal } from '../common/LegalModal';
 import { useBackHandler, BackPriority } from '../../hooks/useBackHandler';
 
@@ -33,32 +32,11 @@ type AboutView = 'hub' | 'app' | 'developer' | 'sources';
 
 export const AboutPage: React.FC<AboutPageProps> = ({ onBack, onOpenChangelog }) => {
   const [currentView, setCurrentView] = useState<AboutView>('hub');
-  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
-  const [updateStatus, setUpdateStatus] = useState<string | null>(null);
-  const [foundUpdate, setFoundUpdate] = useState<UpdateCheckResult | null>(null);
   const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
   const [legalModalInitialTab, setLegalModalInitialTab] = useState<'terms' | 'privacy'>('terms');
 
   // Return to About Hub on Android back press when in a sub-view
   useBackHandler(currentView !== 'hub', () => setCurrentView('hub'), BackPriority.SUBVIEW, 'about_subview');
-
-  const handleManualCheck = async () => {
-    setIsCheckingUpdate(true);
-    setUpdateStatus(null);
-    try {
-      const res = await checkForAppUpdate();
-      if (res.hasUpdate) {
-        setFoundUpdate(res);
-        setUpdateStatus(`Version ${res.latestVersion} is available!`);
-      } else {
-        setUpdateStatus(`You are on the latest version (v${CURRENT_APP_VERSION})`);
-      }
-    } catch {
-      setUpdateStatus('Could not check updates. Check internet connection.');
-    } finally {
-      setIsCheckingUpdate(false);
-    }
-  };
 
   const hubItems = [
     {
@@ -161,23 +139,6 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onBack, onOpenChangelog })
               <p className="text-xs text-[var(--text-secondary)] max-w-md mx-auto leading-relaxed">
                 An offline student companion created by a Davao college student to help you stay organized and travel easier around the city.
               </p>
-
-              <div className="pt-1 flex flex-col items-center gap-2">
-                <button
-                  onClick={handleManualCheck}
-                  disabled={isCheckingUpdate}
-                  className="px-5 py-2.5 rounded-full bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] font-bold text-xs inline-flex items-center gap-2 pressable shadow-sm cursor-pointer disabled:opacity-60"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isCheckingUpdate ? 'animate-spin' : ''}`} />
-                  <span>{isCheckingUpdate ? 'Checking for updates...' : 'Check for Updates'}</span>
-                </button>
-
-                {updateStatus && (
-                  <p className="text-xs text-[var(--text-secondary)] animate-fade-in">
-                    {updateStatus}
-                  </p>
-                )}
-              </div>
             </div>
 
             {/* Hub Button Grid (Modeled after StudentHubPage) */}
@@ -456,14 +417,6 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onBack, onOpenChangelog })
         onClose={() => setIsLegalModalOpen(false)}
         initialTab={legalModalInitialTab}
       />
-
-      {/* In-App Update Modal */}
-      {foundUpdate && (
-        <AppUpdateModal
-          updateInfo={foundUpdate}
-          onClose={() => setFoundUpdate(null)}
-        />
-      )}
     </div>
   );
 };

@@ -10,6 +10,8 @@ import {
   RefreshCw, 
   Lock, 
   LogOut,
+  Trash2,
+  Smartphone,
   Building2,
   ChevronRight,
   ChevronDown,
@@ -71,7 +73,7 @@ import {
   autoSyncCurrentStateToOverlay 
 } from '../../services/eagleOverlayService';
 import { flushPendingSync } from '../../services/taskSyncService';
-import { StudentAuthSession, signInWithGoogle, signOutUser, setOnboardingCompleted, saveSession } from '../../services/authService';
+import { StudentAuthSession, signInWithGoogle, signOutUser, setOnboardingCompleted, saveSession, getSavedSession } from '../../services/authService';
 import { 
   checkUsernameAvailable, 
   updateUsername, 
@@ -82,8 +84,10 @@ import {
   checkExistingUserDetailed,
   syncUserSchedules,
   saveLocalUserRecord,
-  updateUserProfileFields
+  updateUserProfileFields,
+  deleteUserAccount
 } from '../../services/userService';
+import type { ClassSchedule } from '../../types';
 import { syncLocalDataToCloud, queueCloudSync, syncCloudDataBiDirectional, LAST_SYNC_KEY } from '../../services/cloudSyncService';
 import { AccountLinkSyncModal } from '../auth/AccountLinkSyncModal';
 import { ProcessingOverlay } from '../common/ProcessingOverlay';
@@ -94,7 +98,7 @@ import { useBackHandler, BackPriority } from '../../hooks/useBackHandler';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 import { useAppLanguage, AppLanguage, t } from '../../services/languageService';
 import { isAudioEnabled, setAudioEnabled } from '../../utils/audio';
-import { checkForAppUpdate, CURRENT_APP_VERSION, UpdateCheckResult } from '../../services/updateService';
+import { CURRENT_APP_VERSION } from '../../services/updateService';
 import { 
   sendTestNotification, 
   NOTIFICATION_THEMES, 
@@ -107,7 +111,6 @@ import {
   scheduleAllClassSchedulesReminders
 } from '../../services/notificationService';
 import { requestBatteryExemption, isBatteryExemptionActive, syncScheduleToWidgets } from '../../services/widgetService';
-import { AppUpdateModal } from '../common/AppUpdateModal';
 import {
   TapEffectStyle,
   TapSoundType,
@@ -332,10 +335,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const [soundEnabled, setSoundEnabledState] = useState<boolean>(isAudioEnabled);
   const [selectedTheme, setSelectedTheme] = useState<string>(currentTheme);
 
-  // In-App Update State
-  const [isCheckingUpdate, setIsCheckingUpdate] = useState<boolean>(false);
-  const [updateStatusMessage, setUpdateStatusMessage] = useState<string | null>(null);
-  const [foundUpdateModal, setFoundUpdateModal] = useState<UpdateCheckResult | null>(null);
+  // Account Deletion State (Google Play Policy Compliance)
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState<boolean>(false);
+  const [deleteToast, setDeleteToast] = useState<string | null>(null);
 
   // Username Change State
   const [isEditingUsername, setIsEditingUsername] = useState<boolean>(false);
@@ -372,7 +375,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   useBackHandler(isLogoutModalOpen, () => setIsLogoutModalOpen(false), BackPriority.MODAL, 'settings_logout');
   useBackHandler(isResetModalOpen, () => setIsResetModalOpen(false), BackPriority.MODAL, 'settings_reset');
   useBackHandler(isImportModalOpen, () => setIsImportModalOpen(false), BackPriority.MODAL, 'settings_import');
-  useBackHandler(Boolean(foundUpdateModal), () => setFoundUpdateModal(null), BackPriority.MODAL, 'settings_update');
+  useBackHandler(isDeleteModalOpen, () => setIsDeleteModalOpen(false), BackPriority.MODAL, 'settings_delete_account');
   useBackHandler(isEditingUsername, () => setIsEditingUsername(false), BackPriority.MODAL, 'settings_edit_username');
 
   // Background Scroll Lock safely managed via reference counting
@@ -384,7 +387,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     isNotifSettingsModalOpen ||
     isAccountLinkSyncModalOpen ||
     isEditProfileOpen ||
-    foundUpdateModal
+    isDeleteModalOpen
   );
 
   useBodyScrollLock(isAnyModalActive);
@@ -949,6 +952,29 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     const reset = await signOutUser();
     setOnboardingCompleted(false);
     onUpdateSession(reset);
+  };
+
+  const handleConfirmDeleteAccount = async () => {
+    setIsDeletingAccount(true);
+    try {
+      const res = await deleteUserAccount();
+      if (res.success) {
+        setIsDeleteModalOpen(false);
+        setOnboardingCompleted(false);
+        const resetSession = getSavedSession();
+        onUpdateSession(resetSession);
+        setResetSuccessToast(true);
+        setTimeout(() => setResetSuccessToast(false), 4000);
+      } else {
+        setDeleteToast(res.message || 'Failed to delete account');
+        setTimeout(() => setDeleteToast(null), 3500);
+      }
+    } catch {
+      setDeleteToast('Error deleting account');
+      setTimeout(() => setDeleteToast(null), 3500);
+    } finally {
+      setIsDeletingAccount(false);
+    }
   };
 
   const handleSaveUsername = async () => {
@@ -1536,19 +1562,28 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               </div>
             )}
 
-            {/* Log Out Button at the Very Bottom of Profile */}
+            {/* Log Out & Account Deletion at the Very Bottom of Profile */}
             {userSession.isLoggedIn && (
-              <div className="pt-6 mt-auto">
+              <div className="pt-6 mt-auto space-y-2">
                 <button
                   type="button"
                   onClick={() => setIsLogoutModalOpen(true)}
-                  className="w-full py-3.5 px-4 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] hover:border-red-500/40 text-[#FF453A] font-bold text-xs pressable flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
+                  className="w-full py-3.5 px-4 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] hover:border-red-500/40 text-[var(--text-primary)] font-bold text-xs pressable flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
                 >
-                  <LogOut className="w-4 h-4 text-[#FF453A]" />
+                  <LogOut className="w-4 h-4 text-[var(--text-secondary)]" />
                   <span>Log Out of SkwelaDabaw</span>
                 </button>
-                <p className="text-[11px] text-[var(--text-secondary)] text-center mt-2 opacity-75">
-                  Your class schedules stay saved on your device even after logging out.
+
+                <button
+                  type="button"
+                  onClick={() => setIsDeleteModalOpen(true)}
+                  className="w-full py-3 px-4 rounded-2xl bg-red-500/10 hover:bg-red-500/15 border border-red-500/30 text-[#FF453A] font-bold text-xs pressable flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
+                >
+                  <Trash2 className="w-4 h-4 text-[#FF453A]" />
+                  <span>Delete Account &amp; Cloud Data</span>
+                </button>
+                <p className="text-[11px] text-[var(--text-secondary)] text-center mt-1 opacity-75">
+                  Permanently purges all your academic records, timetables, and cloud profile.
                 </p>
               </div>
             )}
@@ -2513,50 +2548,20 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               About &amp; System
             </div>
 
-            {/* Application Version & Cloud Updates Card */}
-            <div className="p-5 rounded-3xl bg-[var(--card-bg)] border border-[var(--card-border)] space-y-3">
-              <div>
-                <h4 className="font-bold text-sm text-[var(--text-primary)] flex items-center gap-2">
-                  <RefreshCw className="w-4 h-4 text-[var(--text-primary)]" />
-                  <span>Application Version &amp; Updates</span>
-                </h4>
-                <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                  SkwelaDabaw v{CURRENT_APP_VERSION} • Davao City Student System
-                </p>
-              </div>
-
-              {updateStatusMessage && (
-                <p className="text-[11px] font-semibold text-center text-[var(--text-primary)] py-1">
-                  {updateStatusMessage}
-                </p>
-              )}
-
-              <div className="pt-1">
-                <button
-                  type="button"
-                  disabled={isCheckingUpdate}
-                  onClick={async () => {
-                    setIsCheckingUpdate(true);
-                    setUpdateStatusMessage(null);
-                    try {
-                      const res = await checkForAppUpdate();
-                      if (res.hasUpdate) {
-                        setFoundUpdateModal(res);
-                        setUpdateStatusMessage(`Version ${res.latestVersion} available!`);
-                      } else {
-                        setUpdateStatusMessage(`Up to date • v${CURRENT_APP_VERSION}`);
-                      }
-                    } catch {
-                      setUpdateStatusMessage('Could not connect to update server.');
-                    } finally {
-                      setIsCheckingUpdate(false);
-                    }
-                  }}
-                  className="w-full py-2.5 px-4 rounded-xl bg-[var(--nested-bg)] border border-[var(--card-border)] text-xs font-semibold text-[var(--text-primary)] flex items-center justify-center gap-2 pressable cursor-pointer"
-                >
-                  <RefreshCw className={`w-4 h-4 ${isCheckingUpdate ? 'animate-spin' : ''}`} />
-                  <span>{isCheckingUpdate ? 'Checking for Updates...' : 'Check for Updates'}</span>
-                </button>
+            {/* Application Version Card (Google Play Edition) */}
+            <div className="p-5 rounded-3xl bg-[var(--card-bg)] border border-[var(--card-border)] space-y-2">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] flex items-center justify-center shrink-0">
+                  <Smartphone className="w-5 h-5 text-[var(--text-primary)]" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-[var(--text-primary)]">
+                    SkwelaDabaw v{CURRENT_APP_VERSION}
+                  </h4>
+                  <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                    Google Play Release • Davao City Student System
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -2971,12 +2976,64 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         document.body
       )}
 
-      {/* In-App Update Modal */}
-      {foundUpdateModal && (
-        <AppUpdateModal
-          updateInfo={foundUpdateModal}
-          onClose={() => setFoundUpdateModal(null)}
-        />
+      {/* Permanent Account Deletion Modal (Google Play Policy Compliance) */}
+      {isDeleteModalOpen && createPortal(
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm sheet-backdrop-enter select-none"
+          onClick={() => !isDeletingAccount && setIsDeleteModalOpen(false)}
+        >
+          <div 
+            className="bg-[var(--modal-bg)] w-full max-w-sm rounded-3xl p-6 border border-red-500/30 shadow-2xl space-y-4 sheet-enter-spring max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-red-500/10 border border-red-500/30 text-[#FF453A] flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm text-[var(--text-primary)]">
+                  Delete Account &amp; All Data?
+                </h3>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  Permanent &amp; Irreversible
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+              This action will permanently purge all your cloud schedules, tasks, grades, and profile information from SkwelaDabaw servers, clear your local database, and log you out.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--card-border)]">
+              <button
+                type="button"
+                disabled={isDeletingAccount}
+                onClick={() => setIsDeleteModalOpen(false)}
+                className="px-4 py-2 rounded-full text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingAccount}
+                onClick={handleConfirmDeleteAccount}
+                className="px-5 py-2 rounded-full text-xs font-bold bg-[#FF453A] hover:bg-red-600 text-white pressable shadow-sm flex items-center gap-2 disabled:opacity-50"
+              >
+                {isDeletingAccount && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                <span>{isDeletingAccount ? 'Deleting...' : 'Delete Permanently'}</span>
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Delete Account Error Toast */}
+      {deleteToast && createPortal(
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-full bg-red-500/90 text-white text-xs font-bold shadow-xl animate-fade-in pointer-events-none select-none">
+          {deleteToast}
+        </div>,
+        document.body
       )}
 
       {/* Legal & Privacy Modal */}

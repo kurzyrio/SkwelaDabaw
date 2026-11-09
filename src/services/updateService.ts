@@ -5,8 +5,28 @@
 
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 
-export const CURRENT_APP_VERSION = "1.11.4.4";
-export const CURRENT_VERSION_CODE = 126;
+export const CURRENT_APP_VERSION = "1.11.4.5";
+export const CURRENT_VERSION_CODE = 127;
+
+export const GOOGLE_PLAY_PACKAGE_NAME = 'com.kurzyrio.skweladabaw.app';
+export const GOOGLE_PLAY_STORE_URL = `https://play.google.com/store/apps/details?id=${GOOGLE_PLAY_PACKAGE_NAME}`;
+export const GOOGLE_PLAY_MARKET_URI = `market://details?id=${GOOGLE_PLAY_PACKAGE_NAME}`;
+
+/**
+ * Safely redirects the commuter to the official Google Play Store listing
+ */
+export function openGooglePlayStore(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (Capacitor.isNativePlatform()) {
+      window.open(GOOGLE_PLAY_MARKET_URI, '_system');
+    } else {
+      window.open(GOOGLE_PLAY_STORE_URL, '_blank');
+    }
+  } catch {
+    window.open(GOOGLE_PLAY_STORE_URL, '_blank');
+  }
+}
 
 export interface AppVersionManifest {
   version: string;
@@ -141,8 +161,8 @@ export async function checkForAppUpdate(): Promise<UpdateCheckResult> {
       latestVersion: manifest.version,
       title: manifest.title,
       releaseNotes: manifest.releaseNotes,
-      downloadUrl: manifest.downloadUrl || 'https://skweladabaw.kurzyrio.site/download.php',
-      apkUrl: manifest.apkUrl || `https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v${manifest.version}.apk`,
+      downloadUrl: manifest.downloadUrl || GOOGLE_PLAY_STORE_URL,
+      apkUrl: manifest.apkUrl || GOOGLE_PLAY_STORE_URL,
       sizeFormatted: manifest.sizeFormatted,
       checkedAt: nowStr
     };

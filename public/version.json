@@ -1,6 +1,6 @@
 {
-  "version": "1.11.4.4",
-  "versionCode": 126,
+  "version": "1.11.4.5",
+  "versionCode": 127,
   "releaseDate": "2026-11-09",
   "versionScheme": {
     "digit1": "App Version",
@@ -13,15 +13,15 @@
   "forceUpdate": false,
   "developer": "Kurzyrio",
   "supportEmail": "jerriviencenatad@gmail.com",
-  "title": "Play Store Package Name Alignment & Ecosystem Sync",
+  "title": "Google Play Compliance & Account Deletion Framework",
   "releaseNotes": [
-    "Play Store Package Alignment: Updated technical application identifier to com.kurzyrio.skweladabaw.app for Google Play Console compatibility.",
-    "Dual AssetLinks Sync: Configured verified deep links to seamlessly open class schedules and campus shares on both direct-install and Play Store builds.",
-    "Commuter Privacy & Continuity: Maintained full backwards compatibility with all saved local schedules, themes, and study routines."
+    "Google Play Compliance: Completely removed in-app update popups and external APK download prompts in accordance with Google Play Developer Policies.",
+    "Account & Data Deletion: Added a self-service account and cloud data deletion tool in Settings, paired with an official web request portal.",
+    "Permission Hardening: Streamlined Android permissions to exact alarm and battery guidelines while maintaining reliable timetable notifications."
   ],
   "downloadUrl": "https://skweladabaw.kurzyrio.site/download",
-  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.4.4.apk",
-  "sizeBytes": 27874652,
-  "sizeFormatted": "26.6 MB",
-  "sha256": "b76b4dc4459b9f6e7021352e1b770bb15b611f6b5d5e8caac3e1ac2ef1043f08"
+  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.4.5.apk",
+  "sizeBytes": 26607895,
+  "sizeFormatted": "25.4 MB",
+  "sha256": "54b148b09ac4472d36d857318724b00942e4853e882e98a767337b63a4fb7191"
 }

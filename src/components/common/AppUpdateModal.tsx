@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { EagleBuddy } from './EagleBuddy';
 import { Tag, Download, RefreshCw, X, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
-import { UpdateCheckResult, applyAppUpdate } from '../../services/updateService';
+import { UpdateCheckResult, openGooglePlayStore } from '../../services/updateService';
 import { playEagleSound } from '../../utils/audio';
 import { useBackHandler, BackPriority } from '../../hooks/useBackHandler';
 
@@ -26,38 +26,11 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({
     setIsDownloading(true);
     playEagleSound('success');
 
-    // Strictly target only the single authoritative latest versioned APK
-    const targetUrl = updateInfo.apkUrl && updateInfo.apkUrl.includes(updateInfo.latestVersion)
-      ? updateInfo.apkUrl
-      : `https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v${updateInfo.latestVersion}.apk`;
+    openGooglePlayStore();
 
-    if (Capacitor.isNativePlatform()) {
-      // On Android native app: open external browser / download manager cleanly via _system intent
-      try {
-        window.open(targetUrl, '_system');
-      } catch {
-        window.location.href = targetUrl;
-      }
-    } else {
-      // In web browser: trigger a single clean download
-      try {
-        const link = document.createElement('a');
-        link.href = targetUrl;
-        link.setAttribute('download', `SkwelaDabaw-v${updateInfo.latestVersion}.apk`);
-        link.target = '_blank';
-        link.rel = 'noopener noreferrer';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      } catch {
-        window.open(targetUrl, '_blank');
-      }
-    }
-
-    // Lock download button for 5 seconds to eliminate duplicate intent triggers
     setTimeout(() => {
       setIsDownloading(false);
-    }, 5000);
+    }, 3000);
   };
 
   const handleNotNow = () => {
