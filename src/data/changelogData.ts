@@ -17,10 +17,39 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.5.0',
+    releaseDate: 'November 10, 2026',
+    title: 'Live Class Status & Schedule Quick Search',
+    isLatest: true,
+    tagline: 'Instant classroom navigation with real-time class status countdowns, room search filtering, and one-tap subject duplication.',
+    highlights: [
+      'Added real-time In-Session and Up-Next status badges with minute countdowns on today\'s schedule cards',
+      'Added instant search and filter for classrooms, laboratories, subject codes, and professors',
+      'Added one-tap subject duplicator to rapidly replicate recurring courses across multiple days'
+    ],
+    items: [
+      {
+        type: 'feature',
+        title: 'Live Class Status Badges',
+        description: 'Displays pulsing in-session indicators and up-next countdowns on today\'s lecture cards.'
+      },
+      {
+        type: 'feature',
+        title: 'Schedule & Room Filter',
+        description: 'Quickly search and isolate classes by room number, subject code, or professor.'
+      },
+      {
+        type: 'improvement',
+        title: 'Subject Duplicator',
+        description: 'Replicate existing subject details into the Add Class dialog with a single tap.'
+      }
+    ]
+  },
+  {
     version: '1.11.4.6',
     releaseDate: 'November 10, 2026',
     title: 'Android 16 API 36 Target Alignment & Release Signing',
-    isLatest: true,
+    isLatest: false,
     tagline: 'Upgraded target SDK to API 36 (Android 16) and configured official release keystore signing for Google Play Store compliance.',
     highlights: [
       'Upgraded targetSdkVersion and compileSdkVersion to API 36 satisfying Google Play Console requirements',

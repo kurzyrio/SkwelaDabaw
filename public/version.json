@@ -1,6 +1,6 @@
 {
-  "version": "1.11.4.6",
-  "versionCode": 128,
+  "version": "1.11.5.0",
+  "versionCode": 129,
   "releaseDate": "2026-11-10",
   "versionScheme": {
     "digit1": "App Version",
@@ -13,15 +13,16 @@
   "forceUpdate": false,
   "developer": "Kurzyrio",
   "supportEmail": "jerriviencenatad@gmail.com",
-  "title": "Android 16 API 36 Target Alignment & Release Signing",
+  "title": "Live Class Status Indicators & Timetable Filter",
   "releaseNotes": [
-    "Android 16 API 36 Upgrade: Updated target and compile SDK to API 36 in accordance with Google Play security and platform requirements.",
-    "Production Release Signing: Configured cryptographically validated release signing certificate for Google Play Console distribution.",
-    "Platform Optimization: Maintained complete backwards compatibility for existing Davao student timetables and offline transit maps."
+    "Live Class Status: Real-time In-Session and Up-Next countdown badges directly on today's lecture cards.",
+    "Quick Schedule Filter: Instant search by classroom, laboratory, subject code, or professor name.",
+    "One-Tap Subject Duplicator: Easily replicate recurring subjects across alternate days without retyping.",
+    "Performance Optimization: 100% offline-ready timetable query and widget synchronization."
   ],
   "downloadUrl": "https://skweladabaw.kurzyrio.site/download",
-  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.4.6.apk",
-  "sizeBytes": 26608258,
+  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.0.apk",
+  "sizeBytes": 26609848,
   "sizeFormatted": "25.4 MB",
-  "sha256": "8500da80d98657f79ad0b92f509f9bf38975ec5e16bca235b2b8a317ebcbcfc9"
+  "sha256": "b720040cd7c0506d8d3e01aff6fe08290b0c30032e92061e3c5000197585883c"
 }

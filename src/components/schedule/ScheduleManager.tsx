@@ -24,7 +24,9 @@ import {
   Check,
   RefreshCw,
   MoreHorizontal,
-  QrCode
+  QrCode,
+  Search,
+  Copy
 } from 'lucide-react';
 import { db } from '../../db';
 import { ClassSchedule, DayOfWeek } from '../../types';
@@ -114,6 +116,17 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
   const [editingSchedule, setEditingSchedule] = useState<ClassSchedule | null>(null);
   const [scheduleToDelete, setScheduleToDelete] = useState<ClassSchedule | null>(null);
   const [timePickerTarget, setTimePickerTarget] = useState<'start' | 'end' | null>(null);
+
+  // Quick Search & Live Clock Refresh State
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [currentTime, setCurrentTime] = useState<Date>(() => new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Delete All Schedules Safety Modal State
   const [isDeleteAllModalOpen, setIsDeleteAllModalOpen] = useState<boolean>(false);
@@ -517,6 +530,26 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
     setIsModalOpen(true);
   };
 
+  const openDuplicateModal = (item: ClassSchedule) => {
+    setEditingSchedule(null);
+    setOfrCode(item.ofrCode || '');
+    setSubjectCode(item.subjectCode);
+    setSubjectName(item.subjectName);
+    setRoom(item.room || '');
+    setBuilding(item.building || '');
+    setInstructor(item.instructor || '');
+    setSelectedDays([selectedDay]);
+    setStartTime(item.startTime);
+    setEndTime(item.endTime);
+    setColor(item.color || PRESET_COLORS[0]);
+    setUnits(item.units || 3);
+    setNotes(item.notes || '');
+    const rem = item.reminderMinutes !== undefined && item.reminderMinutes !== null ? item.reminderMinutes : 0;
+    setReminderMinutes(rem);
+    setIsCustomReminder(![0, 10, 15, 30, 60].includes(rem));
+    setIsModalOpen(true);
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!subjectCode.trim() || selectedDays.length === 0) return;
@@ -612,10 +645,41 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
     return false;
   };
 
+  // Helper to convert 24h time to total minutes
+  const parseTimeToMinutes = (t24: string) => {
+    if (!t24) return 0;
+    const [h, m] = t24.split(':').map(Number);
+    return (h || 0) * 60 + (m || 0);
+  };
+
+  const currentDayName = DAYS[currentTime.getDay() === 0 ? 6 : currentTime.getDay() - 1];
+  const isSelectedDayToday = selectedDay === currentDayName;
+  const currentTotalMinutes = currentTime.getHours() * 60 + currentTime.getMinutes();
+
   // Filter schedules for the selected day
   const todaySchedules = schedules
     .filter((s) => matchesDay(s.days, selectedDay))
     .sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+  // Determine next upcoming class for today
+  const upcomingTodayClasses = todaySchedules
+    .filter((s) => parseTimeToMinutes(s.startTime) > currentTotalMinutes)
+    .sort((a, b) => parseTimeToMinutes(a.startTime) - parseTimeToMinutes(b.startTime));
+  const nextClassId = upcomingTodayClasses.length > 0 ? upcomingTodayClasses[0].id : null;
+
+  // Search filter across subject code, name, room, instructor, and OFR code
+  const filteredTodaySchedules = todaySchedules.filter((s) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    return (
+      s.subjectCode.toLowerCase().includes(q) ||
+      s.subjectName.toLowerCase().includes(q) ||
+      (s.room && s.room.toLowerCase().includes(q)) ||
+      (s.building && s.building.toLowerCase().includes(q)) ||
+      (s.instructor && s.instructor.toLowerCase().includes(q)) ||
+      (s.ofrCode && s.ofrCode.toLowerCase().includes(q))
+    );
+  });
 
   // Calculate total enrolled units
   const totalUnits = schedules.reduce((acc, curr) => acc + (curr.units || 0), 0);
@@ -847,12 +911,37 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
             })}
           </div>
 
+          {/* Quick Search & Filter Bar */}
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[var(--text-secondary)]">
+              <Search className="w-3.5 h-3.5" />
+            </div>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search subject code, room, or professor..."
+              className="w-full pl-9 pr-8 py-2 rounded-xl text-xs bg-[var(--nested-bg)] border border-[var(--card-border)] text-[var(--text-primary)] placeholder-[var(--text-secondary)] focus:outline-none focus:border-[var(--btn-primary-bg)] transition-all"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                title="Clear filter"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
           {/* Today Overview Header */}
           <div className="flex items-center justify-between px-1">
             <h2 className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
               <span>{selectedDay} Classes</span>
               <span className="text-xs font-normal text-[var(--text-secondary)]">
-                • {todaySchedules.length} {todaySchedules.length === 1 ? 'subject' : 'subjects'}
+                • {filteredTodaySchedules.length} {filteredTodaySchedules.length === 1 ? 'subject' : 'subjects'}
+                {searchQuery.trim() && ` (filtered from ${todaySchedules.length})`}
               </span>
             </h2>
             <span className="text-xs font-medium text-[var(--text-secondary)]">
@@ -861,7 +950,7 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
           </div>
 
           {/* Schedule List in Grouped Inset Cards */}
-          {todaySchedules.length === 0 ? (
+          {filteredTodaySchedules.length === 0 ? (
             <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-3xl p-6 text-center space-y-3">
               <div className="flex justify-center">
                 <EagleBuddy
@@ -872,85 +961,133 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
                   isAnimated={true}
                 />
               </div>
-              <div>
-                <h3 className="font-bold text-[var(--text-primary)] text-sm">No classes on {selectedDay}</h3>
-                <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                  {selectedDay === 'Sunday' || selectedDay === 'Saturday' 
-                    ? 'Day off! Rest well or review your upcoming lessons, Dabawenyo.'
-                    : 'Add your subjects or import your university schedule.'}
-                </p>
-              </div>
-              <div className="flex items-center justify-center gap-2 flex-wrap pt-2">
-                <button
-                  onClick={handleTriggerImport}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-[var(--nested-bg)] border border-[var(--card-border)] text-[var(--text-primary)] rounded-full text-xs font-semibold pressable"
-                >
-                  <Upload className="w-3.5 h-3.5" /> Import Schedule
-                </button>
-                <button
-                  onClick={openAddModal}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] rounded-full text-xs font-bold pressable"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Add Class
-                </button>
-              </div>
+              {searchQuery.trim() ? (
+                <div className="space-y-1">
+                  <h3 className="font-bold text-[var(--text-primary)] text-sm">No matching classes</h3>
+                  <p className="text-xs text-[var(--text-secondary)]">
+                    No classes match "{searchQuery}" on {selectedDay}.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-[var(--nested-bg)] border border-[var(--card-border)] text-[var(--text-primary)] rounded-full text-xs font-semibold pressable"
+                  >
+                    Clear Filter
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <h3 className="font-bold text-[var(--text-primary)] text-sm">No classes on {selectedDay}</h3>
+                    <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                      {selectedDay === 'Sunday' || selectedDay === 'Saturday' 
+                        ? 'Day off! Rest well or review your upcoming lessons, Dabawenyo.'
+                        : 'Add your subjects or import your university schedule.'}
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-center gap-2 flex-wrap pt-2">
+                    <button
+                      onClick={handleTriggerImport}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-[var(--nested-bg)] border border-[var(--card-border)] text-[var(--text-primary)] rounded-full text-xs font-semibold pressable"
+                    >
+                      <Upload className="w-3.5 h-3.5" /> Import Schedule
+                    </button>
+                    <button
+                      onClick={openAddModal}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] rounded-full text-xs font-bold pressable"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Add Class
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {todaySchedules.map((item) => (
-                <div
-                  key={item.id}
-                  className="p-4 rounded-2xl bg-[var(--card-bg)] border border-[var(--card-border)] hover:border-[var(--card-hover-border)] shadow-sm relative overflow-hidden group transition-all pressable"
-                  style={{ borderLeftColor: item.color, borderLeftWidth: '4px' }}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {item.ofrCode && (
-                          <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-[var(--nested-bg)] text-[var(--text-secondary)] border border-[var(--card-border)]">
-                            OFR: {item.ofrCode}
-                          </span>
-                        )}
-                        <span 
-                          className="px-2 py-0.5 rounded-md text-xs font-bold text-white shadow-xs"
-                          style={{ backgroundColor: item.color }}
-                        >
-                          {item.subjectCode}
-                        </span>
-                        <span className="text-[11px] font-medium text-[var(--text-secondary)]">
-                          {item.units || 3} Units
-                        </span>
+              {filteredTodaySchedules.map((item) => {
+                const startM = parseTimeToMinutes(item.startTime);
+                const endM = parseTimeToMinutes(item.endTime);
+                const isOngoing = isSelectedDayToday && currentTotalMinutes >= startM && currentTotalMinutes < endM;
+                const isNext = isSelectedDayToday && item.id === nextClassId;
 
-                        {item.reminderMinutes && item.reminderMinutes > 0 && (
-                          <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-[var(--nested-bg)] text-[var(--text-primary)] border border-[var(--card-border)] flex items-center gap-1">
-                            <Bell className="w-3 h-3 text-[#FF9F0A]" />
-                            <span>{item.reminderMinutes}m</span>
+                return (
+                  <div
+                    key={item.id}
+                    className={`p-4 rounded-2xl bg-[var(--card-bg)] border ${isOngoing ? 'border-emerald-500/50 shadow-md ring-1 ring-emerald-500/20' : 'border-[var(--card-border)]'} hover:border-[var(--card-hover-border)] shadow-sm relative overflow-hidden group transition-all pressable`}
+                    style={{ borderLeftColor: item.color, borderLeftWidth: '4px' }}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {item.ofrCode && (
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-[var(--nested-bg)] text-[var(--text-secondary)] border border-[var(--card-border)]">
+                              OFR: {item.ofrCode}
+                            </span>
+                          )}
+                          <span 
+                            className="px-2 py-0.5 rounded-md text-xs font-bold text-white shadow-xs"
+                            style={{ backgroundColor: item.color }}
+                          >
+                            {item.subjectCode}
                           </span>
-                        )}
+                          <span className="text-[11px] font-medium text-[var(--text-secondary)]">
+                            {item.units || 3} Units
+                          </span>
+
+                          {/* Live Status Badge */}
+                          {isOngoing && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5 animate-pulse shadow-xs">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                              <span>In Session • Ends in {endM - currentTotalMinutes}m</span>
+                            </span>
+                          )}
+                          {isNext && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30 flex items-center gap-1.5 shadow-xs">
+                              <span className="w-1.5 h-1.5 rounded-full bg-sky-500"></span>
+                              <span>Up Next • Starts in {startM - currentTotalMinutes}m</span>
+                            </span>
+                          )}
+
+                          {item.reminderMinutes && item.reminderMinutes > 0 && (
+                            <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-[var(--nested-bg)] text-[var(--text-primary)] border border-[var(--card-border)] flex items-center gap-1">
+                              <Bell className="w-3 h-3 text-[#FF9F0A]" />
+                              <span>{item.reminderMinutes}m</span>
+                            </span>
+                          )}
+                        </div>
+                        <h4 className="font-bold text-[var(--text-primary)] text-sm line-clamp-1">
+                          {item.subjectName}
+                        </h4>
                       </div>
-                      <h4 className="font-bold text-[var(--text-primary)] text-sm line-clamp-1">
-                        {item.subjectName}
-                      </h4>
-                    </div>
 
-                    {/* Actions */}
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => openEditModal(item)}
-                        className="p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--nested-bg)] transition-colors cursor-pointer"
-                        title="Edit Subject"
-                      >
-                        <Edit3 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => setScheduleToDelete(item)}
-                        className="p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[#FF453A] hover:bg-[var(--nested-bg)] transition-colors cursor-pointer"
-                        title="Delete Subject"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {/* Actions */}
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => openDuplicateModal(item)}
+                          className="p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--nested-bg)] transition-colors cursor-pointer"
+                          title="Duplicate Subject"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(item)}
+                          className="p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--nested-bg)] transition-colors cursor-pointer"
+                          title="Edit Subject"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setScheduleToDelete(item)}
+                          className="p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[#FF453A] hover:bg-[var(--nested-bg)] transition-colors cursor-pointer"
+                          title="Delete Subject"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
-                  </div>
 
                   {/* Metadata Chips */}
                   <div className="mt-3 pt-3 border-t border-[var(--card-border)] grid grid-cols-2 gap-2 text-xs text-[var(--text-secondary)]">
@@ -976,9 +1113,10 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
                     )}
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
+              );
+            })}
+          </div>
+        )}
         </div>
       )}
 

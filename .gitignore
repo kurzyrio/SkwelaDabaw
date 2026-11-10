@@ -66,6 +66,10 @@ admin_log.txt
 scratch/
 test-*.cjs
 test-*.js
+clean_screens/
+play_store_assets/
+pristine_screens/
+raw_screens/
 
 # 6. IDEs & Operating System Files
 .vscode/*
