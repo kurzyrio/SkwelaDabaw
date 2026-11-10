@@ -17,10 +17,34 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.5.1',
+    releaseDate: 'November 10, 2026',
+    title: 'Google Play Photo Policy Alignment & Privacy Optimization',
+    isLatest: true,
+    tagline: 'Streamlined media access to the zero-permission Android System Photo Picker for strengthened student privacy.',
+    highlights: [
+      'Transitioned image selection and OCR schedule importing to the zero-permission Android System Photo Picker',
+      'Purged legacy READ_MEDIA_IMAGES and storage permissions to comply with Google Play security standards',
+      'Ensured all schedule image imports and avatar selections remain isolated to user-picked files only'
+    ],
+    items: [
+      {
+        type: 'security',
+        title: 'Android Photo Picker Alignment',
+        description: 'Adopted Android system photo picker architecture, eliminating broad storage permission requirements.'
+      },
+      {
+        type: 'improvement',
+        title: 'Student Privacy Hardening',
+        description: 'Zero broad gallery permissions requested on install; file access is strictly limited to files you tap.'
+      }
+    ]
+  },
+  {
     version: '1.11.5.0',
     releaseDate: 'November 10, 2026',
     title: 'Live Class Status & Schedule Quick Search',
-    isLatest: true,
+    isLatest: false,
     tagline: 'Instant classroom navigation with real-time class status countdowns, room search filtering, and one-tap subject duplication.',
     highlights: [
       'Added real-time In-Session and Up-Next status badges with minute countdowns on today\'s schedule cards',

@@ -1,6 +1,6 @@
 {
-  "version": "1.11.5.0",
-  "versionCode": 129,
+  "version": "1.11.5.1",
+  "versionCode": 130,
   "releaseDate": "2026-11-10",
   "versionScheme": {
     "digit1": "App Version",
@@ -13,16 +13,15 @@
   "forceUpdate": false,
   "developer": "Kurzyrio",
   "supportEmail": "jerriviencenatad@gmail.com",
-  "title": "Live Class Status Indicators & Timetable Filter",
+  "title": "Google Play Photo Policy Alignment & Privacy Optimization",
   "releaseNotes": [
-    "Live Class Status: Real-time In-Session and Up-Next countdown badges directly on today's lecture cards.",
-    "Quick Schedule Filter: Instant search by classroom, laboratory, subject code, or professor name.",
-    "One-Tap Subject Duplicator: Easily replicate recurring subjects across alternate days without retyping.",
-    "Performance Optimization: 100% offline-ready timetable query and widget synchronization."
+    "Google Play Policy Alignment: Transitioned image picking to the zero-permission Android System Photo Picker, removing READ_MEDIA_IMAGES.",
+    "Enhanced Student Privacy: Zero broad gallery permissions requested on installation; access is strictly isolated to files you pick.",
+    "Live Class Status & Timetable Filter: Real-time class session countdowns and instant room/lab search."
   ],
   "downloadUrl": "https://skweladabaw.kurzyrio.site/download",
-  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.0.apk",
-  "sizeBytes": 26609848,
+  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.1.apk",
+  "sizeBytes": 26610104,
   "sizeFormatted": "25.4 MB",
-  "sha256": "b720040cd7c0506d8d3e01aff6fe08290b0c30032e92061e3c5000197585883c"
+  "sha256": "a463b227c3a5b7c1b1dd2fb269a564a6c0723626a3785858fb136ad9a1c5d47b"
 }
