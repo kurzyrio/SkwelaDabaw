@@ -17,10 +17,39 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.5.4',
+    releaseDate: 'November 11, 2026',
+    title: 'Profile Verification Stability & Setup Dialog Fix',
+    isLatest: true,
+    tagline: 'Fixed missing information pop-up triggers, preserved demographic updates across restarts, and streamlined account verification.',
+    highlights: [
+      'Fixed profile verification so students with complete accounts do not see false missing information pop-ups',
+      'Ensured updated personal demographics persist immediately to device storage upon saving',
+      'Streamlined account onboarding verification for returning student accounts'
+    ],
+    items: [
+      {
+        type: 'fix',
+        title: 'Profile Verification Fix',
+        description: 'Prevented completed student accounts from falsely triggering the missing information modal.'
+      },
+      {
+        type: 'fix',
+        title: 'Demographics Persistence',
+        description: 'Fixed profile updates to save immediately across cold restarts and tab closures.'
+      },
+      {
+        type: 'improvement',
+        title: 'Account Verification Reliability',
+        description: 'Streamlined session verification checks between the app and cloud backend.'
+      }
+    ]
+  },
+  {
     version: '1.11.5.3',
     releaseDate: 'November 11, 2026',
     title: 'Google Sign-In Hardening & Top Bar Stabilization',
-    isLatest: true,
+    isLatest: false,
     tagline: 'Stabilized top status bar rendering, hardened Android Google Sign-In callbacks, and improved authentication error handling.',
     highlights: [
       'Eliminated top-of-app status bar glitching and window inset flickering on Android',

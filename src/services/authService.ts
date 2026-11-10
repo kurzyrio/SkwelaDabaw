@@ -194,20 +194,23 @@ const performGoogleSignIn = async (currentCampusId: string): Promise<StudentAuth
           const userCred = await signInWithCredential(auth, credential);
           const firebaseUser = userCred.user;
 
+          const prevSession = getSavedSession();
+          const prevUid = prevSession.isLoggedIn ? prevSession.uid : undefined;
+
           const session: StudentAuthSession = {
             isLoggedIn: true,
             uid: firebaseUser.uid,
-            name: firebaseUser.displayName || nativeResult.displayName || 'Student',
-            email: firebaseUser.email || nativeResult.email || '',
-            avatar: firebaseUser.photoURL || nativeResult.photoUrl || '',
-            campusId: currentCampusId,
-            studentId: '',
-            course: 'Enrolled Student',
-            yearLevel: 'College Student',
-            role: 'student'
+            name: firebaseUser.displayName || nativeResult.displayName || prevSession.name || 'Student',
+            email: firebaseUser.email || nativeResult.email || prevSession.email || '',
+            avatar: firebaseUser.photoURL || nativeResult.photoUrl || prevSession.avatar || '',
+            campusId: currentCampusId || prevSession.campusId || '',
+            studentId: prevSession.studentId || '',
+            course: prevSession.course || 'Enrolled Student',
+            yearLevel: prevSession.yearLevel || 'College Student',
+            role: prevSession.role || 'student',
+            age: prevSession.age,
+            gender: prevSession.gender
           };
-          const prevSession = getSavedSession();
-          const prevUid = prevSession.isLoggedIn ? prevSession.uid : undefined;
           saveSession(session);
           try {
             const idToken = nativeResult.idToken || (await firebaseUser.getIdToken(false).catch(() => undefined));
@@ -218,20 +221,23 @@ const performGoogleSignIn = async (currentCampusId: string): Promise<StudentAuth
           console.warn('Firebase JS SDK signInWithCredential warning (falling back to native user session):', syncErr);
           // Fallback session using native Google credentials so user login never loops or breaks
           const uid = nativeResult.uid || ('usr_' + Date.now());
+          const prevSession = getSavedSession();
+          const prevUid = prevSession.isLoggedIn ? prevSession.uid : undefined;
+
           const session: StudentAuthSession = {
             isLoggedIn: true,
             uid: uid,
-            name: nativeResult.displayName || 'Student',
-            email: nativeResult.email || '',
-            avatar: nativeResult.photoUrl || '',
-            campusId: currentCampusId,
-            studentId: '',
-            course: 'Enrolled Student',
-            yearLevel: 'College Student',
-            role: 'student'
+            name: nativeResult.displayName || prevSession.name || 'Student',
+            email: nativeResult.email || prevSession.email || '',
+            avatar: nativeResult.photoUrl || prevSession.avatar || '',
+            campusId: currentCampusId || prevSession.campusId || '',
+            studentId: prevSession.studentId || '',
+            course: prevSession.course || 'Enrolled Student',
+            yearLevel: prevSession.yearLevel || 'College Student',
+            role: prevSession.role || 'student',
+            age: prevSession.age,
+            gender: prevSession.gender
           };
-          const prevSession = getSavedSession();
-          const prevUid = prevSession.isLoggedIn ? prevSession.uid : undefined;
           saveSession(session);
           try {
             await switchAccountSchedules(prevUid, uid, prevSession.isLoggedIn ? prevSession : undefined, nativeResult.idToken);
@@ -240,20 +246,23 @@ const performGoogleSignIn = async (currentCampusId: string): Promise<StudentAuth
         }
       } else {
         // Fallback session if web auth instance is uninitialized
+        const prevSession = getSavedSession();
+        const prevUid = prevSession.isLoggedIn ? prevSession.uid : undefined;
+
         const session: StudentAuthSession = {
           isLoggedIn: true,
           uid: nativeResult.uid || 'usr_' + Date.now(),
-          name: nativeResult.displayName || 'Student',
-          email: nativeResult.email || '',
-          avatar: nativeResult.photoUrl || '',
-          campusId: currentCampusId,
-          studentId: '',
-          course: 'Enrolled Student',
-          yearLevel: 'College Student',
-          role: 'student'
+          name: nativeResult.displayName || prevSession.name || 'Student',
+          email: nativeResult.email || prevSession.email || '',
+          avatar: nativeResult.photoUrl || prevSession.avatar || '',
+          campusId: currentCampusId || prevSession.campusId || '',
+          studentId: prevSession.studentId || '',
+          course: prevSession.course || 'Enrolled Student',
+          yearLevel: prevSession.yearLevel || 'College Student',
+          role: prevSession.role || 'student',
+          age: prevSession.age,
+          gender: prevSession.gender
         };
-        const prevSession = getSavedSession();
-        const prevUid = prevSession.isLoggedIn ? prevSession.uid : undefined;
         saveSession(session);
         try {
           await switchAccountSchedules(prevUid, session.uid, prevSession.isLoggedIn ? prevSession : undefined, nativeResult.idToken);
@@ -268,20 +277,23 @@ const performGoogleSignIn = async (currentCampusId: string): Promise<StudentAuth
   if (isFirebaseConfigured && auth) {
     const result = await signInWithPopup(auth, googleProvider);
     const user = result.user;
+    const prevSession = getSavedSession();
+    const prevUid = prevSession.isLoggedIn ? prevSession.uid : undefined;
+
     const session: StudentAuthSession = {
       isLoggedIn: true,
       uid: user.uid,
-      name: user.displayName || 'Student',
-      email: user.email || '',
-      avatar: user.photoURL || '',
-      campusId: currentCampusId,
-      studentId: '',
-      course: 'Enrolled Student',
-      yearLevel: 'College Student',
-      role: 'student'
+      name: user.displayName || prevSession.name || 'Student',
+      email: user.email || prevSession.email || '',
+      avatar: user.photoURL || prevSession.avatar || '',
+      campusId: currentCampusId || prevSession.campusId || '',
+      studentId: prevSession.studentId || '',
+      course: prevSession.course || 'Enrolled Student',
+      yearLevel: prevSession.yearLevel || 'College Student',
+      role: prevSession.role || 'student',
+      age: prevSession.age,
+      gender: prevSession.gender
     };
-    const prevSession = getSavedSession();
-    const prevUid = prevSession.isLoggedIn ? prevSession.uid : undefined;
     saveSession(session);
     try {
       const idToken = await user.getIdToken(false).catch(() => undefined);

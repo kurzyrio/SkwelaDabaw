@@ -373,8 +373,8 @@ export function App() {
           }
 
           // Check if existing/old user lacks newer personal information (gender, age)
-          const currentGender = updatedSession.gender || result.user?.gender;
-          const currentAge = updatedSession.age ?? result.user?.age;
+          const currentGender = updatedSession.gender || result.user?.gender || getSavedSession().gender;
+          const currentAge = updatedSession.age ?? result.user?.age ?? getSavedSession().age;
           const missingNewer: string[] = [];
           if (!currentGender) missingNewer.push('gender');
           if (!currentAge || currentAge <= 0) missingNewer.push('age');
@@ -405,8 +405,8 @@ export function App() {
           const hasLocalValidUsername = Boolean(userSession.username && !/^student_[a-f0-9]{6,16}$/i.test(userSession.username));
           const hasLocalName = Boolean(userSession.name && userSession.name.trim().length > 0 && userSession.name !== 'Student');
 
-          const currentGender = userSession.gender || result.user?.gender;
-          const currentAge = userSession.age ?? result.user?.age;
+          const currentGender = userSession.gender || result.user?.gender || getSavedSession().gender;
+          const currentAge = userSession.age ?? result.user?.age ?? getSavedSession().age;
           const missingNewer: string[] = [];
           if (!currentGender) missingNewer.push('gender');
           if (!currentAge || currentAge <= 0) missingNewer.push('age');
@@ -426,9 +426,9 @@ export function App() {
             break;
           }
 
-          // If core fields (username/displayName) are actually missing on existing account:
+          // If core fields (username/displayName/gender/age) are actually missing on existing account:
           const coreMissing = (result.missingFields || []).filter(
-            f => f === 'username' || f === 'displayName' || f === 'isSetupComplete' || f === 'gender' || f === 'age'
+            f => f === 'username' || f === 'displayName' || f === 'gender' || f === 'age'
           );
           if (coreMissing.length > 0) {
             setMissingProfileFields(coreMissing);
@@ -1116,7 +1116,9 @@ export function App() {
         missingFields={missingProfileFields}
         onSaved={(updated) => {
           setIsMissingProfileModalOpen(false);
-          setUserSession((prev) => ({ ...prev, ...updated }));
+          const newSession = { ...userSession, ...updated };
+          setUserSession(newSession);
+          saveSession(newSession);
           sessionStorage.setItem('skwela_session_checked', 'true');
         }}
       />

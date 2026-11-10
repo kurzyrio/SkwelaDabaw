@@ -1,6 +1,6 @@
 {
-  "version": "1.11.5.3",
-  "versionCode": 132,
+  "version": "1.11.5.4",
+  "versionCode": 133,
   "releaseDate": "2026-11-11",
   "versionScheme": {
     "digit1": "App Version",
@@ -13,15 +13,15 @@
   "forceUpdate": false,
   "developer": "Kurzyrio",
   "supportEmail": "jerriviencenatad@gmail.com",
-  "title": "Android Google Sign-In Hardening & Top Bar Stabilization",
+  "title": "Profile Verification Stability & Setup Dialog Fix",
   "releaseNotes": [
-    "Top Bar Stabilization: Eliminated window inset jitter and flickering across all Android devices.",
-    "Google Sign-In Hardening: Enhanced native authentication bridge and preserved ProGuard activity callbacks.",
-    "Authentication Error Clarity: Added clear guidance for Google Play Services and credential issues."
+    "Profile Verification Fix: Prevented completed profiles from mistakenly seeing missing information pop-ups on launch.",
+    "Demographics Persistence: Fixed demographic updates to save immediately across device restarts.",
+    "Account Setup Reliability: Streamlined initial student onboarding and verification flow."
   ],
   "downloadUrl": "https://skweladabaw.kurzyrio.site/download",
-  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.3.apk",
-  "sizeBytes": 26610658,
+  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.4.apk",
+  "sizeBytes": 26611265,
   "sizeFormatted": "25.4 MB",
-  "sha256": "f78682460abb254be62a88039d3cb892b9334b1bc670b734a16c635033ebdb9e"
+  "sha256": "f6354bdabf6c645298d3d1c80b50aa567842173126e883f58fdfe20062b6092f"
 }

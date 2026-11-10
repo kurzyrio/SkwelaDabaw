@@ -264,8 +264,10 @@ export async function checkExistingUserDetailed(
 
   // 1. Check MySQL cloud database
   try {
+    const idToken = await getFirebaseIdToken();
+    const headers: Record<string, string> = idToken ? { Authorization: `Bearer ${idToken}` } : {};
     const lookupUrl = `${USER_API_URL}?action=lookup&uid=${encodeURIComponent(uid || '')}&email=${encodeURIComponent(email || '')}&t=${Date.now()}`;
-    const httpRes = await httpGetWithStatus(lookupUrl);
+    const httpRes = await httpGetWithStatus(lookupUrl, headers);
 
     // Case A: 404 Not Found explicitly means user record does not exist in MySQL yet
     if (httpRes.status === 404) {
@@ -836,9 +838,11 @@ export async function verifyProfileIntegrity(
   }
 
   try {
+    const idToken = await getFirebaseIdToken();
+    const headers: Record<string, string> = idToken ? { Authorization: `Bearer ${idToken}` } : {};
     const query = uid ? `uid=${encodeURIComponent(uid)}` : `email=${encodeURIComponent(email || '')}`;
     const url = `${USER_API_URL}?action=verify_session&${query}&t=${Date.now()}`;
-    const res = await httpGet(url);
+    const res = await httpGet(url, headers);
 
     if (res && res.success) {
       if (res.exists && res.user) {
