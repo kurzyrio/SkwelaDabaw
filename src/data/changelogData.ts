@@ -17,10 +17,39 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.5.2',
+    releaseDate: 'November 11, 2026',
+    title: 'Theme Alignment & Android 15 Edge-to-Edge Optimization',
+    isLatest: true,
+    tagline: 'Refined background alert prompt theming, upgraded Android 15 edge-to-edge support, and optimized DEX performance.',
+    highlights: [
+      'Fixed background alert modal so it matches your selected theme across light, dark, and OLED modes',
+      'Added edge-to-edge full-screen display optimization for seamless viewing on Android 15 devices',
+      'Enhanced native bytecode optimization and performance complying with Google Play standards'
+    ],
+    items: [
+      {
+        type: 'ui',
+        title: 'Theme-Adaptive Alert Dialog',
+        description: 'Background execution prompt now seamlessly reflects the active campus theme and handles back-navigation.'
+      },
+      {
+        type: 'improvement',
+        title: 'Edge-to-Edge Experience',
+        description: 'Enhanced edge-to-edge window display for full-screen layout on Android 15 and above.'
+      },
+      {
+        type: 'fix',
+        title: 'Bytecode & DEX Optimization',
+        description: 'Streamlined app bundle bytecode optimization for fast loading and reduced background memory usage.'
+      }
+    ]
+  },
+  {
     version: '1.11.5.1',
     releaseDate: 'November 10, 2026',
     title: 'Google Play Photo Policy Alignment & Privacy Optimization',
-    isLatest: true,
+    isLatest: false,
     tagline: 'Streamlined media access to the zero-permission Android System Photo Picker for strengthened student privacy.',
     highlights: [
       'Transitioned image selection and OCR schedule importing to the zero-permission Android System Photo Picker',

@@ -1,21 +1,47 @@
 # Add project specific ProGuard rules here.
 # You can control the set of applied configuration files using the
 # proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# Preserve annotations, signatures, and line numbers for stack traces
+-keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod,SourceFile,LineNumberTable
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# Capacitor JavaScript Bridge & WebKit JavaScript Interfaces
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# Capacitor Core & Plugin reflections
+-keep public class * extends com.getcapacitor.Plugin {
+    public *;
+}
+-keep public class * extends com.getcapacitor.Bridge {
+    public *;
+}
+-keep public class com.getcapacitor.** { *; }
+
+# Keep app-specific custom Capacitor plugins, widgets, receivers, and services
+-keep public class com.kurzyrio.skweladabaw.** extends com.getcapacitor.Plugin {
+    public *;
+}
+-keep public class com.kurzyrio.skweladabaw.** extends android.app.Service {
+    public *;
+}
+-keep public class com.kurzyrio.skweladabaw.** extends android.content.BroadcastReceiver {
+    public *;
+}
+-keep public class com.kurzyrio.skweladabaw.** extends android.appwidget.AppWidgetProvider {
+    public *;
+}
+
+# Keep Google Credential Manager & Play Services Identity
+-keep class androidx.credentials.** { *; }
+-keep class com.google.android.libraries.identity.googleid.** { *; }
+-keep class com.google.android.gms.auth.api.signin.** { *; }
+
+# Keep Firebase Auth & Analytics
+-keep class com.google.firebase.** { *; }
+-dontwarn com.google.firebase.**
+
+# Suppress optional unused third-party auth providers in capacitor-firebase-authentication
+-dontwarn com.facebook.**
+-dontwarn twitter4j.**
