@@ -438,8 +438,16 @@ export const DedicatedOnboardingPage: React.FC<DedicatedOnboardingPageProps> = (
       }
     } catch (err: any) {
       console.warn('Google sign-in error:', err);
-      const msg = err?.message || 'Google Sign-In was cancelled or could not connect.';
-      setGoogleAuthError(msg.includes('network') ? 'Network connection error. Check internet.' : 'Sign-in was cancelled or dismissed.');
+      const msg = String(err?.message || err || '');
+      if (msg.includes('Code 10') || msg.includes('Developer Error') || msg.includes('SHA-1')) {
+        setGoogleAuthError('Google Sign-In setup error (Code 10). App SHA-1 must be registered in Firebase Console.');
+      } else if (msg.includes('Code 12500')) {
+        setGoogleAuthError('Google Play Services sign-in error (Code 12500). Check connection and Play Services.');
+      } else if (msg.toLowerCase().includes('network')) {
+        setGoogleAuthError('Network connection error. Check internet.');
+      } else {
+        setGoogleAuthError('Sign-in was cancelled or dismissed.');
+      }
     } finally {
       setIsLoggingIn(false);
     }

@@ -17,10 +17,39 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.5.3',
+    releaseDate: 'November 11, 2026',
+    title: 'Google Sign-In Hardening & Top Bar Stabilization',
+    isLatest: true,
+    tagline: 'Stabilized top status bar rendering, hardened Android Google Sign-In callbacks, and improved authentication error handling.',
+    highlights: [
+      'Eliminated top-of-app status bar glitching and window inset flickering on Android',
+      'Hardened native Google Sign-In callbacks and preserved authentication lifecycle under R8',
+      'Added descriptive error feedback for Google Play Services and authentication configuration'
+    ],
+    items: [
+      {
+        type: 'fix',
+        title: 'Top Bar Stabilization',
+        description: 'Removed conflicting window insets to provide rock-solid, smooth header rendering.'
+      },
+      {
+        type: 'security',
+        title: 'Google Sign-In Bridge Hardening',
+        description: 'Retained native authentication activity callbacks for seamless Google account switching.'
+      },
+      {
+        type: 'improvement',
+        title: 'Authentication Diagnostics',
+        description: 'Clear, helpful guidance when Google Play Services encounters credential issues.'
+      }
+    ]
+  },
+  {
     version: '1.11.5.2',
     releaseDate: 'November 11, 2026',
     title: 'Theme Alignment & Android 15 Edge-to-Edge Optimization',
-    isLatest: true,
+    isLatest: false,
     tagline: 'Refined background alert prompt theming, upgraded Android 15 edge-to-edge support, and optimized DEX performance.',
     highlights: [
       'Fixed background alert modal so it matches your selected theme across light, dark, and OLED modes',

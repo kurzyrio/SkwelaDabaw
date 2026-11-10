@@ -221,7 +221,7 @@ public class NativeGoogleAuthPlugin extends Plugin {
     }
 
     @ActivityCallback
-    private void handleLegacyGoogleSignInResult(PluginCall call, ActivityResult result) {
+    public void handleLegacyGoogleSignInResult(PluginCall call, ActivityResult result) {
         if (call == null) return;
         int resultCode = result.getResultCode();
         Intent data = result.getData();

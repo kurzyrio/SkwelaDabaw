@@ -14,12 +14,22 @@
 -keep public class * extends com.getcapacitor.Plugin {
     public *;
 }
+-keepclassmembers class * extends com.getcapacitor.Plugin {
+    @com.getcapacitor.annotation.ActivityCallback *;
+    @com.getcapacitor.annotation.PermissionCallback *;
+}
 -keep public class * extends com.getcapacitor.Bridge {
     public *;
 }
 -keep public class com.getcapacitor.** { *; }
 
 # Keep app-specific custom Capacitor plugins, widgets, receivers, and services
+-keep class com.kurzyrio.skweladabaw.NativeGoogleAuthPlugin {
+    *;
+}
+-keepclassmembers class com.kurzyrio.skweladabaw.NativeGoogleAuthPlugin {
+    *;
+}
 -keep public class com.kurzyrio.skweladabaw.** extends com.getcapacitor.Plugin {
     public *;
 }

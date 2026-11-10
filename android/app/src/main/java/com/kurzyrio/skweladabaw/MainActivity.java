@@ -8,7 +8,6 @@ import android.os.Bundle;
 import android.webkit.GeolocationPermissions;
 import android.webkit.PermissionRequest;
 import android.webkit.WebSettings;
-import androidx.activity.EdgeToEdge;
 import androidx.annotation.NonNull;
 import androidx.core.content.ContextCompat;
 import com.getcapacitor.BridgeActivity;
@@ -25,7 +24,6 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        EdgeToEdge.enable(this);
         registerPlugin(WidgetBridgePlugin.class);
         registerPlugin(NativeGoogleAuthPlugin.class);
         registerPlugin(EagleOverlayPlugin.class);
