@@ -90,7 +90,7 @@ import {
 import type { ClassSchedule } from '../../types';
 import { syncLocalDataToCloud, queueCloudSync, syncCloudDataBiDirectional, LAST_SYNC_KEY } from '../../services/cloudSyncService';
 import { AccountLinkSyncModal } from '../auth/AccountLinkSyncModal';
-import { ProcessingOverlay } from '../common/ProcessingOverlay';
+import { useProcessingOverlay } from '../../contexts/ProcessingOverlayContext';
 import { EagleBuddy } from '../common/EagleBuddy';
 import { ScheduleImportModal } from '../schedule/ScheduleImportModal';
 import { CachedAvatar } from '../common/CachedAvatar';
@@ -264,6 +264,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   initialCategory,
   onLogout
 }) => {
+  const { withProcessing, showProcessing, hideProcessing } = useProcessingOverlay();
   const [activeCategory, setActiveCategory] = useState<SettingsCategory | null>(initialCategory || null);
   const [isOverlayPermGranted, setIsOverlayPermGranted] = useState<boolean>(false);
   const [taskMetrics, setTaskMetrics] = useState<{ total: number; pending: number; synced: number }>({
@@ -626,18 +627,23 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const handleManualCloudSync = async () => {
     setIsSyncingCloud(true);
     try {
-      await flushPendingSync();
-      if (userSession.isLoggedIn) {
-        const res = await syncCloudDataBiDirectional();
-        if (res.success) {
-          setCloudSyncFeedback('All student data & timetables synchronized to cloud');
+      await withProcessing({
+        message: 'Syncing Data • Please wait',
+        submessage: 'Backing up timetable, tasks, and grades to cloud'
+      }, async () => {
+        await flushPendingSync();
+        if (userSession.isLoggedIn) {
+          const res = await syncCloudDataBiDirectional();
+          if (res.success) {
+            setCloudSyncFeedback('All student data & timetables synchronized to cloud');
+          } else {
+            setCloudSyncFeedback(res.message || 'Sync completed locally offline');
+          }
         } else {
-          setCloudSyncFeedback(res.message || 'Sync completed locally offline');
+          setCloudSyncFeedback('Local changes preserved offline (Guest mode)');
         }
-      } else {
-        setCloudSyncFeedback('Local changes preserved offline (Guest mode)');
-      }
-      await refreshTaskMetrics();
+        await refreshTaskMetrics();
+      });
     } catch (err: any) {
       setCloudSyncFeedback('Sync note: ' + (err?.message || 'Check connection'));
     } finally {
@@ -693,23 +699,33 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       onUpdateSession(updated);
       localStorage.setItem('skweladabaw_profile_dirty', 'true');
       localStorage.setItem('skweladabaw_profile_updated_at', String(Date.now()));
-      await saveUserProfile(updated);
-      if (userSession.uid) {
-        await updateUserProfileFields(userSession.uid, {
-          displayName: updated.name,
-          campusId: updated.campusId,
-          course: updated.course,
-          yearLevel: updated.yearLevel,
-          age: updated.age,
-          gender: updated.gender
-        }).catch(() => {});
-      }
-      syncLocalDataToCloud(updated).catch(() => {});
+
+      await withProcessing({
+        message: 'Updating Profile • Please wait',
+        submessage: 'Saving changes to your student account'
+      }, async () => {
+        await saveUserProfile(updated);
+        if (userSession.uid) {
+          await updateUserProfileFields(userSession.uid, {
+            displayName: updated.name,
+            campusId: updated.campusId,
+            course: updated.course,
+            yearLevel: updated.yearLevel,
+            age: updated.age,
+            gender: updated.gender
+          }).catch(() => {});
+        }
+        await syncLocalDataToCloud(updated).catch(() => {});
+      });
+
       setIsEditProfileOpen(false);
       setProfileSuccessToast('Profile updated successfully!');
       setTimeout(() => setProfileSuccessToast(null), 3500);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to update profile:', err);
+      setIsEditProfileOpen(false);
+      setProfileSuccessToast('Profile saved locally (Offline mode)');
+      setTimeout(() => setProfileSuccessToast(null), 3500);
     } finally {
       setIsSavingProfile(false);
     }
@@ -754,6 +770,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
   const handleGoogleLogin = async () => {
     setIsLoggingIn(true);
+    showProcessing('Authenticating • Please wait', 'Connecting securely to SkwelaDabaw cloud');
     setLoginErrorToast(null);
     try {
       const isFromGuest = !userSession.isLoggedIn;
@@ -855,6 +872,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       setTimeout(() => setLoginErrorToast(null), 4000);
     } finally {
       setIsLoggingIn(false);
+      hideProcessing();
     }
   };
 
@@ -960,7 +978,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const handleConfirmDeleteAccount = async () => {
     setIsDeletingAccount(true);
     try {
-      const res = await deleteUserAccount();
+      const res = await withProcessing({
+        message: 'Deleting Account • Please wait',
+        submessage: 'Purging student account and cloud records'
+      }, async () => {
+        return await deleteUserAccount();
+      });
+
       if (res.success) {
         setIsDeleteModalOpen(false);
         setOnboardingCompleted(false);
@@ -973,8 +997,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         setDeleteToast(res.message || 'Failed to delete account');
         setTimeout(() => setDeleteToast(null), 3500);
       }
-    } catch {
-      setDeleteToast('Error deleting account');
+    } catch (err: any) {
+      setDeleteToast(err?.message || 'Error deleting account');
       setTimeout(() => setDeleteToast(null), 3500);
     } finally {
       setIsDeletingAccount(false);
@@ -986,11 +1010,16 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     setIsSavingUsername(true);
 
     try {
-      const result = await updateUsername(
-        userSession.email || userSession.name,
-        newUsernameInput,
-        userSession.lastUsernameChange
-      );
+      const result = await withProcessing({
+        message: 'Updating Username • Please wait',
+        submessage: 'Verifying availability and registering changes'
+      }, async () => {
+        return await updateUsername(
+          userSession.email || userSession.name,
+          newUsernameInput,
+          userSession.lastUsernameChange
+        );
+      });
 
       if (result.success) {
         const now = new Date().toISOString();
@@ -1006,8 +1035,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       } else {
         setUsernameFeedback(result.message);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving username:', err);
+      setUsernameFeedback(err?.message || 'Network error updating username');
     } finally {
       setIsSavingUsername(false);
     }
@@ -3356,13 +3386,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           isProcessing={isResolvingSyncConflict}
         />
       )}
-
-      {/* Global Processing Spinner Overlay */}
-      <ProcessingOverlay
-        isOpen={isLoggingIn}
-        message="Authenticating • Please wait"
-        submessage="Connecting securely to SkwelaDabaw cloud"
-      />
     </div>
   );
 };

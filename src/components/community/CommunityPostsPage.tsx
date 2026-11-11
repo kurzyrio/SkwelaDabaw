@@ -42,6 +42,7 @@ import { CachedAvatar } from '../common/CachedAvatar';
 import { CustomSelect, CustomSelectOption } from '../common/CustomSelect';
 import { useBackHandler, BackPriority } from '../../hooks/useBackHandler';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
+import { useProcessingOverlay } from '../../contexts/ProcessingOverlayContext';
 
 interface CommunityPostsPageProps {
   userSession?: StudentAuthSession;
@@ -52,6 +53,7 @@ export const CommunityPostsPage: React.FC<CommunityPostsPageProps> = ({
   userSession,
   onOpenAuth
 }) => {
+  const { withProcessing } = useProcessingOverlay();
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -199,23 +201,33 @@ export const CommunityPostsPage: React.FC<CommunityPostsPageProps> = ({
 
     requireAuth('leave a comment', async () => {
       setSubmittingComment(true);
-      const res = await addPostComment(activeCommentsPost.id, commentInput.trim(), userSession?.uid);
-      setSubmittingComment(false);
+      try {
+        const res = await withProcessing({
+          message: 'Posting Comment • Please wait',
+          submessage: 'Joining the campus discussion'
+        }, async () => {
+          return await addPostComment(activeCommentsPost.id, commentInput.trim(), userSession?.uid);
+        });
 
-      if (res.requiresAuth) {
-        setIsLoginModalOpen(true);
-        return;
-      }
+        if (res.requiresAuth) {
+          setIsLoginModalOpen(true);
+          return;
+        }
 
-      if (res.success && res.comment) {
-        setComments((prev) => [...prev, res.comment!]);
-        setCommentInput('');
-        // Increment count in feed
-        setPosts((prev) =>
-          prev.map((p) => (p.id === activeCommentsPost.id ? { ...p, commentsCount: p.commentsCount + 1 } : p))
-        );
-      } else if (res.error) {
-        showToast(res.error || 'Failed to submit comment');
+        if (res.success && res.comment) {
+          setComments((prev) => [...prev, res.comment!]);
+          setCommentInput('');
+          // Increment count in feed
+          setPosts((prev) =>
+            prev.map((p) => (p.id === activeCommentsPost.id ? { ...p, commentsCount: p.commentsCount + 1 } : p))
+          );
+        } else if (res.error) {
+          showToast(res.error || 'Failed to submit comment');
+        }
+      } catch (err: any) {
+        showToast(err?.message || 'Failed to submit comment. Please check your connection.');
+      } finally {
+        setSubmittingComment(false);
       }
     });
   };
@@ -272,32 +284,42 @@ export const CommunityPostsPage: React.FC<CommunityPostsPageProps> = ({
       setIsPublishing(true);
       setComposerError(null);
 
-      const res = await createCommunityPost({
-        title: newTitle.trim() || undefined,
-        content: newContent.trim(),
-        category: newCategory,
-        campusId: newCampusId,
-        imageData: newImageData || null,
-        userId: userSession?.uid,
-        authorName: userSession?.name,
-        authorAvatar: userSession?.avatar
-      });
+      try {
+        const res = await withProcessing({
+          message: 'Publishing Discussion • Please wait',
+          submessage: newImageData ? 'Uploading photo and sharing with Davao students' : 'Sharing with Davao students'
+        }, async () => {
+          return await createCommunityPost({
+            title: newTitle.trim() || undefined,
+            content: newContent.trim(),
+            category: newCategory,
+            campusId: newCampusId,
+            imageData: newImageData || null,
+            userId: userSession?.uid,
+            authorName: userSession?.name,
+            authorAvatar: userSession?.avatar
+          });
+        });
 
-      setIsPublishing(false);
+        if (res.requiresAuth) {
+          setIsLoginModalOpen(true);
+          return;
+        }
 
-      if (res.requiresAuth) {
-        setIsLoginModalOpen(true);
-        return;
-      }
-
-      if (res.success && res.post) {
-        setPosts((prev) => [res.post!, ...prev]);
-        setIsComposerOpen(false);
-        setNewTitle('');
-        setNewContent('');
-        setNewImageData(null);
-      } else {
-        setComposerError(res.error || 'Failed to publish post. Please try again.');
+        if (res.success && res.post) {
+          setPosts((prev) => [res.post!, ...prev]);
+          setIsComposerOpen(false);
+          setNewTitle('');
+          setNewContent('');
+          setNewImageData(null);
+          showToast('Discussion published successfully!');
+        } else {
+          setComposerError(res.error || 'Failed to publish post. Please try again.');
+        }
+      } catch (err: any) {
+        setComposerError(err?.message || 'Failed to publish post. Please check your connection.');
+      } finally {
+        setIsPublishing(false);
       }
     });
   };
@@ -311,7 +333,13 @@ export const CommunityPostsPage: React.FC<CommunityPostsPageProps> = ({
     if (!postToDelete) return;
     setIsDeletingPost(true);
     try {
-      const res = await deleteCommunityPost(postToDelete.id, userSession?.uid);
+      const res = await withProcessing({
+        message: 'Deleting Discussion • Please wait',
+        submessage: 'Removing post from community feed'
+      }, async () => {
+        return await deleteCommunityPost(postToDelete.id, userSession?.uid);
+      });
+
       if (res.success) {
         setPosts((prev) => prev.filter((p) => p.id !== postToDelete.id));
         if (activeCommentsPost?.id === postToDelete.id) {
@@ -322,8 +350,8 @@ export const CommunityPostsPage: React.FC<CommunityPostsPageProps> = ({
       } else {
         showToast(res.error || 'Failed to delete post');
       }
-    } catch {
-      showToast('Network error while deleting post');
+    } catch (err: any) {
+      showToast(err?.message || 'Network error while deleting post');
     } finally {
       setIsDeletingPost(false);
     }
@@ -338,15 +366,21 @@ export const CommunityPostsPage: React.FC<CommunityPostsPageProps> = ({
     if (!reportingPost) return;
     setIsSubmittingReport(true);
     try {
-      const res = await reportCommunityPost(reportingPost.id, reason, userSession?.uid);
+      const res = await withProcessing({
+        message: 'Submitting Report • Please wait',
+        submessage: 'Sending moderation flag to campus safety'
+      }, async () => {
+        return await reportCommunityPost(reportingPost.id, reason, userSession?.uid);
+      });
+
       if (res.success) {
         setReportingPost(null);
         showToast('Report submitted for moderation. Thank you!');
       } else {
         showToast(res.error || 'Failed to submit report. Please try again.');
       }
-    } catch {
-      showToast('Network error submitting report.');
+    } catch (err: any) {
+      showToast(err?.message || 'Network error submitting report.');
     } finally {
       setIsSubmittingReport(false);
     }

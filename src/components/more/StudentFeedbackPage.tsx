@@ -24,6 +24,40 @@ import { DAVAO_CAMPUSES } from '../../data/davaoCampuses';
 import { SelectWithOther } from '../common/SelectWithOther';
 import confetti from 'canvas-confetti';
 import { playEagleSound } from '../../utils/audio';
+import { Capacitor, CapacitorHttp } from '@capacitor/core';
+import { useProcessingOverlay } from '../../contexts/ProcessingOverlayContext';
+
+const FEEDBACK_API_URL = 'https://skweladabaw.kurzyrio.site/api/feedback.php';
+
+async function postFeedbackApi(data: any): Promise<boolean> {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const res = await CapacitorHttp.post({
+        url: FEEDBACK_API_URL,
+        headers: { 'Content-Type': 'application/json' },
+        data,
+        connectTimeout: 8000,
+        readTimeout: 8000
+      });
+      return res.status >= 200 && res.status < 300;
+    } catch (e) {
+      console.warn('Native feedback POST note:', e);
+      return false;
+    }
+  } else {
+    try {
+      const res = await fetch(FEEDBACK_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      return res.ok;
+    } catch (e) {
+      console.warn('Web feedback POST note:', e);
+      return false;
+    }
+  }
+}
 
 interface StudentFeedbackPageProps {
   onBack: () => void;
@@ -33,6 +67,7 @@ interface StudentFeedbackPageProps {
 export const StudentFeedbackPage: React.FC<StudentFeedbackPageProps> = ({ 
   onBack 
 }) => {
+  const { withProcessing } = useProcessingOverlay();
   const session: StudentAuthSession = getSavedSession();
 
   // Mode: 'picker' | 'survey' | 'feedback'
@@ -95,24 +130,25 @@ export const StudentFeedbackPage: React.FC<StudentFeedbackPageProps> = ({
     const summary = `[SURVEY] Commute: ${surveyCommuteMode} | Top Feature: ${surveyTopFeature} | Offline: ${surveyOfflineUsage} | Rating: ${surveyRating}/5. Notes: ${surveyComments}`.trim();
 
     try {
-      await dexieDb.feedback.add({
-        name: session?.name || 'Dabawenyo Student',
-        email: session?.email || undefined,
-        campus: session?.campusId || '',
-        category: 'Student Survey',
-        rating: surveyRating,
-        subject: `Campus Survey Response`,
-        message: summary,
-        status: 'New',
-        createdAt: new Date().toISOString()
-      });
-    } catch (_) {}
+      await withProcessing({
+        message: 'Submitting Survey • Please wait',
+        submessage: 'Sending your feedback to SkwelaDabaw'
+      }, async () => {
+        try {
+          await dexieDb.feedback.add({
+            name: session?.name || 'Dabawenyo Student',
+            email: session?.email || undefined,
+            campus: session?.campusId || '',
+            category: 'Student Survey',
+            rating: surveyRating,
+            subject: `Campus Survey Response`,
+            message: summary,
+            status: 'New',
+            createdAt: new Date().toISOString()
+          });
+        } catch (_) {}
 
-    try {
-      await fetch('/api/feedback.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        await postFeedbackApi({
           name: session?.name || 'Dabawenyo Student',
           email: session?.email || '',
           campus: session?.campusId || '',
@@ -120,14 +156,21 @@ export const StudentFeedbackPage: React.FC<StudentFeedbackPageProps> = ({
           rating: surveyRating,
           subject: 'Campus Survey Response',
           message: summary
-        })
+        });
       });
-    } catch (_) {}
 
-    setIsSubmitting(false);
-    setIsSubmitted(true);
-    playEagleSound('success');
-    confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
+      setIsSubmitted(true);
+      playEagleSound('success');
+      confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
+    } catch (err: any) {
+      console.warn('Survey submission note:', err);
+      // Still show submitted if local Dexie succeeded or offline
+      setIsSubmitted(true);
+      playEagleSound('success');
+      confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleSubmitFeedback = async () => {
@@ -140,24 +183,25 @@ export const StudentFeedbackPage: React.FC<StudentFeedbackPageProps> = ({
     const categoryTitle = catObj ? catObj.label : 'General Feedback';
 
     try {
-      await dexieDb.feedback.add({
-        name: session?.name || 'Dabawenyo Student',
-        email: session?.email || undefined,
-        campus: feedbackCampus,
-        category: categoryTitle,
-        rating: 5,
-        subject: `Feedback: ${categoryTitle}`,
-        message: feedbackDetails.trim(),
-        status: 'New',
-        createdAt: new Date().toISOString()
-      });
-    } catch (_) {}
+      await withProcessing({
+        message: 'Submitting Feedback • Please wait',
+        submessage: 'Delivering details directly to developers'
+      }, async () => {
+        try {
+          await dexieDb.feedback.add({
+            name: session?.name || 'Dabawenyo Student',
+            email: session?.email || undefined,
+            campus: feedbackCampus,
+            category: categoryTitle,
+            rating: 5,
+            subject: `Feedback: ${categoryTitle}`,
+            message: feedbackDetails.trim(),
+            status: 'New',
+            createdAt: new Date().toISOString()
+          });
+        } catch (_) {}
 
-    try {
-      await fetch('/api/feedback.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        await postFeedbackApi({
           name: session?.name || 'Dabawenyo Student',
           email: session?.email || '',
           campus: feedbackCampus,
@@ -165,14 +209,20 @@ export const StudentFeedbackPage: React.FC<StudentFeedbackPageProps> = ({
           rating: 5,
           subject: `Feedback: ${categoryTitle}`,
           message: feedbackDetails.trim()
-        })
+        });
       });
-    } catch (_) {}
 
-    setIsSubmitting(false);
-    setIsSubmitted(true);
-    playEagleSound('success');
-    confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
+      setIsSubmitted(true);
+      playEagleSound('success');
+      confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
+    } catch (err: any) {
+      console.warn('Feedback submission note:', err);
+      setIsSubmitted(true);
+      playEagleSound('success');
+      confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // SUCCESS SUBMISSION SCREEN

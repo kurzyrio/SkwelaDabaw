@@ -17,10 +17,39 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.5.7',
+    releaseDate: 'November 12, 2026',
+    title: 'Unified Bayani Mascot Loading Screens & Timeout Protection',
+    isLatest: true,
+    tagline: 'Introduces a unified Bayani Mascot loading screen with 12s timeout guards across all explicit student data submissions.',
+    highlights: [
+      'Full-screen Bayani Mascot loading overlay across community posts, comments, profile updates, feedback, and cloud code generation',
+      'Contextual action messages replacing generic loading spinners across all forms',
+      '12-second connection timeout guard that automatically dismisses on slow networks while preserving user draft input'
+    ],
+    items: [
+      {
+        type: 'ui',
+        title: 'Unified Bayani Mascot Loading Overlay',
+        description: 'Replaced inconsistent button and text spinners with the animated Bayani mascot and orbital spinner for all explicit data transfers.'
+      },
+      {
+        type: 'improvement',
+        title: 'Contextual Submission Messages',
+        description: 'Every student submission displays custom status text detailing the exact operation in progress.'
+      },
+      {
+        type: 'security',
+        title: '12-Second Network Timeout Protection',
+        description: 'Safely dismisses the loading screen on slow transit networks without discarding any typed post or feedback draft content.'
+      }
+    ]
+  },
+  {
     version: '1.11.5.6',
     releaseDate: 'November 11, 2026',
     title: 'Logout Navigation Redirect & Session Flow Refinement',
-    isLatest: true,
+    isLatest: false,
     tagline: 'Instantly redirects users to the Login Page upon logout, resets view history, and enables seamless double-tap app exit.',
     highlights: [
       'Instantly redirects students to the Login Page upon logging out from Settings',

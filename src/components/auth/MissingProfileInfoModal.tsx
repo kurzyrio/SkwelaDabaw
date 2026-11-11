@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { UserCheck, Loader2, Check } from 'lucide-react';
 import { updateUserProfileFields } from '../../services/userService';
+import { useProcessingOverlay } from '../../contexts/ProcessingOverlayContext';
 
 interface MissingProfileInfoModalProps {
   isOpen: boolean;
@@ -22,6 +23,7 @@ export const MissingProfileInfoModal: React.FC<MissingProfileInfoModalProps> = (
   missingFields,
   onSaved
 }) => {
+  const { withProcessing } = useProcessingOverlay();
   const needsUsername = missingFields.includes('username');
   const needsDisplayName = missingFields.includes('displayName');
   const needsGender = missingFields.includes('gender');
@@ -82,13 +84,18 @@ export const MissingProfileInfoModal: React.FC<MissingProfileInfoModalProps> = (
       if (needsAge && parsedAge !== undefined) payload.age = parsedAge;
 
       if (Object.keys(payload).length > 0) {
-        await updateUserProfileFields(uid, payload);
+        await withProcessing({
+          message: 'Saving Profile • Please wait',
+          submessage: 'Completing your Davao student account'
+        }, async () => {
+          await updateUserProfileFields(uid, payload);
+        });
       }
 
       onSaved(payload);
     } catch (err: any) {
       console.warn('Profile save note:', err);
-      setErrorMsg('Could not save information right now. Please try again.');
+      setErrorMsg(err?.message || 'Could not save information right now. Please try again.');
     } finally {
       setIsSubmitting(false);
     }

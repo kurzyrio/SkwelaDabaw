@@ -17,7 +17,7 @@ export const ProcessingOverlay: React.FC<ProcessingOverlayProps> = ({
 
   return createPortal(
     <div 
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 dark:bg-black/60 backdrop-blur-md select-none animate-fade-in pointer-events-auto"
+      className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/40 dark:bg-black/60 backdrop-blur-md select-none animate-fade-in pointer-events-auto"
       role="dialog"
       aria-modal="true"
     >

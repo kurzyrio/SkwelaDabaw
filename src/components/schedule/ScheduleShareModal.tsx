@@ -23,6 +23,7 @@ import {
   shareContent
 } from '../../services/shareService';
 import { saveWallpaperToDevice } from '../../services/widgetService';
+import { useProcessingOverlay } from '../../contexts/ProcessingOverlayContext';
 
 interface ScheduleShareModalProps {
   isOpen: boolean;
@@ -39,6 +40,7 @@ export const ScheduleShareModal: React.FC<ScheduleShareModalProps> = ({
   studentName = 'Dabawenyo Student',
   campusName = 'Davao Campus'
 }) => {
+  const { withProcessing } = useProcessingOverlay();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
   const [activeTab, setActiveTab] = useState<'graphic' | 'qr'>('graphic');
@@ -224,7 +226,13 @@ export const ScheduleShareModal: React.FC<ScheduleShareModalProps> = ({
     setIsGeneratingCloudCode(true);
     setShareFeedback(null);
     try {
-      const res = await createCloudScheduleCode(schedules, studentName, campusName);
+      const res = await withProcessing({
+        message: 'Generating Cloud Code • Please wait',
+        submessage: 'Creating your 6-digit timetable share code'
+      }, async () => {
+        return await createCloudScheduleCode(schedules, studentName, campusName);
+      });
+
       if (res.success && res.shortCode) {
         setCloudCode(res.shortCode);
         setShareMode('cloud');
@@ -236,7 +244,7 @@ export const ScheduleShareModal: React.FC<ScheduleShareModalProps> = ({
         setTimeout(() => setShareFeedback(null), 3000);
       }
     } catch (e: any) {
-      setShareFeedback('Cloud service unreachable');
+      setShareFeedback(e?.message || 'Cloud service unreachable');
       setTimeout(() => setShareFeedback(null), 3000);
     } finally {
       setIsGeneratingCloudCode(false);
@@ -248,7 +256,13 @@ export const ScheduleShareModal: React.FC<ScheduleShareModalProps> = ({
     if (!targetCode) {
       setIsGeneratingCloudCode(true);
       try {
-        const res = await createCloudScheduleCode(schedules, studentName, campusName);
+        const res = await withProcessing({
+          message: 'Generating Cloud Code • Please wait',
+          submessage: 'Creating your 6-digit timetable share code'
+        }, async () => {
+          return await createCloudScheduleCode(schedules, studentName, campusName);
+        });
+
         if (res.success && res.shortCode) {
           targetCode = res.shortCode;
           setCloudCode(targetCode);
@@ -258,8 +272,8 @@ export const ScheduleShareModal: React.FC<ScheduleShareModalProps> = ({
           setTimeout(() => setShareFeedback(null), 3000);
           return;
         }
-      } catch {
-        setShareFeedback('Cloud service unreachable');
+      } catch (err: any) {
+        setShareFeedback(err?.message || 'Cloud service unreachable');
         setTimeout(() => setShareFeedback(null), 3000);
         return;
       } finally {

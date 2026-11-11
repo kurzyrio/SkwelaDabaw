@@ -48,6 +48,7 @@ import { UserProfileModal } from '../common/UserProfileModal';
 import { CachedAvatar } from '../common/CachedAvatar';
 import { ChatAttachmentDrawer } from './ChatAttachmentDrawer';
 import { ChatChannelsDrawer, formatChannelDisplayName } from './ChatChannelsDrawer';
+import { useProcessingOverlay } from '../../contexts/ProcessingOverlayContext';
 import { compressImageForChat } from '../../utils/imageCompressor';
 import { getFirebaseIdToken } from '../../services/cloudSyncService';
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
@@ -226,6 +227,7 @@ export const StudentCommunityChat: React.FC<StudentCommunityChatProps> = ({
   onBack,
   onNavigateTab
 }) => {
+  const { withProcessing } = useProcessingOverlay();
   const [channels, setChannels] = useState<ChatChannel[]>(() => {
     try {
       const cached = localStorage.getItem('skweladabaw_chat_channels');
@@ -887,22 +889,32 @@ export const StudentCommunityChat: React.FC<StudentCommunityChatProps> = ({
     if (!reportingMessage) return;
 
     setIsSubmittingReport(true);
-    await submitChatReport({
-      reportedUser: reportingMessage.senderUsername || reportingMessage.senderName,
-      reporter: userSession?.username || userSession?.name || 'Anonymous',
-      reporterUid: userSession?.uid,
-      reason: reportReason,
-      details: reportDetails || reportingMessage.content,
-      channelId: activeChannelId
-    });
+    try {
+      await withProcessing({
+        message: 'Submitting Report • Please wait',
+        submessage: 'Flagging message for campus chat moderation'
+      }, async () => {
+        return await submitChatReport({
+          reportedUser: reportingMessage.senderUsername || reportingMessage.senderName,
+          reporter: userSession?.username || userSession?.name || 'Anonymous',
+          reporterUid: userSession?.uid,
+          reason: reportReason,
+          details: reportDetails || reportingMessage.content,
+          channelId: activeChannelId
+        });
+      });
 
-    setIsSubmittingReport(false);
-    setReportSuccess(true);
-    setTimeout(() => {
-      setReportingMessage(null);
-      setReportSuccess(false);
-      setReportDetails('');
-    }, 1500);
+      setReportSuccess(true);
+      setTimeout(() => {
+        setReportingMessage(null);
+        setReportSuccess(false);
+        setReportDetails('');
+      }, 1500);
+    } catch (err: any) {
+      console.warn('Report submit error:', err);
+    } finally {
+      setIsSubmittingReport(false);
+    }
   };
 
   const shouldRenderMessageText = (msg: ChatMessage): boolean => {

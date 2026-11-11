@@ -1,7 +1,7 @@
 {
-  "version": "1.11.5.6",
-  "versionCode": 135,
-  "releaseDate": "2026-11-11",
+  "version": "1.11.5.7",
+  "versionCode": 136,
+  "releaseDate": "2026-11-12",
   "versionScheme": {
     "digit1": "App Version",
     "digit2": "Major Features added",
@@ -13,15 +13,15 @@
   "forceUpdate": false,
   "developer": "Kurzyrio",
   "supportEmail": "jerriviencenatad@gmail.com",
-  "title": "Logout Navigation Redirect & Session Flow Refinement",
+  "title": "Unified Bayani Mascot Loading Screens & Timeout Protection",
   "releaseNotes": [
-    "Login Page Redirect on Logout: Fixed navigation routing so signing out immediately redirects to the Login Page.",
-    "Navigation History Reset: Automatically resets view history and timetable tab when switching accounts or logging out.",
-    "Root Back Button Exit: Enabled clean double-tap back button exit from the Login and Onboarding screen."
+    "Unified Bayani Loading Overlay: Integrated the animated Bayani mascot and orbital spinner across all explicit submissions (Community posts/comments, Profile updates, Student feedback & surveys, Cloud code generation, Account deletion, and Manual sync).",
+    "Contextual Submission Feedback: Replaced generic text spinners with dynamic contextual messages per student action.",
+    "12-Second Timeout Guard: Added connection timeout safety to auto-dismiss on slow mobile networks while preserving student draft forms intact."
   ],
   "downloadUrl": "https://skweladabaw.kurzyrio.site/download",
-  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.6.apk",
-  "sizeBytes": 26612796,
+  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.7.apk",
+  "sizeBytes": 26614401,
   "sizeFormatted": "25.4 MB",
-  "sha256": "beea3152c1570f3106e12cacf8a175972d27aced8ff1bc8ffc92927ecfac0891"
+  "sha256": "3974f58673f2143b5eda1f96d74ee9940030e8b3be4c483e943322a3aeddf333"
 }
