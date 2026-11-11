@@ -4,9 +4,10 @@
  */
 
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
+import { notifyAppUpdateAvailable } from './notificationService';
 
-export const CURRENT_APP_VERSION = "1.11.5.4";
-export const CURRENT_VERSION_CODE = 133;
+export const CURRENT_APP_VERSION = "1.11.5.5";
+export const CURRENT_VERSION_CODE = 134;
 
 export const GOOGLE_PLAY_PACKAGE_NAME = 'com.kurzyrio.skweladabaw.app';
 export const GOOGLE_PLAY_STORE_URL = `https://play.google.com/store/apps/details?id=${GOOGLE_PLAY_PACKAGE_NAME}`;
@@ -152,6 +153,14 @@ export async function checkForAppUpdate(): Promise<UpdateCheckResult> {
     // An update is forced ONLY if explicitly required or minSupportedVersion is higher, AND not explicitly optional
     const isForceUpdate = hasUpdate && !isExplicitlyOptional && (isExplicitlyRequired || Boolean(manifest.forceUpdate) || isMinSupportedHigher);
     const isOptional = hasUpdate && !isForceUpdate;
+
+    if (hasUpdate && manifest.version) {
+      notifyAppUpdateAvailable(
+        manifest.version,
+        manifest.releaseNotes || manifest.title || 'A new update is available with timetable improvements and fixes',
+        manifest.apkUrl || manifest.downloadUrl
+      ).catch(() => {});
+    }
 
     return {
       hasUpdate,

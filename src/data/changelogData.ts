@@ -17,10 +17,44 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.5.5',
+    releaseDate: 'November 11, 2026',
+    title: 'Background Weather Alerts & Notification Accuracy Fix',
+    isLatest: true,
+    tagline: 'Fixed background weather and rainfall alerts while the app is closed, corrected commute dismissal timing, and refined task deadline reminders.',
+    highlights: [
+      'Restored background weather and thunderstorm advisories so alerts arrive reliably when the app is closed',
+      'Corrected commute dismissal alerts to trigger only after the true final class of the day concludes',
+      'Refined task deadline reminders to alert one hour before the actual assignment deadline'
+    ],
+    items: [
+      {
+        type: 'fix',
+        title: 'Background Weather Alerts',
+        description: 'Fixed background weather monitoring so heat and thunderstorm advisories trigger reliably even when the app is closed.'
+      },
+      {
+        type: 'fix',
+        title: 'Commute Dismissal Timing',
+        description: 'Corrected dismissal alert calculations to wait for multi-hour lectures and lab sessions to finish.'
+      },
+      {
+        type: 'fix',
+        title: 'Task Deadline Reminders',
+        description: 'Fixed 1-hour task alarms to calculate based on the actual deadline time rather than default morning hours.'
+      },
+      {
+        type: 'improvement',
+        title: 'Settings Preference Synchronization',
+        description: 'Synchronized weather alert toggles across app settings and native background services.'
+      }
+    ]
+  },
+  {
     version: '1.11.5.4',
     releaseDate: 'November 11, 2026',
     title: 'Profile Verification Stability & Setup Dialog Fix',
-    isLatest: true,
+    isLatest: false,
     tagline: 'Fixed missing information pop-up triggers, preserved demographic updates across restarts, and streamlined account verification.',
     highlights: [
       'Fixed profile verification so students with complete accounts do not see false missing information pop-ups',

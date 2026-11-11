@@ -341,6 +341,22 @@ export async function isBatteryExemptionActive(): Promise<boolean> {
 }
 
 /**
+ * Synchronize user weather alert preference to Android native SharedPreferences
+ * so the background receiver respects toggling alerts on/off
+ */
+export async function syncWeatherAlertPreference(enabled: boolean): Promise<void> {
+  if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'android') return;
+  try {
+    await WidgetBridge.setWidgetData({
+      key: 'skweladabaw_weather_alerts_enabled',
+      value: enabled ? 'true' : 'false'
+    });
+  } catch (err) {
+    console.warn('Failed to sync weather alert preference to native storage:', err);
+  }
+}
+
+/**
  * Request battery optimization exemption from Android OS
  */
 export async function requestBatteryExemption(): Promise<void> {

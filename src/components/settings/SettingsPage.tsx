@@ -110,7 +110,7 @@ import {
   checkNotificationPermission,
   scheduleAllClassSchedulesReminders
 } from '../../services/notificationService';
-import { requestBatteryExemption, isBatteryExemptionActive, syncScheduleToWidgets } from '../../services/widgetService';
+import { requestBatteryExemption, isBatteryExemptionActive, syncScheduleToWidgets, syncWeatherAlertPreference } from '../../services/widgetService';
 import {
   TapEffectStyle,
   TapSoundType,
@@ -2496,6 +2496,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     const val = e.target.checked;
                     setWeatherAlertsEnabled(val);
                     localStorage.setItem('skweladabaw_weather_alerts_enabled', val ? 'true' : 'false');
+                    syncWeatherAlertPreference(val);
                     queueCloudSync();
                   }}
                   className="sr-only peer"
@@ -3284,7 +3285,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                       const val = e.target.checked;
                       setWeatherAlertsEnabled(val);
                       localStorage.setItem('skweladabaw_weather_alerts_enabled', val ? 'true' : 'false');
-                    queueCloudSync();
+                      syncWeatherAlertPreference(val);
+                      queueCloudSync();
                     }}
                     className="sr-only peer"
                   />

@@ -14,7 +14,7 @@ import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
 import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 import { scheduleAllClassSchedulesReminders, refreshUnremovableClassNotification } from './notificationService';
-import { syncScheduleToWidgets, syncTasksToWidgets, syncRoutinesToWidgets } from './widgetService';
+import { syncScheduleToWidgets, syncTasksToWidgets, syncRoutinesToWidgets, syncWeatherAlertPreference } from './widgetService';
 
 const SYNC_API_URL = 'https://skweladabaw.kurzyrio.site/api/sync.php';
 
@@ -556,7 +556,9 @@ export async function restoreUserData(
             localStorage.setItem('skweladabaw_connect_allowance', Number(set.connect_allowance) === 1 ? 'true' : 'false');
           }
           if (set.weather_alerts_enabled !== undefined && set.weather_alerts_enabled !== null) {
-            localStorage.setItem('skweladabaw_weather_alerts_enabled', Number(set.weather_alerts_enabled) === 1 ? 'true' : 'false');
+            const isAlertsOn = Number(set.weather_alerts_enabled) === 1;
+            localStorage.setItem('skweladabaw_weather_alerts_enabled', isAlertsOn ? 'true' : 'false');
+            syncWeatherAlertPreference(isAlertsOn);
           }
           if (set.tap_fx_style) localStorage.setItem('skweladabaw_tap_fx_style', set.tap_fx_style);
           if (set.tap_fx_speed) localStorage.setItem('skweladabaw_tap_fx_speed', set.tap_fx_speed);

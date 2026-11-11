@@ -552,14 +552,20 @@ export async function scheduleTaskReminder(task: TaskItem): Promise<void> {
     const now = Date.now();
 
     // 1. Primary Reminder (Separated Date & Time)
-    const targetRemindDateStr = task.reminderDate || task.dueDate;
-    const targetRemindTimeStr = task.reminderTime || '08:00';
-    const primaryReminderDate = new Date(`${targetRemindDateStr}T${targetRemindTimeStr}:00`);
+    const deadlineTimeStr = task.dueTime || '23:59';
+    const deadlineDate = new Date(`${task.dueDate}T${deadlineTimeStr}:00`);
 
-    if (task.reminderOption === '1d') {
-      primaryReminderDate.setDate(primaryReminderDate.getDate() - 1);
+    let primaryReminderDate: Date;
+    if (task.reminderDate && task.reminderTime) {
+      primaryReminderDate = new Date(`${task.reminderDate}T${task.reminderTime}:00`);
     } else if (task.reminderOption === '1h') {
-      primaryReminderDate.setHours(primaryReminderDate.getHours() - 1);
+      primaryReminderDate = new Date(deadlineDate.getTime() - (60 * 60 * 1000));
+    } else if (task.reminderOption === '1d') {
+      primaryReminderDate = new Date(deadlineDate.getTime() - (24 * 60 * 60 * 1000));
+    } else {
+      const targetRemindDateStr = task.reminderDate || task.dueDate;
+      const targetRemindTimeStr = task.reminderTime || '08:00';
+      primaryReminderDate = new Date(`${targetRemindDateStr}T${targetRemindTimeStr}:00`);
     }
 
     if (primaryReminderDate.getTime() > now + 30000) {
@@ -582,8 +588,6 @@ export async function scheduleTaskReminder(task: TaskItem): Promise<void> {
 
     // 2. Near-Hour Notifications based on Priority level
     // Parse task deadline timestamp
-    const deadlineTimeStr = task.dueTime || '23:59';
-    const deadlineDate = new Date(`${task.dueDate}T${deadlineTimeStr}:00`);
     const deadlineMs = deadlineDate.getTime();
 
     // Priority Near-Hour Intervals (Hours before deadline)
@@ -1027,8 +1031,8 @@ export async function scheduleCommuteAndEasterNotifications(schedules: ClassSche
       const dayClasses = schedules.filter((s) => s.days.includes(dayName as any));
 
       if (dayClasses.length > 0) {
-        // Sort classes of this day by start time
-        const sorted = [...dayClasses].sort((a, b) => a.startTime.localeCompare(b.startTime));
+        // Sort classes of this day by end time so the true final dismissal of the day is identified
+        const sorted = [...dayClasses].sort((a, b) => a.endTime.localeCompare(b.endTime));
         const lastClass = sorted[sorted.length - 1];
 
         // Evening Commute Greeting: right at last class dismissal

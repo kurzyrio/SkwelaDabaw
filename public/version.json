@@ -1,6 +1,6 @@
 {
-  "version": "1.11.5.4",
-  "versionCode": 133,
+  "version": "1.11.5.5",
+  "versionCode": 134,
   "releaseDate": "2026-11-11",
   "versionScheme": {
     "digit1": "App Version",
@@ -13,15 +13,16 @@
   "forceUpdate": false,
   "developer": "Kurzyrio",
   "supportEmail": "jerriviencenatad@gmail.com",
-  "title": "Profile Verification Stability & Setup Dialog Fix",
+  "title": "Background Weather Alerts & Notification Accuracy Fix",
   "releaseNotes": [
-    "Profile Verification Fix: Prevented completed profiles from mistakenly seeing missing information pop-ups on launch.",
-    "Demographics Persistence: Fixed demographic updates to save immediately across device restarts.",
-    "Account Setup Reliability: Streamlined initial student onboarding and verification flow."
+    "Background Weather Alerts: Fixed background weather monitoring so heat and thunderstorm advisories trigger reliably even when the app is closed.",
+    "Commute Dismissal Timing: Corrected dismissal alert calculations to wait for multi-hour lectures and lab sessions to finish.",
+    "Task Deadline Reminders: Fixed 1-hour task alarms to calculate based on the actual deadline time rather than default morning hours.",
+    "Settings Preference Sync: Synchronized weather alert toggles across app settings and native background services."
   ],
   "downloadUrl": "https://skweladabaw.kurzyrio.site/download",
-  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.4.apk",
-  "sizeBytes": 26611265,
+  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.5.apk",
+  "sizeBytes": 26612462,
   "sizeFormatted": "25.4 MB",
-  "sha256": "f6354bdabf6c645298d3d1c80b50aa567842173126e883f58fdfe20062b6092f"
+  "sha256": "b7b714d15f6df5095687263187f7eafe2bee4bcc6efdfb84e1bbdac53c8458e1"
 }

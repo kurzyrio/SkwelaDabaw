@@ -9,6 +9,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Build;
+import android.os.PowerManager;
 import android.util.Log;
 
 import androidx.core.app.NotificationCompat;
@@ -50,6 +51,19 @@ public class WeatherBackgroundReceiver extends BroadcastReceiver {
         String action = intent != null ? intent.getAction() : null;
         Log.d(TAG, "WeatherBackgroundReceiver woke up with action: " + action);
 
+        final PendingResult pendingResult = goAsync();
+
+        PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+        final PowerManager.WakeLock wakeLock = (pm != null)
+            ? pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "skweladabaw:weather_bg_wakelock")
+            : null;
+
+        if (wakeLock != null) {
+            try {
+                wakeLock.acquire(45000L); // 45s safety timeout
+            } catch (Exception ignored) {}
+        }
+
         // Run fetch and threshold evaluation on background thread
         executor.execute(() -> {
             try {
@@ -73,8 +87,16 @@ public class WeatherBackgroundReceiver extends BroadcastReceiver {
             } catch (Exception e) {
                 Log.w(TAG, "Error evaluating background weather", e);
             } finally {
-                // Schedule next alarm in exactly 5 minutes
+                // Guarantee next alarm in exactly 5 minutes
                 scheduleNextWeatherAlarm(context.getApplicationContext(), System.currentTimeMillis() + INTERVAL_MS);
+                if (wakeLock != null && wakeLock.isHeld()) {
+                    try {
+                        wakeLock.release();
+                    } catch (Exception ignored) {}
+                }
+                try {
+                    pendingResult.finish();
+                } catch (Exception ignored) {}
             }
         });
     }
@@ -147,26 +169,22 @@ public class WeatherBackgroundReceiver extends BroadcastReceiver {
             JSONObject current = json.optJSONObject("current");
             if (current == null) return;
 
-            double temperature = current.optDouble("temperature", 30.0);
+            double temperature = current.has("temp") ? current.optDouble("temp") : current.optDouble("temperature", 30.0);
             double heatIndex = current.has("heatIndex") ? current.optDouble("heatIndex") : current.optDouble("apparentTemperature", temperature);
             double precipitation = current.optDouble("precipitation", 0.0);
             String condition = current.optString("condition", "Partly Cloudy");
 
             JSONObject advisory = json.optJSONObject("advisory");
             double peakHeat = heatIndex;
-            if (advisory != null && advisory.has("todayHeatMax")) {
-                peakHeat = Math.max(heatIndex, advisory.optDouble("todayHeatMax"));
-            }
-
-            JSONObject forecast = json.optJSONObject("forecast");
-            int rainProbability = 0;
             boolean isRainImminent = false;
-            if (forecast != null) {
-                JSONObject currentHour = forecast.optJSONObject("currentHour");
-                if (currentHour != null) {
-                    rainProbability = currentHour.optInt("rainProbability", 0);
+            int rainProbability = 0;
+
+            if (advisory != null) {
+                if (advisory.has("todayHeatMax")) {
+                    peakHeat = Math.max(heatIndex, advisory.optDouble("todayHeatMax"));
                 }
-                isRainImminent = forecast.optBoolean("isRainImminent", false);
+                isRainImminent = advisory.optBoolean("isRainImminent", false);
+                rainProbability = advisory.optInt("maxUpcomingRainProb", 0);
             }
 
             // Cache data in SharedPreferences for widgets and Eagle Overlay
@@ -178,6 +196,15 @@ public class WeatherBackgroundReceiver extends BroadcastReceiver {
                 .putFloat("last_heat_index", (float) heatIndex)
                 .putString("last_condition", condition)
                 .apply();
+
+            // Check if user has weather alerts enabled in Settings
+            SharedPreferences widgetPrefs = context.getSharedPreferences("SkwelaWidgetPrefs", Context.MODE_PRIVATE);
+            String alertsEnabledStr = widgetPrefs.getString("skweladabaw_weather_alerts_enabled", "true");
+            boolean alertsEnabled = !"false".equalsIgnoreCase(alertsEnabledStr);
+            if (!alertsEnabled) {
+                Log.d(TAG, "Weather alerts disabled by user preference, skipping notification evaluation");
+                return;
+            }
 
             // Evaluate Notification Thresholds
             SharedPreferences notifPrefs = context.getSharedPreferences("skwela_weather_alerts_prefs", Context.MODE_PRIVATE);
@@ -207,13 +234,16 @@ public class WeatherBackgroundReceiver extends BroadcastReceiver {
                 );
             }
 
-            // 2. Commute Rain Advisory Evaluation (>= 1.0mm rain or >= 65% probability)
+            // 2. Commute Rain Advisory Evaluation (Rain imminent, or rain probability >= 65%, or precip >= 1.0mm)
+            // Evaluated during commute/afternoon hours (12:00 PM to 6:30 PM) or when rain is immediately imminent
             long lastRainAlertTime = notifPrefs.getLong("last_rain_alert_ts", 0L);
-            boolean rainCooldownExpired = (System.currentTimeMillis() - lastRainAlertTime > 3 * 3600 * 1000L);
+            String lastRainDate = notifPrefs.getString("last_rain_alert_date", "");
+            boolean rainCooldownExpired = !todayStr.equals(lastRainDate) || (System.currentTimeMillis() - lastRainAlertTime > 3 * 3600 * 1000L);
 
-            if ((precipitation >= 1.0 || rainProbability >= 65 || isRainImminent) && rainCooldownExpired) {
+            if ((precipitation >= 1.0 || rainProbability >= 65 || isRainImminent) && rainCooldownExpired && (isRainImminent || (currentHour >= 12 && currentHour <= 18))) {
                 notifPrefs.edit()
                     .putLong("last_rain_alert_ts", System.currentTimeMillis())
+                    .putString("last_rain_alert_date", todayStr)
                     .apply();
 
                 sendWeatherNotification(
@@ -268,8 +298,14 @@ public class WeatherBackgroundReceiver extends BroadcastReceiver {
 
             PendingIntent pi = PendingIntent.getActivity(context, notificationId, intent, flags);
 
+            int iconRes = context.getResources().getIdentifier("ic_stat_icon_config_sample", "drawable", context.getPackageName());
+            if (iconRes == 0) {
+                iconRes = R.mipmap.ic_launcher;
+            }
+
             NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(R.mipmap.ic_launcher)
+                .setSmallIcon(iconRes)
+                .setColor(0xFF2563EB)
                 .setContentTitle(title)
                 .setContentText(body)
                 .setStyle(new NotificationCompat.BigTextStyle().bigText(body))
