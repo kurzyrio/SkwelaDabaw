@@ -1,6 +1,6 @@
 {
-  "version": "1.11.5.7",
-  "versionCode": 136,
+  "version": "1.11.5.8",
+  "versionCode": 137,
   "releaseDate": "2026-11-12",
   "versionScheme": {
     "digit1": "App Version",
@@ -13,15 +13,15 @@
   "forceUpdate": false,
   "developer": "Kurzyrio",
   "supportEmail": "jerriviencenatad@gmail.com",
-  "title": "Unified Bayani Mascot Loading Screens & Timeout Protection",
+  "title": "Release Signing Enforcement & AAB Deployment Protocol",
   "releaseNotes": [
-    "Unified Bayani Loading Overlay: Integrated the animated Bayani mascot and orbital spinner across all explicit submissions (Community posts/comments, Profile updates, Student feedback & surveys, Cloud code generation, Account deletion, and Manual sync).",
-    "Contextual Submission Feedback: Replaced generic text spinners with dynamic contextual messages per student action.",
-    "12-Second Timeout Guard: Added connection timeout safety to auto-dismiss on slow mobile networks while preserving student draft forms intact."
+    "Production Release Signing Enforcement: Enforced mandatory release signing with the production keystore on all Android App Bundles.",
+    "Google Play Bundle Compliance: Resolved upload signature verification issue for seamless Google Play Console release management.",
+    "Loading Overlay Stability: Maintained full-screen Bayani mascot feedback and 12-second timeout safeguards across all student data submissions."
   ],
   "downloadUrl": "https://skweladabaw.kurzyrio.site/download",
-  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.7.apk",
-  "sizeBytes": 26614401,
+  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.8.apk",
+  "sizeBytes": 26614682,
   "sizeFormatted": "25.4 MB",
-  "sha256": "3974f58673f2143b5eda1f96d74ee9940030e8b3be4c483e943322a3aeddf333"
+  "sha256": "45bdaf97531984a177ae05213acf9be55a74c72eb387e2f75b2d969ff58e533c"
 }

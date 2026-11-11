@@ -17,10 +17,39 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.5.8',
+    releaseDate: 'November 12, 2026',
+    title: 'Release Signing Enforcement & AAB Deployment Protocol',
+    isLatest: true,
+    tagline: 'Enforces production release keystore signing on all Android App Bundles for seamless Google Play Console publishing.',
+    highlights: [
+      'Enforced mandatory release signing with production keystore on all compiled Android App Bundles',
+      'Resolved Google Play Console signature validation error for release distribution',
+      'Unified Bayani Mascot loading screen system with 12s connection timeout protection'
+    ],
+    items: [
+      {
+        type: 'security',
+        title: 'Production Keystore Release Signing',
+        description: 'Updated bundle build pipeline to compile release-signed AABs directly using the production keystore.'
+      },
+      {
+        type: 'fix',
+        title: 'Google Play Bundle Compliance',
+        description: 'Fixed distribution script to strictly isolate and distribute signed release bundles for Google Play.'
+      },
+      {
+        type: 'ui',
+        title: 'Unified Bayani Loading Overlay',
+        description: 'Maintained full-screen Bayani mascot feedback and 12-second timeout safeguards across all student data submissions.'
+      }
+    ]
+  },
+  {
     version: '1.11.5.7',
     releaseDate: 'November 12, 2026',
     title: 'Unified Bayani Mascot Loading Screens & Timeout Protection',
-    isLatest: true,
+    isLatest: false,
     tagline: 'Introduces a unified Bayani Mascot loading screen with 12s timeout guards across all explicit student data submissions.',
     highlights: [
       'Full-screen Bayani Mascot loading overlay across community posts, comments, profile updates, feedback, and cloud code generation',
