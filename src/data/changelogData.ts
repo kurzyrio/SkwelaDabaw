@@ -17,10 +17,38 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.5.6',
+    releaseDate: 'November 11, 2026',
+    title: 'Logout Navigation Redirect & Session Flow Refinement',
+    isLatest: true,
+    tagline: 'Instantly redirects users to the Login Page upon logout, resets view history, and enables seamless double-tap app exit.',
+    highlights: [
+      'Instantly redirects students to the Login Page upon logging out from Settings',
+      'Resets navigation history and active tabs cleanly back to the timetable home view',
+      'Enabled double-tap back button exit directly on the login and onboarding screen'
+    ],
+    items: [
+      {
+        type: 'fix',
+        title: 'Login Page Redirect on Logout',
+        description: 'Fixed account sign-out to immediately transition to the Login Page rather than staying in Settings.'
+      },
+      {
+        type: 'improvement',
+        title: 'Navigation History Reset',
+        description: 'Automatically clears subview history and resets active tab to the main timetable on account switch.'
+      },
+      {
+        type: 'fix',
+        title: 'Root Back Button Exit',
+        description: 'Enabled double-tap back button exit from the Login Page when not signed in.'
+      }
+    ]
+  },
+  {
     version: '1.11.5.5',
     releaseDate: 'November 11, 2026',
     title: 'Background Weather Alerts & Notification Accuracy Fix',
-    isLatest: true,
     tagline: 'Fixed background weather and rainfall alerts while the app is closed, corrected commute dismissal timing, and refined task deadline reminders.',
     highlights: [
       'Restored background weather and thunderstorm advisories so alerts arrive reliably when the app is closed',

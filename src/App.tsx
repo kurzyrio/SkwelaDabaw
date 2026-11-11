@@ -187,7 +187,8 @@ export function App() {
   );
 
   useBackHandler(
-    currentView === 'main' && tabHistory.length <= 1 && activeTab === 'schedule' && !isOnboardingOpen,
+    (currentView === 'main' && tabHistory.length <= 1 && activeTab === 'schedule' && !isOnboardingOpen) ||
+    (isOnboardingOpen && !hasCompletedOnboarding()),
     () => {
       navigationManager.armExit(2000);
     },
@@ -743,6 +744,14 @@ export function App() {
     }
   };
 
+  const handleLogout = useCallback(() => {
+    setCurrentView('main');
+    setViewHistory(['main']);
+    setActiveTab('schedule');
+    setTabHistory(['schedule']);
+    setIsOnboardingOpen(true);
+  }, []);
+
   const handleUpdateSession = (session: UserSession) => {
     const wasLoggedIn = userSession.isLoggedIn;
     setUserSession(session);
@@ -758,6 +767,9 @@ export function App() {
       if (Capacitor.isNativePlatform() && typeof localStorage !== 'undefined' && localStorage.getItem('skwela_eagle_overlay_prompted') !== 'true') {
         setIsEagleOverlayPromptOpen(true);
       }
+    }
+    if (wasLoggedIn && !session.isLoggedIn) {
+      handleLogout();
     }
   };
 
@@ -803,6 +815,7 @@ export function App() {
             <SettingsPage
               userSession={userSession}
               onUpdateSession={handleUpdateSession}
+              onLogout={handleLogout}
               currentTheme={theme}
               onChangeTheme={setTheme}
               onBack={handleBackView}

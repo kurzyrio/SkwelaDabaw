@@ -647,6 +647,7 @@ export const signOutUser = async (currentUid?: string): Promise<StudentAuthSessi
     }
   }
   localStorage.removeItem('skwela_password_set');
+  sessionStorage.removeItem('skwela_session_checked');
   setOnboardingCompleted(false);
   const resetSession = { ...DEFAULT_GUEST_SESSION };
   saveSession(resetSession);

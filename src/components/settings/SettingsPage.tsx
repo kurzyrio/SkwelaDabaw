@@ -249,6 +249,7 @@ interface SettingsPageProps {
   onOpenChangelog?: () => void;
   onOpenFeedback?: () => void;
   initialCategory?: SettingsCategory;
+  onLogout?: () => void;
 }
 
 export const SettingsPage: React.FC<SettingsPageProps> = ({
@@ -260,7 +261,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   onOpenAbout,
   onOpenChangelog,
   onOpenFeedback,
-  initialCategory
+  initialCategory,
+  onLogout
 }) => {
   const [activeCategory, setActiveCategory] = useState<SettingsCategory | null>(initialCategory || null);
   const [isOverlayPermGranted, setIsOverlayPermGranted] = useState<boolean>(false);
@@ -952,6 +954,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     const reset = await signOutUser();
     setOnboardingCompleted(false);
     onUpdateSession(reset);
+    onLogout?.();
   };
 
   const handleConfirmDeleteAccount = async () => {
@@ -965,6 +968,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         onUpdateSession(resetSession);
         setResetSuccessToast(true);
         setTimeout(() => setResetSuccessToast(false), 4000);
+        onLogout?.();
       } else {
         setDeleteToast(res.message || 'Failed to delete account');
         setTimeout(() => setDeleteToast(null), 3500);
