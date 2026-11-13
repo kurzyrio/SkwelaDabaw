@@ -1,6 +1,6 @@
 {
-  "version": "1.11.5.9",
-  "versionCode": 138,
+  "version": "1.11.5.10",
+  "versionCode": 139,
   "releaseDate": "2026-11-14",
   "versionScheme": {
     "digit1": "App Version",
@@ -13,15 +13,15 @@
   "forceUpdate": false,
   "developer": "Kurzyrio",
   "supportEmail": "jerriviencenatad@gmail.com",
-  "title": "Task & Commuter Cloud Sync Deletion Fix",
+  "title": "Schedule Notification Deduplication & Alert Streamlining",
   "releaseNotes": [
-    "Permanent Task Deletion: Fixed an issue where deleted tasks reappeared after logging in or synchronizing.",
-    "Cloud Sync Data Integrity: Ensured empty task, routine, expense, and grade lists accurately update in cloud database.",
-    "Multi-Account Sync Cleanliness: Enhanced account switching to properly purge deleted records across sessions."
+    "Eliminated duplicate class alarms that triggered again after the user-configured reminder time.",
+    "Ensured subjects with no reminder set remain completely quiet without unexpected alerts.",
+    "Removed unrequested post-class commute dismissal notifications for a cleaner timetable."
   ],
   "downloadUrl": "https://skweladabaw.kurzyrio.site/download",
-  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.9.apk",
-  "sizeBytes": 26615663,
+  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.10.apk",
+  "sizeBytes": 26614741,
   "sizeFormatted": "25.4 MB",
-  "sha256": "0cead41cd83e86dc26962263b654c66a302e674d1443e2d14dd7cc05f8f2d900"
+  "sha256": "36c6e9d6199ec7d8a0eafbdf6f08adcf14d4ab45a39e2ea00129d6e0d77e3984"
 }

@@ -20,7 +20,8 @@ export const WEATHER_RAIN_NOTIFICATION_ID = 95002;
 
 /**
  * Thoroughly purge any legacy or orphaned notifications that were scheduled in previous app builds
- * and remain lingering in Android's AlarmManager (such as old 78000..78999 recurring alarms or military-time alerts).
+ * and remain lingering in Android's AlarmManager (such as old 78000..78999 recurring alarms,
+ * rogue 120000..121500 native alerts, or military-time alerts).
  */
 export async function purgeLegacyOrphanedNotifications(): Promise<void> {
   try {
@@ -29,6 +30,10 @@ export async function purgeLegacyOrphanedNotifications(): Promise<void> {
     // 1. Explicitly cancel legacy range blocks known from prior app builds
     const legacyIds: { id: number }[] = [];
     
+    // Rogue native class alert IDs (120000..121500)
+    for (let i = 120000; i <= 121500; i++) {
+      legacyIds.push({ id: i });
+    }
     // Legacy class reminder IDs (78000..78250)
     for (let i = 78000; i <= 78250; i++) {
       legacyIds.push({ id: i });
@@ -61,6 +66,7 @@ export async function purgeLegacyOrphanedNotifications(): Promise<void> {
           // Detect legacy text patterns: military time, legacy "Greetings, this is your class", etc.
           const isLegacyZombie = 
             (notif.id >= 70000 && notif.id < 80000) ||
+            (notif.id >= 120000 && notif.id < 130000) ||
             body.includes('greetings, this is your class') ||
             body.includes('starts at 13:') ||
             body.includes('starts at 14:') ||
@@ -367,10 +373,10 @@ export async function scheduleClassScheduleReminder(schedule: ClassSchedule): Pr
 
       return {
         id: notifId,
-        title: `Bayani Class Alert: ${schedule.subjectCode} in ${reminderMinutes}m`,
+        title: `Next Class in ${reminderMinutes}m: ${schedule.subjectCode}`,
         body: `${schedule.subjectName} • Starts at ${format12Hour(schedule.startTime)} • ${roomText}${schedule.notes ? ` • Note: ${schedule.notes}` : ''}`,
         largeBody: largeBodyText,
-        summaryText: `Bayani Upcoming Class • ${schedule.subjectCode}`,
+        summaryText: `Upcoming Class • ${schedule.subjectCode}`,
         channelId: NOTIFICATION_CHANNEL_ID,
         schedule: {
           on: {
@@ -868,14 +874,6 @@ export async function updateUnremovableClassNotification(
           }
         ]
       });
-    } else if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-      try {
-        new Notification(notifTitle, {
-          body: notifBody,
-          icon: '/compass.svg',
-          tag: 'skweladabaw_ongoing_class'
-        });
-      } catch (_) {}
     }
   } catch (err) {
     console.warn('Error updating unremovable class notification:', err);
@@ -1007,60 +1005,21 @@ export async function cancelPersistentNextClassNotification(): Promise<void> {
 }
 
 /**
- * Schedule client-side commute dismissal notifications (canceling duplicate morning greetings)
- * 100% on-device schedule reading with zero server dependencies
+ * Purge and cancel any lingering client-side commute dismissal notifications (77000..77020 and 79000..79020)
+ * Eliminates unsolicited post-class alerts while ensuring complete student schedule silence.
  */
-export async function scheduleCommuteAndEasterNotifications(schedules: ClassSchedule[]): Promise<void> {
+export async function scheduleCommuteAndEasterNotifications(_schedules?: ClassSchedule[]): Promise<void> {
   try {
-    if (!Capacitor.isNativePlatform() || !schedules || schedules.length === 0) return;
+    if (!Capacitor.isNativePlatform()) return;
 
-    await initializeNotificationChannels();
-
-    const daysList: (keyof typeof DAY_INDEX_MAP)[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    const notificationsToSchedule: any[] = [];
-
-    // Clear old commute IDs (including duplicate morning 77000 IDs)
+    // Purge legacy and unsolicited commute dismissal alerts (77000..77020 and 79000..79020)
     const cleanupIds = [0, 1, 2, 3, 4, 5, 6, 7].flatMap((w) => [
       { id: 77000 + w },
       { id: 79000 + w }
     ]);
     await LocalNotifications.cancel({ notifications: cleanupIds });
-
-    daysList.forEach((dayName) => {
-      const weekday = DAY_INDEX_MAP[dayName] || 2;
-      const dayClasses = schedules.filter((s) => s.days.includes(dayName as any));
-
-      if (dayClasses.length > 0) {
-        // Sort classes of this day by end time so the true final dismissal of the day is identified
-        const sorted = [...dayClasses].sort((a, b) => a.endTime.localeCompare(b.endTime));
-        const lastClass = sorted[sorted.length - 1];
-
-        // Evening Commute Greeting: right at last class dismissal
-        const [lastH, lastM] = lastClass.endTime.split(':').map(Number);
-
-        notificationsToSchedule.push({
-          id: 79000 + weekday,
-          title: '🦅 Bayani: Classes Done For Today!',
-          body: 'Mabuhay! You are done for today • Have a safe commute home Dabawenyo!',
-          channelId: NOTIFICATION_CHANNEL_ID,
-          schedule: {
-            on: {
-              weekday,
-              hour: lastH,
-              minute: lastM
-            },
-            allowWhileIdle: true
-          },
-          extra: { type: 'commute_evening', day: dayName }
-        });
-      }
-    });
-
-    if (notificationsToSchedule.length > 0) {
-      await LocalNotifications.schedule({ notifications: notificationsToSchedule });
-    }
   } catch (err) {
-    console.warn('Error scheduling commute notifications:', err);
+    console.warn('Error purging commute dismissal notifications:', err);
   }
 }
 

@@ -124,7 +124,30 @@ public class SkwelaOngoingService extends Service {
     public void onCreate() {
         super.onCreate();
         createNotificationChannel();
+        purgeLegacyReminderAlerts();
         registerTimeTickReceiver();
+    }
+
+    private void purgeLegacyReminderAlerts() {
+        try {
+            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    android.service.notification.StatusBarNotification[] active = nm.getActiveNotifications();
+                    if (active != null) {
+                        for (android.service.notification.StatusBarNotification sbn : active) {
+                            if (sbn != null && sbn.getId() >= 120000 && sbn.getId() < 130000) {
+                                nm.cancel(sbn.getId());
+                            }
+                        }
+                    }
+                } else {
+                    for (int i = 120000; i <= 121500; i++) {
+                        nm.cancel(i);
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
     }
 
     @Override
@@ -637,18 +660,6 @@ public class SkwelaOngoingService extends Service {
                 editor.putString(PREF_NEXT_ROOM, next.room);
                 editor.putString(PREF_NEXT_TIME, WidgetScheduleHelper.format12Hour(next.startTime));
                 editor.putString(PREF_STATUS_STATE, "");
-
-                // Check and trigger native class reminder alert if within reminder window
-                int targetReminder = next.reminderMinutes > 0 ? next.reminderMinutes : 10;
-                int minutesUntilStart = next.startMinutes - currentMinutes;
-                if (minutesUntilStart > 0 && minutesUntilStart <= targetReminder) {
-                    String todayKey = now.get(Calendar.YEAR) + "_" + (now.get(Calendar.MONTH) + 1) + "_" + now.get(Calendar.DAY_OF_MONTH);
-                    String alertKey = "last_remind_" + next.subjectCode + "_" + next.startTime + "_" + todayKey;
-                    if (!prefs.getBoolean(alertKey, false)) {
-                        editor.putBoolean(alertKey, true);
-                        fireClassReminderAlert(next, minutesUntilStart);
-                    }
-                }
             } else {
                 editor.putString(PREF_NEXT_CLASS, "");
                 editor.putString(PREF_NEXT_ROOM, "");
@@ -661,77 +672,6 @@ public class SkwelaOngoingService extends Service {
             }
             editor.apply();
         } catch (Exception ignored) {}
-    }
-
-    private void fireClassReminderAlert(WidgetScheduleHelper.ScheduleItem cls, int minutesUntilStart) {
-        try {
-            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-            if (nm == null) return;
-
-            String channelId = "skweladabaw_reminders";
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                NotificationChannel channel = nm.getNotificationChannel(channelId);
-                if (channel == null) {
-                    channel = new NotificationChannel(
-                        channelId,
-                        "Class & Study Reminders",
-                        NotificationManager.IMPORTANCE_HIGH
-                    );
-                    channel.setDescription("Alerts for upcoming classes, rooms, and assignments");
-                    channel.enableVibration(true);
-                    channel.enableLights(true);
-                    nm.createNotificationChannel(channel);
-                }
-            }
-
-            String roomStr = cls.room != null && !cls.room.trim().isEmpty() ? "Room " + cls.room.trim() : "Campus Room";
-            if (cls.building != null && !cls.building.trim().isEmpty()) {
-                roomStr += " • " + cls.building.trim();
-            }
-
-            String title = "Upcoming Class in " + minutesUntilStart + "m: " + cls.subjectCode;
-            String body = cls.subjectName + " starts at " + WidgetScheduleHelper.format12Hour(cls.startTime) + " • " + roomStr;
-
-            Intent tapIntent = getPackageManager().getLaunchIntentForPackage(getPackageName());
-            if (tapIntent == null) {
-                tapIntent = new Intent(this, MainActivity.class);
-            }
-            tapIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-            tapIntent.putExtra("target_tab", "schedule");
-            tapIntent.setData(android.net.Uri.parse("skweladabaw://navigate/schedule"));
-
-            int pFlags = PendingIntent.FLAG_UPDATE_CURRENT;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                pFlags |= PendingIntent.FLAG_IMMUTABLE;
-            }
-            PendingIntent pendingIntent = PendingIntent.getActivity(this, 1000 + (cls.startMinutes % 1000), tapIntent, pFlags);
-
-            int iconRes = getResources().getIdentifier("ic_stat_icon_config_sample", "drawable", getPackageName());
-            if (iconRes == 0) iconRes = R.mipmap.ic_launcher;
-
-            NotificationCompat.Builder builder = new NotificationCompat.Builder(this, channelId)
-                .setSmallIcon(iconRes)
-                .setContentTitle(title)
-                .setContentText(body)
-                .setStyle(new NotificationCompat.BigTextStyle().bigText(body + "\nMake sure you have your study materials ready for class."))
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setCategory(NotificationCompat.CATEGORY_ALARM)
-                .setDefaults(NotificationCompat.DEFAULT_ALL)
-                .setAutoCancel(true)
-                .setContentIntent(pendingIntent);
-
-            try {
-                Bitmap eagleIcon = BitmapFactory.decodeResource(getResources(), R.drawable.ic_eagle_buddy);
-                if (eagleIcon != null) {
-                    builder.setLargeIcon(eagleIcon);
-                }
-            } catch (Exception ignored) {}
-
-            int notifId = 120000 + (cls.startMinutes % 10000);
-            nm.notify(notifId, builder.build());
-        } catch (Exception e) {
-            android.util.Log.w("SkwelaOngoingService", "Error firing class reminder alert: " + e.getMessage());
-        }
     }
 
     @Nullable

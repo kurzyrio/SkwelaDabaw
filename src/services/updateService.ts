@@ -6,8 +6,8 @@
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { notifyAppUpdateAvailable } from './notificationService';
 
-export const CURRENT_APP_VERSION = "1.11.5.9";
-export const CURRENT_VERSION_CODE = 138;
+export const CURRENT_APP_VERSION = "1.11.5.10";
+export const CURRENT_VERSION_CODE = 139;
 
 export const GOOGLE_PLAY_PACKAGE_NAME = 'com.kurzyrio.skweladabaw.app';
 export const GOOGLE_PLAY_STORE_URL = `https://play.google.com/store/apps/details?id=${GOOGLE_PLAY_PACKAGE_NAME}`;

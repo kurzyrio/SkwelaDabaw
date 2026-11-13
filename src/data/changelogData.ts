@@ -17,10 +17,39 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.5.10',
+    releaseDate: 'November 14, 2026',
+    title: 'Schedule Notification Deduplication & Alert Streamlining',
+    isLatest: true,
+    tagline: 'Eliminated redundant class alarms that fired again after your scheduled reminder and cleaned up unrequested post-class alerts.',
+    highlights: [
+      'Eliminated duplicate class alarms that triggered again after the user-configured reminder time',
+      'Ensured subjects with no reminder set remain completely quiet without unexpected alerts',
+      'Removed unrequested post-class commute dismissal notifications for a cleaner timetable'
+    ],
+    items: [
+      {
+        type: 'fix',
+        title: 'Class Alarm Deduplication',
+        description: 'Fixed an issue where a second notification buzzed shortly after the scheduled class reminder.'
+      },
+      {
+        type: 'fix',
+        title: 'Silent Reminder Respect',
+        description: 'Classes set to None now stay completely quiet without triggering default 10-minute alarms.'
+      },
+      {
+        type: 'improvement',
+        title: 'Cleaner Commute Timetable',
+        description: 'Purged unrequested post-class dismissal alerts to keep your notification tray clutter-free.'
+      }
+    ]
+  },
+  {
     version: '1.11.5.9',
     releaseDate: 'November 14, 2026',
     title: 'Task & Commuter Cloud Sync Deletion Fix',
-    isLatest: true,
+    isLatest: false,
     tagline: 'Ensures deleted tasks, routines, and commuter records are permanently removed from cloud storage and never resurrect on login or sync.',
     highlights: [
       'Fixed an issue where deleted tasks reappeared after logging in or synchronizing',
