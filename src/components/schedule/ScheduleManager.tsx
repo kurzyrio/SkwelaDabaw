@@ -586,6 +586,7 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
 
     // Sync to account-scoped local cache & cloud
     try {
+      localStorage.removeItem('skweladabaw_explicit_empty_schedules');
       const allNow = await db.schedules.toArray();
       const userSession = getSavedSession();
       const cacheKey = userSession.isLoggedIn && userSession.uid
@@ -616,6 +617,11 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
         ? `skweladabaw_cached_schedules_${userSession.uid}`
         : 'skweladabaw_cached_schedules_guest';
       localStorage.setItem(cacheKey, JSON.stringify(allNow));
+      if (allNow.length === 0) {
+        localStorage.setItem('skweladabaw_explicit_empty_schedules', 'true');
+      } else {
+        localStorage.removeItem('skweladabaw_explicit_empty_schedules');
+      }
       refreshUnremovableClassNotification(allNow);
       syncScheduleToWidgets(allNow);
       if (userSession.isLoggedIn && userSession.uid) {

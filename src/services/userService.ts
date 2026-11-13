@@ -592,11 +592,16 @@ export async function switchAccountSchedules(
         db.schedules.toArray(),
         db.tasks.toArray()
       ]);
+      const activeTasks = currentTasks.filter((t) => t.sync_status !== 'pending_delete');
       if (currentSchedules.length > 0) {
         localStorage.setItem('skweladabaw_pending_guest_schedules', JSON.stringify(currentSchedules));
+      } else {
+        localStorage.removeItem('skweladabaw_pending_guest_schedules');
       }
-      if (currentTasks.length > 0) {
-        localStorage.setItem('skweladabaw_pending_guest_tasks', JSON.stringify(currentTasks));
+      if (activeTasks.length > 0) {
+        localStorage.setItem('skweladabaw_pending_guest_tasks', JSON.stringify(activeTasks));
+      } else {
+        localStorage.removeItem('skweladabaw_pending_guest_tasks');
       }
     } else if (session && session.uid === oldUid && session.isLoggedIn) {
       // Switching from registered user: save to that account's specific cache and cloud
@@ -607,18 +612,11 @@ export async function switchAccountSchedules(
         db.expenses.toArray()
       ]);
 
-      if (currentSchedules.length > 0) {
-        localStorage.setItem(`skweladabaw_cached_schedules_${oldUid}`, JSON.stringify(currentSchedules));
-      }
-      if (currentTasks.length > 0) {
-        localStorage.setItem(`skweladabaw_cached_tasks_${oldUid}`, JSON.stringify(currentTasks));
-      }
-      if (currentRoutines.length > 0) {
-        localStorage.setItem(`skweladabaw_cached_routines_${oldUid}`, JSON.stringify(currentRoutines));
-      }
-      if (currentExpenses.length > 0) {
-        localStorage.setItem(`skweladabaw_cached_expenses_${oldUid}`, JSON.stringify(currentExpenses));
-      }
+      const activeTasks = currentTasks.filter((t) => t.sync_status !== 'pending_delete');
+      localStorage.setItem(`skweladabaw_cached_schedules_${oldUid}`, JSON.stringify(currentSchedules));
+      localStorage.setItem(`skweladabaw_cached_tasks_${oldUid}`, JSON.stringify(activeTasks));
+      localStorage.setItem(`skweladabaw_cached_routines_${oldUid}`, JSON.stringify(currentRoutines));
+      localStorage.setItem(`skweladabaw_cached_expenses_${oldUid}`, JSON.stringify(currentExpenses));
 
       // Direct, blocking sync so cloud receives data before logout/switch
       try {

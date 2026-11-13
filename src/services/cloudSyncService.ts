@@ -393,13 +393,13 @@ export async function restoreUserData(
         } catch (_) {}
       } else {
         // Cloud has 0 schedules for this user.
-        // ANTI-WIPE PROTECTION: Check local device Dexie database first!
+        const isExplicitEmpty = typeof window !== 'undefined' && localStorage.getItem('skweladabaw_explicit_empty_schedules') === 'true';
         const existingLocalSchedules = await db.schedules.toArray();
-        if (existingLocalSchedules.length > 0) {
-          // Keep local schedules! Never wipe local data if cloud returns 0.
+
+        if (existingLocalSchedules.length > 0 && !isExplicitEmpty) {
+          // Keep local schedules for offline guest transition
           scheduleCount = existingLocalSchedules.length;
           localStorage.setItem(`skweladabaw_cached_schedules_${uid}`, JSON.stringify(existingLocalSchedules));
-          // Auto-heal cloud by uploading the student's local schedules
           queueCloudSync(restoredSession);
           try {
             await scheduleAllClassSchedulesReminders(existingLocalSchedules);
@@ -407,22 +407,14 @@ export async function restoreUserData(
             syncScheduleToWidgets(existingLocalSchedules);
           } catch (_) {}
         } else {
-          // Local Dexie is also empty. Check if user has an existing account-specific cache
-          const userCacheRaw = localStorage.getItem(`skweladabaw_cached_schedules_${uid}`);
-          if (userCacheRaw) {
-            try {
-              const userScheds = JSON.parse(userCacheRaw);
-              if (Array.isArray(userScheds) && userScheds.length > 0) {
-                await db.schedules.clear();
-                await db.schedules.bulkAdd(userScheds);
-                scheduleCount = userScheds.length;
-                queueCloudSync(restoredSession);
-                await scheduleAllClassSchedulesReminders(userScheds);
-                await refreshUnremovableClassNotification(userScheds);
-                syncScheduleToWidgets(userScheds);
-              }
-            } catch (_) {}
-          }
+          // Both cloud and local have 0 schedules, or explicit empty: clean state without resurrecting
+          await db.schedules.clear();
+          localStorage.setItem(`skweladabaw_cached_schedules_${uid}`, JSON.stringify([]));
+          scheduleCount = 0;
+          try {
+            await refreshUnremovableClassNotification([]);
+            syncScheduleToWidgets([]);
+          } catch (_) {}
         }
       }
 
@@ -431,42 +423,43 @@ export async function restoreUserData(
       if (Array.isArray(responseData.tasks) && responseData.tasks.length > 0) {
         const mappedTasks: TaskItem[] = responseData.tasks.map((t: any, idx: number) => ({
           id: t.id ? Number(t.id) : idx + 1,
+          uuid: t.uuid || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : ('task_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9))),
           title: t.title || 'Task',
           notes: t.description || t.notes || '',
-          dueDate: t.due_date || '',
-          reminderTime: t.reminder_time || '',
+          dueDate: t.due_date || t.dueDate || '',
+          reminderTime: t.reminder_time || t.reminderTime || '',
+          dueTime: t.reminder_time || t.dueTime || '23:59',
           priority: t.priority || 'medium',
-          completed: Boolean(t.completed),
-          subjectCode: t.subject_code || ''
+          completed: Boolean(t.is_completed ?? t.completed),
+          is_completed: Boolean(t.is_completed ?? t.completed),
+          completed_at: t.completed_at || null,
+          created_at: t.created_at || new Date().toISOString(),
+          updated_at: t.updated_at || new Date().toISOString(),
+          sync_status: 'synced',
+          subjectCode: t.subject_code || t.subjectCode || ''
         }));
 
         await db.tasks.clear();
         await db.tasks.bulkAdd(mappedTasks);
         taskCount = mappedTasks.length;
         localStorage.setItem(`skweladabaw_cached_tasks_${uid}`, JSON.stringify(mappedTasks));
+        localStorage.removeItem('skweladabaw_explicit_empty_tasks');
         syncTasksToWidgets(mappedTasks);
       } else {
-        // ANTI-WIPE PROTECTION: Check local device Dexie tasks first!
+        // Cloud returned 0 tasks for this user
+        const isExplicitEmpty = typeof window !== 'undefined' && localStorage.getItem('skweladabaw_explicit_empty_tasks') === 'true';
         const existingLocalTasks = (await db.tasks.toArray()).filter((t) => t.sync_status !== 'pending_delete');
-        if (existingLocalTasks.length > 0) {
+
+        if (existingLocalTasks.length > 0 && !isExplicitEmpty) {
           taskCount = existingLocalTasks.length;
           localStorage.setItem(`skweladabaw_cached_tasks_${uid}`, JSON.stringify(existingLocalTasks));
           queueCloudSync(restoredSession);
           syncTasksToWidgets(existingLocalTasks);
         } else {
-          const userTasksRaw = localStorage.getItem(`skweladabaw_cached_tasks_${uid}`);
-          if (userTasksRaw) {
-            try {
-              const userTasks = JSON.parse(userTasksRaw);
-              if (Array.isArray(userTasks) && userTasks.length > 0) {
-                await db.tasks.clear();
-                await db.tasks.bulkAdd(userTasks);
-                taskCount = userTasks.length;
-                queueCloudSync(restoredSession);
-                syncTasksToWidgets(userTasks);
-              }
-            } catch (_) {}
-          }
+          // Both cloud and local have 0 tasks, or explicit empty: clear cleanly without resurrecting
+          await db.tasks.clear();
+          localStorage.setItem(`skweladabaw_cached_tasks_${uid}`, JSON.stringify([]));
+          syncTasksToWidgets([]);
         }
       }
 
@@ -484,55 +477,62 @@ export async function restoreUserData(
         await db.dayReminders.bulkAdd(mappedRoutines);
         localStorage.setItem(`skweladabaw_cached_routines_${uid}`, JSON.stringify(mappedRoutines));
       } else {
-        // ANTI-WIPE PROTECTION: Check local device routines first!
+        // Cloud returned 0 routines for this user
         const existingLocalRoutines = await db.dayReminders.toArray();
         if (existingLocalRoutines.length > 0) {
           localStorage.setItem(`skweladabaw_cached_routines_${uid}`, JSON.stringify(existingLocalRoutines));
           queueCloudSync(restoredSession);
         } else {
-          const userRoutinesRaw = localStorage.getItem(`skweladabaw_cached_routines_${uid}`);
-          if (userRoutinesRaw) {
-            try {
-              const userRoutines = JSON.parse(userRoutinesRaw);
-              if (Array.isArray(userRoutines) && userRoutines.length > 0) {
-                await db.dayReminders.clear();
-                await db.dayReminders.bulkAdd(userRoutines);
-              }
-            } catch (_) {}
-          }
+          // Both cloud and local have 0 routines: clean state without resurrecting
+          await db.dayReminders.clear();
+          localStorage.setItem(`skweladabaw_cached_routines_${uid}`, JSON.stringify([]));
         }
       }
       db.dayReminders.toArray().then(syncRoutinesToWidgets).catch(() => {});
 
       // 5. Restore Expenses into Dexie
-      if (Array.isArray(responseData.expenses) && responseData.expenses.length > 0) {
+      if (Array.isArray(responseData.expenses)) {
         try {
-          const mappedExpenses = responseData.expenses.map((e: any, idx: number) => ({
-            id: e.id ? Number(e.id) : idx + 1,
-            date: e.date ? String(e.date).substring(0, 10) : new Date().toISOString().substring(0, 10),
-            category: e.category || 'other',
-            amount: Number(e.amount) || 0,
-            note: e.note || ''
-          }));
-          await db.expenses.clear();
-          await db.expenses.bulkAdd(mappedExpenses);
+          if (responseData.expenses.length > 0) {
+            const mappedExpenses = responseData.expenses.map((e: any, idx: number) => ({
+              id: e.id ? Number(e.id) : idx + 1,
+              date: e.date ? String(e.date).substring(0, 10) : new Date().toISOString().substring(0, 10),
+              category: e.category || 'other',
+              amount: Number(e.amount) || 0,
+              note: e.note || ''
+            }));
+            await db.expenses.clear();
+            await db.expenses.bulkAdd(mappedExpenses);
+          } else {
+            const localExp = await db.expenses.toArray();
+            if (localExp.length === 0) {
+              await db.expenses.clear();
+            }
+          }
         } catch (expErr) {
           console.warn('Could not restore expenses to Dexie:', expErr);
         }
       }
 
       // 6. Restore Saved Transit Routes into localStorage
-      if (Array.isArray(responseData.savedTransit) && responseData.savedTransit.length > 0) {
+      if (Array.isArray(responseData.savedTransit)) {
         try {
-          const mappedRoutes = responseData.savedTransit.map((st: any) => ({
-            id: st.route_id || st.id || 'route',
-            name: st.route_name || 'Route',
-            mode: 'jeep',
-            origin: st.origin || '',
-            destination: st.destination || '',
-            starredAt: st.created_at || new Date().toISOString()
-          }));
-          localStorage.setItem('skweladabaw_favorite_routes', JSON.stringify(mappedRoutes));
+          if (responseData.savedTransit.length > 0) {
+            const mappedRoutes = responseData.savedTransit.map((st: any) => ({
+              id: st.route_id || st.id || 'route',
+              name: st.route_name || 'Route',
+              mode: 'jeep',
+              origin: st.origin || '',
+              destination: st.destination || '',
+              starredAt: st.created_at || new Date().toISOString()
+            }));
+            localStorage.setItem('skweladabaw_favorite_routes', JSON.stringify(mappedRoutes));
+          } else {
+            const localFavorites = localStorage.getItem('skweladabaw_favorite_routes');
+            if (!localFavorites || localFavorites === '[]') {
+              localStorage.setItem('skweladabaw_favorite_routes', JSON.stringify([]));
+            }
+          }
         } catch (transErr) {
           console.warn('Could not restore saved transit routes:', transErr);
         }
@@ -569,53 +569,71 @@ export async function restoreUserData(
       }
 
       // 8. Restore Student Grades into Dexie
-      if (Array.isArray(responseData.grades) && responseData.grades.length > 0) {
+      if (Array.isArray(responseData.grades)) {
         try {
-          const mappedGrades = responseData.grades.map((g: any, idx: number) => ({
-            id: g.id ? Number(g.id) : idx + 1,
-            subjectCode: g.subject_code || g.subjectCode || 'SUBJ',
-            subjectName: g.subject_name || g.subjectName || 'Subject',
-            units: Number(g.units) || 3,
-            prelim: g.prelim !== null && g.prelim !== undefined ? Number(g.prelim) : undefined,
-            midterm: g.midterm !== null && g.midterm !== undefined ? Number(g.midterm) : undefined,
-            prefinal: g.prefinal !== null && g.prefinal !== undefined ? Number(g.prefinal) : undefined,
-            finals: g.finals !== null && g.finals !== undefined ? Number(g.finals) : undefined,
-            rawAverage: g.raw_average !== null && g.raw_average !== undefined ? Number(g.raw_average) : undefined,
-            transmutedGrade: g.transmuted_grade || g.transmutedGrade || undefined,
-            gradingScale: g.grading_scale || g.gradingScale || '1.0-5.0'
-          }));
-          await db.grades.clear();
-          await db.grades.bulkAdd(mappedGrades);
+          if (responseData.grades.length > 0) {
+            const mappedGrades = responseData.grades.map((g: any, idx: number) => ({
+              id: g.id ? Number(g.id) : idx + 1,
+              subjectCode: g.subject_code || g.subjectCode || 'SUBJ',
+              subjectName: g.subject_name || g.subjectName || 'Subject',
+              units: Number(g.units) || 3,
+              prelim: g.prelim !== null && g.prelim !== undefined ? Number(g.prelim) : undefined,
+              midterm: g.midterm !== null && g.midterm !== undefined ? Number(g.midterm) : undefined,
+              prefinal: g.prefinal !== null && g.prefinal !== undefined ? Number(g.prefinal) : undefined,
+              finals: g.finals !== null && g.finals !== undefined ? Number(g.finals) : undefined,
+              rawAverage: g.raw_average !== null && g.raw_average !== undefined ? Number(g.raw_average) : undefined,
+              transmutedGrade: g.transmuted_grade || g.transmutedGrade || undefined,
+              gradingScale: g.grading_scale || g.gradingScale || '1.0-5.0'
+            }));
+            await db.grades.clear();
+            await db.grades.bulkAdd(mappedGrades);
+          } else {
+            const localGrades = await db.grades.toArray();
+            if (localGrades.length === 0) {
+              await db.grades.clear();
+            }
+          }
         } catch (gradeErr) {
           console.warn('Could not restore grades to Dexie:', gradeErr);
         }
       }
 
       // 9. Restore Saved Commuter Places into localStorage
-      if (Array.isArray(responseData.savedPlaces) && responseData.savedPlaces.length > 0) {
+      if (Array.isArray(responseData.savedPlaces)) {
         try {
-          const mappedPlaces = responseData.savedPlaces.map((sp: any) => ({
-            id: sp.place_id || sp.id || 'place-home',
-            type: sp.place_type || sp.type || 'custom',
-            name: sp.name || 'Place',
-            address: sp.address || '',
-            lat: Number(sp.lat) || 0,
-            lng: Number(sp.lng) || 0,
-            updatedAt: sp.updated_at || sp.created_at || new Date().toISOString()
-          }));
-          localStorage.setItem('skweladabaw_saved_places', JSON.stringify(mappedPlaces));
+          if (responseData.savedPlaces.length > 0) {
+            const mappedPlaces = responseData.savedPlaces.map((sp: any) => ({
+              id: sp.place_id || sp.id || 'place-home',
+              type: sp.place_type || sp.type || 'custom',
+              name: sp.name || 'Place',
+              address: sp.address || '',
+              lat: Number(sp.lat) || 0,
+              lng: Number(sp.lng) || 0,
+              updatedAt: sp.updated_at || sp.created_at || new Date().toISOString()
+            }));
+            localStorage.setItem('skweladabaw_saved_places', JSON.stringify(mappedPlaces));
+          } else {
+            const localPlaces = localStorage.getItem('skweladabaw_saved_places');
+            if (!localPlaces || localPlaces === '[]') {
+              localStorage.setItem('skweladabaw_saved_places', JSON.stringify([]));
+            }
+          }
         } catch (placeErr) {
           console.warn('Could not restore saved places:', placeErr);
         }
       }
 
       // 10. Restore Bulletin Bookmarks into localStorage
-      if (Array.isArray(responseData.bookmarkedBulletins) && responseData.bookmarkedBulletins.length > 0) {
+      if (Array.isArray(responseData.bookmarkedBulletins)) {
         try {
           localStorage.setItem('skweladabaw_bookmarked_bulletins', JSON.stringify(responseData.bookmarkedBulletins));
         } catch (bkErr) {
           console.warn('Could not restore bookmarked bulletins:', bkErr);
         }
+      }
+
+      if (typeof window !== 'undefined' && (uid || u.user_id)) {
+        localStorage.setItem(`skweladabaw_has_hydrated_${uid || u.user_id}`, 'true');
       }
 
       return {
@@ -782,6 +800,7 @@ export async function syncLocalDataToCloud(session?: StudentAuthSession): Promis
       }
     } catch {}
 
+    const hasHydrated = typeof window !== 'undefined' && localStorage.getItem(`skweladabaw_has_hydrated_${currentSession.uid}`) === 'true';
     const isExplicitEmptySchedules = typeof window !== 'undefined' && localStorage.getItem('skweladabaw_explicit_empty_schedules') === 'true';
     const isExplicitEmptyTasks = typeof window !== 'undefined' && localStorage.getItem('skweladabaw_explicit_empty_tasks') === 'true';
 
@@ -800,7 +819,7 @@ export async function syncLocalDataToCloud(session?: StudentAuthSession): Promis
       }
     };
 
-    if (localSchedules.length > 0 || isExplicitEmptySchedules) {
+    if (localSchedules.length > 0 || isExplicitEmptySchedules || hasHydrated) {
       payload.schedules = localSchedules.map((s) => ({
         ofrCode: s.ofrCode,
         subjectCode: s.subjectCode,
@@ -818,19 +837,24 @@ export async function syncLocalDataToCloud(session?: StudentAuthSession): Promis
       }));
     }
 
-    if (localTasks.length > 0 || isExplicitEmptyTasks) {
+    if (localTasks.length > 0 || isExplicitEmptyTasks || hasHydrated) {
       payload.tasks = localTasks.map((t) => ({
+        uuid: t.uuid,
         title: t.title,
         description: t.notes || '',
         dueDate: t.dueDate,
         reminderTime: t.reminderTime,
         priority: t.priority,
-        completed: t.completed ? 1 : 0,
+        completed: (t.completed || t.is_completed) ? 1 : 0,
+        is_completed: (t.is_completed || t.completed) ? 1 : 0,
+        completed_at: t.completed_at || null,
+        created_at: t.created_at || new Date().toISOString(),
+        updated_at: t.updated_at || new Date().toISOString(),
         subjectCode: t.subjectCode
       }));
     }
 
-    if (localRoutines.length > 0) {
+    if (localRoutines.length > 0 || hasHydrated) {
       payload.routines = localRoutines.map((r) => ({
         title: r.title,
         dayOfWeek: r.dayOfWeek,
@@ -839,7 +863,7 @@ export async function syncLocalDataToCloud(session?: StudentAuthSession): Promis
       }));
     }
 
-    if (localExpenses.length > 0) {
+    if (localExpenses.length > 0 || hasHydrated) {
       payload.expenses = localExpenses.map((e) => ({
         amount: e.amount,
         category: e.category,
@@ -848,7 +872,7 @@ export async function syncLocalDataToCloud(session?: StudentAuthSession): Promis
       }));
     }
 
-    if (Array.isArray(savedTransitRoutes) && savedTransitRoutes.length > 0) {
+    if (savedTransitRoutes.length > 0 || hasHydrated) {
       payload.savedTransit = savedTransitRoutes.map((st) => ({
         routeId: st.id || '',
         routeName: st.name || '',
@@ -859,7 +883,7 @@ export async function syncLocalDataToCloud(session?: StudentAuthSession): Promis
       }));
     }
 
-    if (localGrades.length > 0) {
+    if (localGrades.length > 0 || hasHydrated) {
       payload.grades = localGrades.map((g) => ({
         subjectCode: g.subjectCode,
         subjectName: g.subjectName,
@@ -874,7 +898,7 @@ export async function syncLocalDataToCloud(session?: StudentAuthSession): Promis
       }));
     }
 
-    if (Array.isArray(savedPlacesList) && savedPlacesList.length > 0) {
+    if (savedPlacesList.length > 0 || hasHydrated) {
       payload.savedPlaces = savedPlacesList.map((p) => ({
         id: p.id,
         type: p.type,
@@ -885,7 +909,7 @@ export async function syncLocalDataToCloud(session?: StudentAuthSession): Promis
       }));
     }
 
-    if (Array.isArray(bookmarkedBulletinsList) && bookmarkedBulletinsList.length > 0) {
+    if (bookmarkedBulletinsList.length > 0 || hasHydrated) {
       payload.bookmarkedBulletins = bookmarkedBulletinsList;
     }
 

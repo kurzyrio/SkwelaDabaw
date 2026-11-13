@@ -38,6 +38,26 @@ export function generateTaskUUID(): string {
 }
 
 /**
+ * Keeps account-specific local cache in localStorage and explicit empty flag synchronized
+ */
+export function syncTaskLocalCache(tasks: TaskItem[]): void {
+  try {
+    const session = getSavedSession();
+    if (session?.uid && typeof localStorage !== 'undefined') {
+      const activeTasks = tasks.filter((t) => t.sync_status !== 'pending_delete');
+      localStorage.setItem(`skweladabaw_cached_tasks_${session.uid}`, JSON.stringify(activeTasks));
+      if (activeTasks.length === 0) {
+        localStorage.setItem('skweladabaw_explicit_empty_tasks', 'true');
+      } else {
+        localStorage.removeItem('skweladabaw_explicit_empty_tasks');
+      }
+    }
+  } catch (e) {
+    console.debug('[taskSyncService] Task cache sync note:', e);
+  }
+}
+
+/**
  * Schedule a debounced silent background sync
  */
 export function scheduleSilentSync(delayMs = 1500) {
@@ -83,10 +103,11 @@ export async function toggleTaskDone(task: TaskItem): Promise<TaskItem> {
     await db.tasks.where('uuid').equals(task.uuid).modify(updatedFields);
   }
 
-  // 2. Synchronize Android Home Screen Widgets & Local Alarms in background (non-blocking)
+// 2. Synchronize Android Home Screen Widgets & Local Alarms in background (non-blocking)
   (async () => {
     try {
       const allTasks = await db.tasks.toArray();
+      syncTaskLocalCache(allTasks);
       syncTasksToWidgets(allTasks.filter((t) => t.sync_status !== 'pending_delete'));
 
       if (willBeCompleted) {
@@ -144,6 +165,7 @@ export async function createTask(data: CreateTaskInput): Promise<TaskItem> {
         await scheduleTaskReminder(newTask);
       }
       const allTasks = await db.tasks.toArray();
+      syncTaskLocalCache(allTasks);
       syncTasksToWidgets(allTasks.filter((t) => t.sync_status !== 'pending_delete'));
     } catch (e) {
       console.debug('[taskSyncService] Task creation side-effect note:', e);
@@ -203,6 +225,7 @@ export async function updateTask(task: TaskItem, updates: Partial<TaskItem>): Pr
         }
       }
       const allTasks = await db.tasks.toArray();
+      syncTaskLocalCache(allTasks);
       syncTasksToWidgets(allTasks.filter((t) => t.sync_status !== 'pending_delete'));
     } catch (e) {
       console.debug('[taskSyncService] Task update side-effect note:', e);
@@ -220,18 +243,30 @@ export async function updateTask(task: TaskItem, updates: Partial<TaskItem>): Pr
  */
 export async function deleteTask(task: TaskItem): Promise<void> {
   const taskId = task.id;
+  const taskUuid = task.uuid;
 
   // Cancel local notification
   if (taskId) {
     await cancelTaskReminder(taskId);
   }
 
-  if (task.sync_status === 'pending_create') {
-    // Never synced to cloud -> hard delete immediately
+  // Immediately remove from account-specific cache in localStorage so it cannot resurrect
+  (async () => {
+    try {
+      const all = await db.tasks.toArray();
+      const remaining = all.filter(
+        (t) => (taskId ? t.id !== taskId : true) && (taskUuid ? t.uuid !== taskUuid : true) && t.sync_status !== 'pending_delete'
+      );
+      syncTaskLocalCache(remaining);
+    } catch (_) {}
+  })();
+
+  if (task.sync_status === 'pending_create' || !taskUuid) {
+    // Never synced to cloud or missing UUID -> hard delete immediately
     if (taskId) {
       await db.tasks.delete(taskId);
-    } else if (task.uuid) {
-      await db.tasks.where('uuid').equals(task.uuid).delete();
+    } else if (taskUuid) {
+      await db.tasks.where('uuid').equals(taskUuid).delete();
     }
   } else {
     // Soft mark as pending_delete
@@ -241,8 +276,8 @@ export async function deleteTask(task: TaskItem): Promise<void> {
         sync_status: 'pending_delete',
         updated_at: now
       });
-    } else if (task.uuid) {
-      await db.tasks.where('uuid').equals(task.uuid).modify({
+    } else if (taskUuid) {
+      await db.tasks.where('uuid').equals(taskUuid).modify({
         sync_status: 'pending_delete',
         updated_at: now
       });
@@ -253,7 +288,9 @@ export async function deleteTask(task: TaskItem): Promise<void> {
   (async () => {
     try {
       const allTasks = await db.tasks.toArray();
-      syncTasksToWidgets(allTasks.filter((t) => t.sync_status !== 'pending_delete'));
+      const active = allTasks.filter((t) => t.sync_status !== 'pending_delete');
+      syncTaskLocalCache(active);
+      syncTasksToWidgets(active);
     } catch (e) {
       console.debug('[taskSyncService] Task delete widget note:', e);
     }
@@ -365,14 +402,25 @@ export async function flushPendingSync(): Promise<void> {
       }
 
       // 2. Permanently remove acknowledged deleted tasks from Dexie
-      const confirmedDeletedUuids: string[] = responseData.deleted_uuids || tasksToDelete.map((t) => t.uuid);
-      if (confirmedDeletedUuids.length > 0) {
-        await db.transaction('rw', db.tasks, async () => {
-          for (const uuid of confirmedDeletedUuids) {
+      const confirmedDeletedUuids: string[] = responseData.deleted_uuids || tasksToDelete.map((t) => t.uuid).filter(Boolean);
+      await db.transaction('rw', db.tasks, async () => {
+        for (const uuid of confirmedDeletedUuids) {
+          if (uuid) {
             await db.tasks.where('uuid').equals(uuid).delete();
           }
-        });
-      }
+        }
+        // Also clean up by taskId to prevent orphan records
+        for (const td of tasksToDelete) {
+          if (td.id) {
+            await db.tasks.delete(td.id);
+          } else if (td.uuid) {
+            await db.tasks.where('uuid').equals(td.uuid).delete();
+          }
+        }
+      });
+
+      const remainingNow = await db.tasks.toArray();
+      syncTaskLocalCache(remainingNow);
     }
   } catch (err) {
     // Silent failure: zero toasts, zero UI popups, zero rollbacks
@@ -459,6 +507,7 @@ export async function pullCloudTasks(): Promise<void> {
     });
 
     const currentTasks = await db.tasks.toArray();
+    syncTaskLocalCache(currentTasks);
     syncTasksToWidgets(currentTasks.filter((t) => t.sync_status !== 'pending_delete'));
   } catch (err) {
     console.debug('[taskSyncService] Pull cloud tasks note:', err);

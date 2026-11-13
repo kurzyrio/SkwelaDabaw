@@ -49,12 +49,23 @@ export const DayReminderManager: React.FC = () => {
 
     const reminderId = (await db.dayReminders.add(reminderData)) as number;
     await scheduleDayReminder({ ...reminderData, id: reminderId });
+    await syncRoutineCache();
     queueCloudSync();
 
     setTitle('');
     setNotes('');
     setTime('07:00');
     setIsAdding(false);
+  };
+
+  const syncRoutineCache = async () => {
+    try {
+      const allRoutines = await db.dayReminders.toArray();
+      const session = getSavedSession();
+      if (session?.uid && typeof localStorage !== 'undefined') {
+        localStorage.setItem(`skweladabaw_cached_routines_${session.uid}`, JSON.stringify(allRoutines));
+      }
+    } catch (_) {}
   };
 
   const toggleReminder = async (reminder: DayReminderItem) => {
@@ -67,12 +78,14 @@ export const DayReminderManager: React.FC = () => {
     } else {
       await cancelDayReminder(reminder.id);
     }
+    await syncRoutineCache();
     queueCloudSync();
   };
 
   const deleteReminder = async (id: number) => {
     await cancelDayReminder(id);
     await db.dayReminders.delete(id);
+    await syncRoutineCache();
     queueCloudSync();
   };
 
@@ -104,6 +117,7 @@ export const DayReminderManager: React.FC = () => {
     } else {
       await cancelDayReminder(editingReminder.id);
     }
+    await syncRoutineCache();
     queueCloudSync();
 
     setEditingReminder(null);

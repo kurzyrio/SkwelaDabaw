@@ -1,7 +1,7 @@
 {
-  "version": "1.11.5.8",
-  "versionCode": 137,
-  "releaseDate": "2026-11-12",
+  "version": "1.11.5.9",
+  "versionCode": 138,
+  "releaseDate": "2026-11-14",
   "versionScheme": {
     "digit1": "App Version",
     "digit2": "Major Features added",
@@ -13,15 +13,15 @@
   "forceUpdate": false,
   "developer": "Kurzyrio",
   "supportEmail": "jerriviencenatad@gmail.com",
-  "title": "Release Signing Enforcement & AAB Deployment Protocol",
+  "title": "Task & Commuter Cloud Sync Deletion Fix",
   "releaseNotes": [
-    "Production Release Signing Enforcement: Enforced mandatory release signing with the production keystore on all Android App Bundles.",
-    "Google Play Bundle Compliance: Resolved upload signature verification issue for seamless Google Play Console release management.",
-    "Loading Overlay Stability: Maintained full-screen Bayani mascot feedback and 12-second timeout safeguards across all student data submissions."
+    "Permanent Task Deletion: Fixed an issue where deleted tasks reappeared after logging in or synchronizing.",
+    "Cloud Sync Data Integrity: Ensured empty task, routine, expense, and grade lists accurately update in cloud database.",
+    "Multi-Account Sync Cleanliness: Enhanced account switching to properly purge deleted records across sessions."
   ],
   "downloadUrl": "https://skweladabaw.kurzyrio.site/download",
-  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.8.apk",
-  "sizeBytes": 26614682,
+  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.9.apk",
+  "sizeBytes": 26615663,
   "sizeFormatted": "25.4 MB",
-  "sha256": "45bdaf97531984a177ae05213acf9be55a74c72eb387e2f75b2d969ff58e533c"
+  "sha256": "0cead41cd83e86dc26962263b654c66a302e674d1443e2d14dd7cc05f8f2d900"
 }

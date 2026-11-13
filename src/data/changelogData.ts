@@ -17,10 +17,39 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.5.9',
+    releaseDate: 'November 14, 2026',
+    title: 'Task & Commuter Cloud Sync Deletion Fix',
+    isLatest: true,
+    tagline: 'Ensures deleted tasks, routines, and commuter records are permanently removed from cloud storage and never resurrect on login or sync.',
+    highlights: [
+      'Fixed an issue where deleted tasks reappeared after logging in or synchronizing',
+      'Prevented zombie data resurrection across day routines, expenses, grades, and saved transit',
+      'Improved offline-first synchronization reliability between local storage and cloud database'
+    ],
+    items: [
+      {
+        type: 'fix',
+        title: 'Permanent Task Deletion',
+        description: 'Fixed synchronization so deleted tasks are immediately and permanently removed from cloud database.'
+      },
+      {
+        type: 'fix',
+        title: 'Cloud Sync Data Integrity',
+        description: 'Resolved an issue where empty task, routine, expense, or grade lists failed to sync empty states to cloud.'
+      },
+      {
+        type: 'improvement',
+        title: 'Multi-Account Data Cleanliness',
+        description: 'Enhanced account switching to ensure deleted records are properly purged across sessions.'
+      }
+    ]
+  },
+  {
     version: '1.11.5.8',
     releaseDate: 'November 12, 2026',
     title: 'Release Signing Enforcement & AAB Deployment Protocol',
-    isLatest: true,
+    isLatest: false,
     tagline: 'Enforces production release keystore signing on all Android App Bundles for seamless Google Play Console publishing.',
     highlights: [
       'Enforced mandatory release signing with production keystore on all compiled Android App Bundles',
