@@ -59,6 +59,7 @@ export const DEFAULT_APP_CONFIG: RemoteAppConfig = {
 
 const STORAGE_KEY = 'skweladabaw_remote_app_config';
 const DISMISSED_BANNER_KEY = 'skweladabaw_dismissed_global_banner';
+const BYPASS_TOKEN_KEY = 'skweladabaw_admin_bypass_token';
 
 /**
  * Get current cached configuration from localStorage with instant fallback
@@ -165,4 +166,82 @@ export function dismissBanner(bannerText: string): void {
   try {
     localStorage.setItem(DISMISSED_BANNER_KEY, bannerText);
   } catch (_) {}
+}
+
+/**
+ * Verifies maintenance bypass passcode or authenticated admin token on the server.
+ * Clears any legacy unsigned localStorage bypass flag.
+ */
+export async function verifyServerMaintenanceBypass(options: {
+  passcode?: string;
+  idToken?: string | null;
+} = {}): Promise<boolean> {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('skweladabaw_admin_bypass');
+    }
+  } catch (_) {}
+
+  const storedToken = (() => {
+    try {
+      return typeof sessionStorage !== 'undefined' ? (sessionStorage.getItem(BYPASS_TOKEN_KEY) || '') : '';
+    } catch {
+      return '';
+    }
+  })();
+
+  const passcode = options.passcode?.trim() || '';
+  const idToken = options.idToken || '';
+  if (!passcode && !idToken && !storedToken) {
+    return false;
+  }
+
+  const endpoint = 'https://skweladabaw.kurzyrio.site/api/app_config.php?action=verify_admin_bypass';
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (idToken) {
+    headers['Authorization'] = `Bearer ${idToken}`;
+  }
+  const bodyObj: Record<string, string> = {};
+  if (passcode) bodyObj.passcode = passcode;
+  if (storedToken && !passcode) bodyObj.bypassToken = storedToken;
+
+  try {
+    let parsed: any = null;
+    if (Capacitor.isNativePlatform()) {
+      const resp = await CapacitorHttp.post({
+        url: endpoint,
+        headers,
+        data: bodyObj,
+        connectTimeout: 6000,
+        readTimeout: 6000
+      });
+      parsed = typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data;
+      if (resp.status >= 200 && resp.status < 300 && parsed?.authorized) {
+        if (parsed.bypassToken && typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem(BYPASS_TOKEN_KEY, parsed.bypassToken);
+        }
+        return true;
+      }
+      return false;
+    }
+
+    const resp = await fetch(endpoint, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(bodyObj)
+    });
+    parsed = await resp.json().catch(() => null);
+    if (resp.ok && parsed?.authorized) {
+      if (parsed.bypassToken && typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem(BYPASS_TOKEN_KEY, parsed.bypassToken);
+      }
+      return true;
+    }
+    if (!passcode && !idToken && resp.status === 403 && typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem(BYPASS_TOKEN_KEY);
+    }
+    return false;
+  } catch {
+    return false;
+  }
 }

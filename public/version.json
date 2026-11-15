@@ -1,7 +1,7 @@
 {
-  "version": "1.11.5.10",
-  "versionCode": 139,
-  "releaseDate": "2026-11-14",
+  "version": "1.11.5.11",
+  "versionCode": 140,
+  "releaseDate": "2026-11-16",
   "versionScheme": {
     "digit1": "App Version",
     "digit2": "Major Features added",
@@ -13,15 +13,15 @@
   "forceUpdate": false,
   "developer": "Kurzyrio",
   "supportEmail": "jerriviencenatad@gmail.com",
-  "title": "Schedule Notification Deduplication & Alert Streamlining",
+  "title": "Schedule Scanner, Task Sync & Security Hardening",
   "releaseNotes": [
-    "Eliminated duplicate class alarms that triggered again after the user-configured reminder time.",
-    "Ensured subjects with no reminder set remain completely quiet without unexpected alerts.",
-    "Removed unrequested post-class commute dismissal notifications for a cleaner timetable."
+    "Added support for PNG and WebP schedule screenshots in the AI scanner alongside hardened token verification.",
+    "Protected student tasks and shared timetable codes with per-account isolation and ownership validation.",
+    "Strengthened account session verification, TLS checks, and reserved handle safeguards."
   ],
   "downloadUrl": "https://skweladabaw.kurzyrio.site/download",
-  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.10.apk",
-  "sizeBytes": 26614741,
+  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.11.apk",
+  "sizeBytes": 26668202,
   "sizeFormatted": "25.4 MB",
-  "sha256": "36c6e9d6199ec7d8a0eafbdf6f08adcf14d4ab45a39e2ea00129d6e0d77e3984"
+  "sha256": "08d8d6becc63e2f4f632ccb7ec41477fb2afa41d15f24ebfae231031d5fe47a0"
 }

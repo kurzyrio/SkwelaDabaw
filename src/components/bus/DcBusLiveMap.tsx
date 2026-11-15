@@ -559,9 +559,13 @@ export const DcBusLiveMap: React.FC<DcBusLiveMapProps> = ({
         setGeoData(data);
       })
       .catch(() => {
-        const base = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.BASE_URL)
-          ? import.meta.env.BASE_URL.replace(/\/$/, '') + '/'
-          : '/';
+        let baseUrl = '/';
+        try {
+          baseUrl = import.meta.env.BASE_URL || '/';
+        } catch {
+          baseUrl = '/';
+        }
+        const base = baseUrl.replace(/\/$/, '') + '/';
         const fetchLocal = () => fetch(`${base}data/davaoBusRoutes.json`).catch(() => fetch('/data/davaoBusRoutes.json'));
         fetchLocal()
           .then((res) => {

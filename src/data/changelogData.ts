@@ -17,10 +17,39 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.5.11',
+    releaseDate: 'November 16, 2026',
+    title: 'Schedule Scanner, Task Sync & Security Hardening',
+    isLatest: true,
+    tagline: 'Strengthened authentication, task isolation, schedule share ownership, and multi-format schedule photo scanning.',
+    highlights: [
+      'Supported JPEG, PNG, and WebP schedule images cleanly in the AI timetable scanner',
+      'Protected cloud task syncing with per-account uniqueness and timestamp guards',
+      'Secured schedule share generation and account verification workflows'
+    ],
+    items: [
+      {
+        type: 'security',
+        title: 'Authenticated AI Schedule Scanning',
+        description: 'Enforced Firebase token verification on schedule scans while keeping guest scanning seamless and validating PNG, JPEG, and WebP images.'
+      },
+      {
+        type: 'fix',
+        title: 'Per-User Task Sync Isolation',
+        description: 'Upgraded task cloud sync uniqueness per student account to prevent cross-account task ID collisions.'
+      },
+      {
+        type: 'security',
+        title: 'Timetable Share & Account Protections',
+        description: 'Bound shared timetable updates to verified token owners and added reserved staff username safeguards.'
+      }
+    ]
+  },
+  {
     version: '1.11.5.10',
     releaseDate: 'November 14, 2026',
     title: 'Schedule Notification Deduplication & Alert Streamlining',
-    isLatest: true,
+    isLatest: false,
     tagline: 'Eliminated redundant class alarms that fired again after your scheduled reminder and cleaned up unrequested post-class alerts.',
     highlights: [
       'Eliminated duplicate class alarms that triggered again after the user-configured reminder time',

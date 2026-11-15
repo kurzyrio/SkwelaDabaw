@@ -7,6 +7,7 @@ import { scheduleDayReminder, cancelDayReminder } from '../../services/notificat
 import { CustomTimePicker } from '../common/CustomTimePicker';
 import { queueCloudSync } from '../../services/cloudSyncService';
 import { syncRoutinesToWidgets } from '../../services/widgetService';
+import { getSavedSession } from '../../services/authService';
 
 const DAYS_OF_WEEK: DayOfWeek[] = [
   'Everyday',

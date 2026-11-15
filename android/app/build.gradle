@@ -8,8 +8,8 @@ android {
         applicationId "com.kurzyrio.skweladabaw.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 139
-        versionName "1.11.5.10"
+        versionCode 140
+        versionName "1.11.5.11"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
@@ -17,15 +17,32 @@ android {
     }
     signingConfigs {
         release {
-            storeFile file("skweladabaw-release.jks")
-            storePassword "skweladabaw2026"
-            keyAlias "skweladabaw"
-            keyPassword "skweladabaw2026"
+            def keystorePropsFile = rootProject.file("keystore.properties")
+            if (keystorePropsFile.exists()) {
+                def keystoreProps = new Properties()
+                keystorePropsFile.withInputStream { keystoreProps.load(it) }
+                if (keystoreProps['storeFile']) {
+                    storeFile file(keystoreProps['storeFile'])
+                }
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            } else {
+                def envStore = System.getenv("SKWELA_KEYSTORE_FILE")
+                if (envStore) {
+                    storeFile file(envStore)
+                }
+                storePassword System.getenv("SKWELA_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("SKWELA_KEY_ALIAS")
+                keyPassword System.getenv("SKWELA_KEY_PASSWORD")
+            }
         }
     }
     buildTypes {
         release {
-            signingConfig signingConfigs.release
+            if (signingConfigs.release.storeFile != null && signingConfigs.release.storeFile.exists()) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled true
             shrinkResources false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'

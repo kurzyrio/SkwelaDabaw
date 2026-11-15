@@ -812,9 +812,12 @@ export async function loadPedestrianGraph(): Promise<IndexedGraph | null> {
         const localPath = path.resolve(process.cwd(), 'public/data/transport/davao-pedestrian-graph.bin');
         rawBuffer = fs.readFileSync(localPath);
       } else {
-        const baseUrl = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.BASE_URL)
-          ? import.meta.env.BASE_URL
-          : '/';
+        let baseUrl = '/';
+        try {
+          baseUrl = import.meta.env.BASE_URL || '/';
+        } catch {
+          baseUrl = '/';
+        }
         const prefix = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
         let res: Response | null = null;
         try {

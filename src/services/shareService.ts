@@ -1,5 +1,6 @@
 import { deflateRaw, inflateRaw } from 'pako';
 import { ClassSchedule, DayOfWeek } from '../types';
+import { getFirebaseIdToken } from './cloudSyncService';
 
 export interface ShareResult {
   success: boolean;
@@ -708,6 +709,12 @@ export async function createCloudScheduleCode(
   }
 
   try {
+    const idToken = await getFirebaseIdToken().catch(() => null);
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (idToken) {
+      headers['Authorization'] = `Bearer ${idToken}`;
+    }
+
     const payload = {
       schedules,
       studentName: studentName || 'Dabawenyo Student',
@@ -716,7 +723,7 @@ export async function createCloudScheduleCode(
 
     const res = await fetch('https://skweladabaw.kurzyrio.site/api/share.php', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(payload)
     });
 

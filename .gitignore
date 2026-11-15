@@ -8,6 +8,9 @@
 !.env.example
 android/app/google-services.json
 !android/app/google-services.json.example
+keystore.properties
+**/keystore.properties
+android/keystore.properties
 **/local.properties
 android/local.properties
 *.jks

@@ -44,7 +44,8 @@ import {
   subscribeToRemoteAppConfig, 
   RemoteAppConfig, 
   getCachedAppConfig, 
-  fetchRemoteAppConfig 
+  fetchRemoteAppConfig,
+  verifyServerMaintenanceBypass 
 } from './services/appConfigService';
 import { GlobalBroadcastBanner } from './components/common/GlobalBroadcastBanner';
 import { MaintenanceScreen } from './components/common/MaintenanceScreen';
@@ -60,7 +61,7 @@ import {
   StudentAuthSession,
   signOutUser
 } from './services/authService';
-import { restoreUserData, syncLocalDataToCloud, queueCloudSync, syncCloudDataBiDirectional } from './services/cloudSyncService';
+import { restoreUserData, syncLocalDataToCloud, queueCloudSync, syncCloudDataBiDirectional, getFirebaseIdToken } from './services/cloudSyncService';
 import { verifyProfileIntegrity, ProfileVerificationState, saveLocalUserRecord } from './services/userService';
 import { requestNotificationPermission, refreshUnremovableClassNotification, scheduleAllClassSchedulesReminders } from './services/notificationService';
 import { useScheduleAlarm } from './hooks/useScheduleAlarm';
@@ -93,6 +94,7 @@ export function App() {
   });
   const [userSession, setUserSession] = useState<UserSession>(getSavedSession());
   const [appConfig, setAppConfig] = useState<RemoteAppConfig>(getCachedAppConfig);
+  const [isMaintenanceBypassed, setIsMaintenanceBypassed] = useState<boolean>(false);
   const [isJeepMapFullScreen, setIsJeepMapFullScreen] = useState<boolean>(false);
   const [isChatTyping, setIsChatTyping] = useState<boolean>(false);
   const [pendingImportCode, setPendingImportCode] = useState<string | undefined>(undefined);
@@ -493,6 +495,25 @@ export function App() {
     return () => unsubscribe();
   }, []);
 
+  // Verify admin bypass or authenticated admin role on server whenever maintenance mode is active
+  useEffect(() => {
+    let cancelled = false;
+    if (!appConfig?.maintenance?.enabled) {
+      setIsMaintenanceBypassed(false);
+      return;
+    }
+    (async () => {
+      const idToken = await getFirebaseIdToken().catch(() => null);
+      const ok = await verifyServerMaintenanceBypass({ idToken });
+      if (!cancelled) {
+        setIsMaintenanceBypassed(ok);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [appConfig?.maintenance?.enabled, userSession?.uid, userSession?.isLoggedIn]);
+
   // Listen for tab navigation requests across components
   useEffect(() => {
     const handleNavTab = (e: any) => {
@@ -784,16 +805,15 @@ export function App() {
       );
     }
 
-    const isBypassed = typeof localStorage !== 'undefined' && localStorage.getItem('skweladabaw_admin_bypass') === 'true';
-    const isAdmin = (userSession?.role as string) === 'admin' || userSession?.username?.toLowerCase() === 'admin';
-    if (appConfig?.maintenance?.enabled && !isBypassed && !isAdmin) {
+    if (appConfig?.maintenance?.enabled && !isMaintenanceBypassed) {
       return (
         <MaintenanceScreen 
           config={appConfig.maintenance} 
           onCheckAgain={async () => {
             const fresh = await fetchRemoteAppConfig();
             setAppConfig(fresh);
-          }} 
+          }}
+          onAdminBypass={() => setIsMaintenanceBypassed(true)}
         />
       );
     }

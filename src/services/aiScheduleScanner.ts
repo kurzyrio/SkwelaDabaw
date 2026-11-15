@@ -2,8 +2,9 @@ import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { ClassSchedule, DayOfWeek } from '../types';
 
-import { auth, isFirebaseConfigured } from './firebase';
+import { auth } from './firebase';
 import { ensureFirebaseAuth } from './authService';
+import { getFirebaseIdToken } from './cloudSyncService';
 
 export type ScanSourceMode = 'server' | 'client';
 
@@ -16,9 +17,13 @@ const STORAGE_KEY_OCR_MODEL = 'skweladabaw_ocr_model_preference';
 
 export const DEFAULT_API_BASE_URL = 'https://skweladabaw.kurzyrio.site';
 
-const API_BASE_URL = 
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL?.trim()) || 
-  DEFAULT_API_BASE_URL;
+const API_BASE_URL = (() => {
+  try {
+    return import.meta.env.VITE_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL;
+  } catch {
+    return DEFAULT_API_BASE_URL;
+  }
+})();
 
 export interface UnreadableDetection {
   subjectCode?: string;
@@ -53,18 +58,35 @@ export function setPreferredOcrModel(modelId: string): void {
 }
 
 /**
- * SECURITY: Never hardcode API keys in client-side code.
- * Users must provide their own Gemini key via Settings or .env (VITE_GEMINI_API_KEY).
+ * SECURITY: Never hardcode API keys or read client env keys in client-side code.
+ * Server AI proxy holds the Gemini key; advanced users may optionally supply their own key in Settings.
  */
 
 export function getStoredGeminiApiKey(): string {
   if (typeof window === 'undefined') return '';
   const stored = localStorage.getItem(STORAGE_KEY_GEMINI_API_KEY)?.trim();
   if (stored && stored.length > 5) return stored;
-  const envKey = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY?.trim()) || '';
-  if (envKey && envKey.length > 5) return envKey;
-  // Default to empty if not provided via Settings or environment
   return '';
+}
+
+async function getScannerAuthToken(): Promise<string | undefined> {
+  try {
+    const existingToken = await getFirebaseIdToken();
+    if (existingToken) return existingToken;
+  } catch (_) {}
+
+  try {
+    await ensureFirebaseAuth();
+    const webToken = await auth?.currentUser?.getIdToken();
+    if (webToken) return webToken;
+  } catch (_) {}
+
+  try {
+    const refreshedToken = await getFirebaseIdToken();
+    if (refreshedToken) return refreshedToken;
+  } catch (_) {}
+
+  return undefined;
 }
 
 export function setStoredGeminiApiKey(key: string): void {
@@ -448,11 +470,7 @@ export async function analyzeErcWithAi(
   if (API_BASE_URL) {
     try {
       onProgress?.('Connecting to SkwelaDabaw CamScanner service...', 2, 'server');
-      let idToken: string | undefined = undefined;
-      try {
-        await ensureFirebaseAuth();
-        idToken = await auth?.currentUser?.getIdToken();
-      } catch (_) {}
+      const idToken = await getScannerAuthToken();
 
       onProgress?.('Scanning document via CamScanner...', 3, 'server');
       const proxyUrl = `${API_BASE_URL.replace(/\/$/, '')}/api/proxy.php?action=scan-image`;
@@ -637,11 +655,7 @@ export async function parseRawScheduleTextWithAi(
   if (API_BASE_URL) {
     try {
       onProgress?.('Connecting to SkwelaDabaw CamScanner service...', 1, 'server');
-      let idToken: string | undefined = undefined;
-      try {
-        await ensureFirebaseAuth();
-        idToken = await auth?.currentUser?.getIdToken();
-      } catch (_) {}
+      const idToken = await getScannerAuthToken();
 
       onProgress?.('Parsing timetable text...', 2, 'server');
       const proxyUrl = `${API_BASE_URL.replace(/\/$/, '')}/api/proxy.php?action=parse-text`;

@@ -7,7 +7,8 @@ import {
   Lock, 
   ExternalLink 
 } from 'lucide-react';
-import { RemoteAppConfig } from '../../services/appConfigService';
+import { RemoteAppConfig, verifyServerMaintenanceBypass } from '../../services/appConfigService';
+import { getFirebaseIdToken } from '../../services/cloudSyncService';
 
 interface MaintenanceScreenProps {
   config: RemoteAppConfig['maintenance'];
@@ -24,6 +25,7 @@ export const MaintenanceScreen: React.FC<MaintenanceScreenProps> = ({
   const [showAdminLogin, setShowAdminLogin] = useState<boolean>(false);
   const [adminPass, setAdminPass] = useState<string>('');
   const [passError, setPassError] = useState<boolean>(false);
+  const [isVerifyingPass, setIsVerifyingPass] = useState<boolean>(false);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -34,31 +36,38 @@ export const MaintenanceScreen: React.FC<MaintenanceScreenProps> = ({
     }
   };
 
-  const sha256Hex = async (text: string): Promise<string> => {
-    try {
-      const enc = new TextEncoder().encode(text);
-      const buf = await crypto.subtle.digest('SHA-256', enc);
-      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-    } catch {
-      return '';
-    }
-  };
-
   const handlePasscodeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const inputVal = adminPass.trim().toLowerCase();
-    const hash = await sha256Hex(inputVal);
-    const validBypassHashes = [
-      '83830cfc3bbc4e02d2c9124163aa7d9934c4abb94e63b6243de6465906024f16',
-      '0d4f619b0f57113220da5e6916fdf2748b8c9bc29fb86cd86041effb7f767461'
-    ];
-
-    if (validBypassHashes.includes(hash)) {
-      localStorage.setItem('skweladabaw_admin_bypass', 'true');
-      if (onAdminBypass) onAdminBypass();
-    } else {
+    if (!adminPass.trim() && !isVerifyingPass) {
+      // Allow signed-in admin accounts to verify via token as well
+      setIsVerifyingPass(true);
+      try {
+        const idToken = await getFirebaseIdToken().catch(() => null);
+        const ok = await verifyServerMaintenanceBypass({ idToken });
+        if (ok) {
+          if (onAdminBypass) onAdminBypass();
+          return;
+        }
+      } finally {
+        setIsVerifyingPass(false);
+      }
       setPassError(true);
       setTimeout(() => setPassError(false), 2000);
+      return;
+    }
+
+    setIsVerifyingPass(true);
+    try {
+      const idToken = await getFirebaseIdToken().catch(() => null);
+      const ok = await verifyServerMaintenanceBypass({ passcode: adminPass, idToken });
+      if (ok) {
+        if (onAdminBypass) onAdminBypass();
+      } else {
+        setPassError(true);
+        setTimeout(() => setPassError(false), 2000);
+      }
+    } finally {
+      setIsVerifyingPass(false);
     }
   };
 

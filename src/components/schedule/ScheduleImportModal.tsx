@@ -106,7 +106,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
 
   // Gemini API Key in-modal state
   const [apiKeyInput, setApiKeyInput] = useState<string>(getStoredGeminiApiKey);
-  const [showApiKeyConfig, setShowApiKeyConfig] = useState<boolean>(() => !getStoredGeminiApiKey());
+  const [showApiKeyConfig, setShowApiKeyConfig] = useState<boolean>(false);
   const [keySavedSuccess, setKeySavedSuccess] = useState<boolean>(false);
   const [selectedModel, setSelectedModel] = useState<string>(getPreferredOcrModel);
 

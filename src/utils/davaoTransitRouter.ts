@@ -486,9 +486,12 @@ let cachedPatterns: PrecomputedPattern[] | null = null;
 
 function getTransitAssetUrl(relPath: string): string {
   const clean = relPath.startsWith('/') ? relPath.slice(1) : relPath;
-  const baseUrl = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.BASE_URL)
-    ? import.meta.env.BASE_URL
-    : '/';
+  let baseUrl = '/';
+  try {
+    baseUrl = import.meta.env.BASE_URL || '/';
+  } catch {
+    baseUrl = '/';
+  }
   const prefix = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
   return `${prefix}${clean}`;
 }

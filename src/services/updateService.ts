@@ -6,8 +6,8 @@
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { notifyAppUpdateAvailable } from './notificationService';
 
-export const CURRENT_APP_VERSION = "1.11.5.10";
-export const CURRENT_VERSION_CODE = 139;
+export const CURRENT_APP_VERSION = "1.11.5.11";
+export const CURRENT_VERSION_CODE = 140;
 
 export const GOOGLE_PLAY_PACKAGE_NAME = 'com.kurzyrio.skweladabaw.app';
 export const GOOGLE_PLAY_STORE_URL = `https://play.google.com/store/apps/details?id=${GOOGLE_PLAY_PACKAGE_NAME}`;
@@ -155,9 +155,12 @@ export async function checkForAppUpdate(): Promise<UpdateCheckResult> {
     const isOptional = hasUpdate && !isForceUpdate;
 
     if (hasUpdate && manifest.version) {
+      const releaseSummary = Array.isArray(manifest.releaseNotes)
+        ? manifest.releaseNotes.filter(Boolean).join(' • ')
+        : manifest.releaseNotes;
       notifyAppUpdateAvailable(
         manifest.version,
-        manifest.releaseNotes || manifest.title || 'A new update is available with timetable improvements and fixes',
+        releaseSummary || manifest.title || 'A new update is available with timetable improvements and fixes',
         manifest.apkUrl || manifest.downloadUrl
       ).catch(() => {});
     }
