@@ -6,6 +6,8 @@
  * Eliminates artificial highway median detours and produces realistic walking distances.
  */
 
+import { ungzip } from 'pako';
+
 export interface LatLng {
   lat: number;
   lng: number;
@@ -59,6 +61,11 @@ interface SearchTree {
   } | null;
 }
 
+export interface SearchTreeOptions {
+  reverse?: boolean;
+  maxCost?: number;
+}
+
 interface IndexedGraph {
   metadata: GraphMetadata;
   nodeCount: number;
@@ -76,7 +83,7 @@ interface IndexedGraph {
     restrictedMeters: number;
     expanded?: number;
   } | null;
-  createSearchTree: (source: SnappedNode) => SearchTree;
+  createSearchTree: (source: SnappedNode, options?: SearchTreeOptions) => SearchTree;
 }
 
 const MAGIC_HEADER = 1145524311;
@@ -86,6 +93,7 @@ const MAX_NODES = 5e6;
 const FLAG_RESTRICTED = 1;
 const FLAG_FORWARD_CLOSED = 2;
 const FLAG_BACKWARD_CLOSED = 4;
+const FLAG_BOTH_CLOSED = FLAG_FORWARD_CLOSED | FLAG_BACKWARD_CLOSED;
 
 const EARTH_RADIUS = 6371e3;
 const DEG_TO_RAD = Math.PI / 180;
@@ -94,7 +102,12 @@ const HEURISTIC_EPSILON = 0.995;
 const RESTRICTED_WEIGHT = 4;
 const DEFAULT_SNAP_MAX = 250; // meters
 const DEFAULT_MAX_COST = 12e3; // ~12 km max walking threshold
-const WALKING_SPEED_MPS = 1.061; // Average Davao pedestrian speed (~3.82 km/h)
+export const WALKING_SPEED_MPS = 1.061; // Average Davao pedestrian speed (~3.82 km/h)
+export const WALKING_SPEED_MPM = WALKING_SPEED_MPS * 60;
+
+export function walkMetersToMinutes(distanceMeters: number, minMinutes = 1): number {
+  return Math.max(minMinutes, Math.round((distanceMeters / WALKING_SPEED_MPS) / 60));
+}
 
 function haversineDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const dLat = (lat2 - lat1) * DEG_TO_RAD;
@@ -301,11 +314,12 @@ function buildAdjacencyList(nodeCount: number, segFrom: Uint32Array, segTo: Uint
   return { offsets, segments };
 }
 
-// Identifies connected components
+// Identifies weakly connected components over traversable pedestrian segments
 function computeConnectedComponents(
   nodeCount: number,
   segFrom: Uint32Array,
   segTo: Uint32Array,
+  segFlags: Uint8Array,
   adj: { offsets: Uint32Array; segments: Uint32Array }
 ) {
   const component = new Int32Array(nodeCount).fill(-1);
@@ -322,6 +336,7 @@ function computeConnectedComponents(
       const u = queue[--head];
       for (let sIdx = adj.offsets[u]; sIdx < adj.offsets[u + 1]; sIdx++) {
         const seg = adj.segments[sIdx];
+        if ((segFlags[seg] & FLAG_BOTH_CLOSED) === FLAG_BOTH_CLOSED) continue;
         const v = segFrom[seg] === u ? segTo[seg] : segFrom[seg];
         if (component[v] < 0) {
           component[v] = compCount;
@@ -356,7 +371,7 @@ function indexPedestrianGraph(rawGraph: UnpackedGraph): IndexedGraph {
   const getOtherNode = (seg: number, node: number) => segmentFrom[seg] === node ? segmentTo[seg] : segmentFrom[seg];
 
   const adj = buildAdjacencyList(nodeCount, segmentFrom, segmentTo);
-  const { component, componentCount } = computeConnectedComponents(nodeCount, segmentFrom, segmentTo, adj);
+  const { component, componentCount } = computeConnectedComponents(nodeCount, segmentFrom, segmentTo, segmentFlags, adj);
 
   const bbox = metadata.bbox;
   const cols = Math.ceil((bbox.east - bbox.west) / GRID_CELL_DEG) + 1;
@@ -439,6 +454,7 @@ function indexPedestrianGraph(rawGraph: UnpackedGraph): IndexedGraph {
             const seg = gridSegments[sIdx];
             if (seenSegments[seg] === snapStamp) continue;
             seenSegments[seg] = snapStamp;
+            if ((segmentFlags[seg] & FLAG_BOTH_CLOSED) === FLAG_BOTH_CLOSED) continue;
 
             const u = segmentFrom[seg];
             const v = segmentTo[seg];
@@ -678,7 +694,9 @@ function indexPedestrianGraph(rawGraph: UnpackedGraph): IndexedGraph {
     };
   }
 
-  function createSearchTree(fromSnap: SnappedNode): SearchTree {
+  function createSearchTree(fromSnap: SnappedNode, options: SearchTreeOptions = {}): SearchTree {
+    const isReverse = Boolean(options.reverse);
+    const maxCost = options.maxCost ?? DEFAULT_MAX_COST;
     const distances = new Float32Array(nodeCount).fill(Infinity);
     const prevEdges = new Int32Array(nodeCount).fill(-1);
     const settled = new Uint8Array(nodeCount);
@@ -686,7 +704,8 @@ function indexPedestrianGraph(rawGraph: UnpackedGraph): IndexedGraph {
     const startDistMap = new Map<number, number>();
     let settledNodes = 0;
 
-    for (const entry of getDepartures(fromSnap)) {
+    const initialEntries = isReverse ? getArrivals(fromSnap) : getDepartures(fromSnap);
+    for (const entry of initialEntries) {
       if (entry.cost < distances[entry.node]) {
         distances[entry.node] = entry.cost;
         startDistMap.set(entry.node, entry.distance);
@@ -703,7 +722,7 @@ function indexPedestrianGraph(rawGraph: UnpackedGraph): IndexedGraph {
       const distU = distances[u];
       for (let sIdx = adj.offsets[u]; sIdx < adj.offsets[u + 1]; sIdx++) {
         const seg = adj.segments[sIdx];
-        if (!canTraverseFrom(seg, u)) continue;
+        if (isReverse ? !canTraverseTo(seg, u) : !canTraverseFrom(seg, u)) continue;
         const v = getOtherNode(seg, u);
         if (settled[v]) continue;
 
@@ -723,46 +742,71 @@ function indexPedestrianGraph(rawGraph: UnpackedGraph): IndexedGraph {
       routeTo(toSnap: SnappedNode) {
         if (toSnap.component !== fromSnap.component) return null;
 
-        const arrivals = getArrivals(toSnap);
-        const shortcut = getSameSegmentShortcut(fromSnap, toSnap);
+        const targetEntries = isReverse ? getDepartures(toSnap) : getArrivals(toSnap);
+        const shortcut = isReverse
+          ? getSameSegmentShortcut(toSnap, fromSnap)
+          : getSameSegmentShortcut(fromSnap, toSnap);
         let bestTargetCost = shortcut ? shortcut.cost : Infinity;
-        let bestArr: { node: number; cost: number; distance: number } | null = null;
+        let bestMatch: { node: number; cost: number; distance: number } | null = null;
 
-        for (const arr of arrivals) {
-          if (!settled[arr.node]) continue;
-          const cost = distances[arr.node] + arr.cost;
+        for (const entry of targetEntries) {
+          if (!settled[entry.node]) continue;
+          const cost = distances[entry.node] + entry.cost;
           if (cost < bestTargetCost) {
             bestTargetCost = cost;
-            bestArr = arr;
+            bestMatch = entry;
           }
         }
 
-        while (treePQ.size && treePQ.minKey < bestTargetCost) {
+        while (treePQ.size && treePQ.minKey < bestTargetCost && treePQ.minKey <= maxCost) {
           const u = step();
           if (u < 0) continue;
-          for (const arr of arrivals) {
-            if (arr.node !== u) continue;
-            const cost = distances[u] + arr.cost;
+          for (const entry of targetEntries) {
+            if (entry.node !== u) continue;
+            const cost = distances[u] + entry.cost;
             if (cost < bestTargetCost) {
               bestTargetCost = cost;
-              bestArr = arr;
+              bestMatch = entry;
             }
           }
         }
 
-        if (!Number.isFinite(bestTargetCost)) return null;
-        if (!bestArr) {
-          return buildRouteGeometry(fromSnap, toSnap, [], [], shortcut!.distance, 0);
+        if (!Number.isFinite(bestTargetCost) || bestTargetCost > maxCost) return null;
+        if (!bestMatch) {
+          return isReverse
+            ? buildRouteGeometry(toSnap, fromSnap, [], [], shortcut!.distance, 0)
+            : buildRouteGeometry(fromSnap, toSnap, [], [], shortcut!.distance, 0);
         }
 
-        const { nodes, pathSegments } = backtrackPath(bestArr.node, (n) => prevEdges[n]);
+        if (isReverse) {
+          const forwardNodes: number[] = [];
+          const pathSegments: number[] = [];
+          let current = bestMatch.node;
+          for (;;) {
+            forwardNodes.push(current);
+            const edge = prevEdges[current];
+            if (edge < 0) break;
+            pathSegments.push(edge);
+            current = getOtherNode(edge, current);
+          }
+          return buildRouteGeometry(
+            toSnap,
+            fromSnap,
+            forwardNodes,
+            pathSegments,
+            bestMatch.distance,
+            startDistMap.get(current) ?? 0
+          );
+        }
+
+        const { nodes, pathSegments } = backtrackPath(bestMatch.node, (n) => prevEdges[n]);
         return buildRouteGeometry(
           fromSnap,
           toSnap,
           nodes,
           pathSegments,
           startDistMap.get(nodes[0]) ?? 0,
-          bestArr.distance
+          bestMatch.distance
         );
       }
     };
@@ -787,14 +831,31 @@ function indexPedestrianGraph(rawGraph: UnpackedGraph): IndexedGraph {
 let activeGraphPromise: Promise<IndexedGraph | null> | null = null;
 let activeGraphInstance: IndexedGraph | null = null;
 
-// Inflates gzip binary buffer if necessary
+const GRAPH_FETCH_TIMEOUT_MS = 10000;
+
+async function fetchWithTimeout(url: string, timeoutMs = GRAPH_FETCH_TIMEOUT_MS): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+// Inflates gzip binary buffer if necessary, falling back to pako when DecompressionStream is unavailable
 async function inflateBufferIfNeeded(buffer: ArrayBuffer | Uint8Array): Promise<Uint8Array> {
   const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
   if (bytes[0] === 31 && bytes[1] === 139) {
     if (typeof DecompressionStream !== 'undefined') {
-      const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
-      return new Uint8Array(await new Response(stream).arrayBuffer());
+      try {
+        const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+        return new Uint8Array(await new Response(stream).arrayBuffer());
+      } catch {
+        return ungzip(bytes);
+      }
     }
+    return ungzip(bytes);
   }
   return bytes;
 }
@@ -803,7 +864,8 @@ export async function loadPedestrianGraph(): Promise<IndexedGraph | null> {
   if (activeGraphInstance) return activeGraphInstance;
   if (activeGraphPromise) return activeGraphPromise;
 
-  activeGraphPromise = (async () => {
+  let loadPromise: Promise<IndexedGraph | null> | null = null;
+  loadPromise = (async () => {
     try {
       let rawBuffer: ArrayBuffer | Uint8Array;
       if (typeof window === 'undefined') {
@@ -821,10 +883,10 @@ export async function loadPedestrianGraph(): Promise<IndexedGraph | null> {
         const prefix = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
         let res: Response | null = null;
         try {
-          res = await fetch(`${prefix}data/transport/davao-pedestrian-graph.bin`);
+          res = await fetchWithTimeout(`${prefix}data/transport/davao-pedestrian-graph.bin`);
         } catch (_) {}
         if (!res || !res.ok) {
-          res = await fetch('/data/transport/davao-pedestrian-graph.bin');
+          res = await fetchWithTimeout('/data/transport/davao-pedestrian-graph.bin');
         }
         if (!res.ok) {
           console.warn(`[PedestrianGraphService] Binary unavailable (${res.status})`);
@@ -840,10 +902,15 @@ export async function loadPedestrianGraph(): Promise<IndexedGraph | null> {
     } catch (err) {
       console.warn('[PedestrianGraphService] Failed to load offline pedestrian graph:', err);
       return null;
+    } finally {
+      if (!activeGraphInstance && activeGraphPromise === loadPromise) {
+        activeGraphPromise = null;
+      }
     }
   })();
 
-  return activeGraphPromise;
+  activeGraphPromise = loadPromise;
+  return loadPromise;
 }
 
 /**
@@ -870,7 +937,7 @@ export async function getOfflinePedestrianRoute(
   // Convert GeoJSON [lon, lat] coordinates to Leaflet/MapLibre [lat, lng] format
   const latLngCoords: [number, number][] = routeMatch.coordinates.map(([lon, lat]) => [lat, lon]);
   const distanceMeters = Math.round(routeMatch.distanceMeters);
-  const durationMinutes = Math.max(1, Math.round((distanceMeters / WALKING_SPEED_MPS) / 60));
+  const durationMinutes = walkMetersToMinutes(distanceMeters);
 
   return {
     coordinates: latLngCoords,

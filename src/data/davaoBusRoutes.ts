@@ -1,6 +1,8 @@
 // Davao City Interim Bus Service (DIBS) Routes Metadata & Utilities
 // Strictly no parentheses in route names or descriptions
 
+import { getDibsServiceStatus, getManilaDate } from '../utils/dibsSchedule';
+
 export interface RouteMeta {
   code: string;
   family: string;
@@ -117,19 +119,17 @@ export interface DavaoBusGeoJson {
   features: (GeoJsonLineFeature | GeoJsonStopFeature)[];
 }
 
-// Get current Manila time hour to detect AM/PM shift
-export function getManilaShift(): 'AM' | 'PM' {
+// Align AM/PM shift detection with DIBS operating windows (Morning 06:00-10:00 AM, Evening 04:00-09:00 PM)
+export function getManilaShift(refDate: Date = new Date()): 'AM' | 'PM' {
   try {
-    const hour = parseInt(
-      new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Manila',
-        hour: '2-digit',
-        hour12: false
-      }).format(new Date()),
-      10
-    );
-    return hour < 13 ? 'AM' : 'PM';
+    const status = getDibsServiceStatus(refDate);
+    if (status.currentShift === 'morning') return 'AM';
+    if (status.currentShift === 'evening' || status.currentShift === 'between_shifts') return 'PM';
+    const manila = getManilaDate(refDate);
+    const totalMinutes = manila.getHours() * 60 + manila.getMinutes();
+    return totalMinutes > 600 && totalMinutes <= 1260 ? 'PM' : 'AM';
   } catch {
-    return new Date().getHours() < 13 ? 'AM' : 'PM';
+    const totalMinutes = refDate.getHours() * 60 + refDate.getMinutes();
+    return totalMinutes > 600 && totalMinutes <= 1260 ? 'PM' : 'AM';
   }
 }

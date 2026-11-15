@@ -17,10 +17,39 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.5.13',
+    releaseDate: 'November 16, 2026',
+    title: 'Offline Maps, DC Bus Shift Routing & Transit Accuracy',
+    isLatest: true,
+    tagline: 'Reliable offline map fallbacks, active DIBS bus shift filtering with free fare calculation, and sharper transit timing.',
+    highlights: [
+      'Maps now switch cleanly to an offline basemap grid instead of stalling on missing tiles while keeping computed routes visible',
+      'DC Bus suggestions follow active AM/PM shifts with ₱0.00 student fares and never get hidden behind feeder jeepneys',
+      'Fixed pedestrian path loading recovery, reverse destination walks, transfer slicing, and wait-time ranking'
+    ],
+    items: [
+      {
+        type: 'fix',
+        title: 'Offline Map & Live Bus Fallbacks',
+        description: 'Added fast offline basemap fallbacks across Jeepney and DC Bus maps so local routes, pins, and cached stops load immediately without mobile data.'
+      },
+      {
+        type: 'improvement',
+        title: 'DC Bus Shift Filtering & Free Fares',
+        description: 'Matched DC Bus routes to active AM and PM operating windows, applied ₱0.00 fares accurately, and kept free bus options visible on busy corridors.'
+      },
+      {
+        type: 'fix',
+        title: 'Pedestrian Routing & Wait-Time Accuracy',
+        description: 'Restored transient pedestrian graph recovery, aligned reverse destination walks, and preserved boarding/transfer wait minutes when ranking journeys.'
+      }
+    ]
+  },
+  {
     version: '1.11.5.12',
     releaseDate: 'November 16, 2026',
     title: 'Offline Sync, Account Switching & Chat Queue Reliability',
-    isLatest: true,
+    isLatest: false,
     tagline: 'Protected offline edits, full expense history, saved route isolation across accounts, and queued campus chat delivery.',
     highlights: [
       'Pushed offline edits and deletions to the cloud before pulling updates to avoid losing recent changes',

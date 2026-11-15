@@ -103,6 +103,22 @@ const MAP_STYLES: MapStyleConfig[] = [
   }
 ];
 
+function createOfflineBlankStyle(isDark: boolean): maplibregl.StyleSpecification {
+  return {
+    version: 8,
+    sources: {},
+    layers: [
+      {
+        id: 'background',
+        type: 'background',
+        paint: {
+          'background-color': isDark ? '#0f172a' : '#f3f4f6'
+        }
+      }
+    ]
+  };
+}
+
 function registerFootprintImage(map: maplibregl.Map): void {
   try {
     if (map.hasImage('pedestrian-footprint')) return;
@@ -206,7 +222,14 @@ export const JeepTransitMap: React.FC<JeepTransitMapProps> = ({
   const [isStyleLoaded, setIsStyleLoaded] = useState<boolean>(false);
   const [styleRevision, setStyleRevision] = useState<number>(0);
   const [isMapTilesLoading, setIsMapTilesLoading] = useState<boolean>(true);
+  const [isOfflineBasemap, setIsOfflineBasemap] = useState<boolean>(
+    () => typeof navigator !== 'undefined' && navigator.onLine === false
+  );
   const currentLoadedStyleIdRef = useRef<VectorMapStyleId>(mapStyleId);
+  const isUsingOfflineFallbackRef = useRef<boolean>(false);
+  const isDarkModeRef = useRef<boolean>(isDarkMode);
+  const styleTimeoutRef = useRef<number | null>(null);
+  isDarkModeRef.current = isDarkMode;
   const activeJourneyRef = useRef<TransitJourney | null>(null);
   const activeSingleRouteRef = useRef<GeoJsonFeature | null>(null);
 
@@ -377,6 +400,7 @@ export const JeepTransitMap: React.FC<JeepTransitMapProps> = ({
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
+    let isUnmounted = false;
     const initialStyleObj = MAP_STYLES.find(s => s.id === mapStyleId) || MAP_STYLES[0];
     currentLoadedStyleIdRef.current = initialStyleObj.id;
 
@@ -384,9 +408,16 @@ export const JeepTransitMap: React.FC<JeepTransitMapProps> = ({
       ? [initialDestination.lng, initialDestination.lat]
       : (origin ? [origin.lng, origin.lat] : DAVAO_CENTER_LNG_LAT);
 
+    const startOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    const initialUseDark = isDarkModeRef.current || initialStyleObj.id === 'dark';
+    isUsingOfflineFallbackRef.current = startOffline;
+    if (startOffline) {
+      setIsOfflineBasemap(true);
+    }
+
     const map = new maplibregl.Map({
       container: mapContainerRef.current,
-      style: initialStyleObj.style,
+      style: startOffline ? createOfflineBlankStyle(initialUseDark) : initialStyleObj.style,
       center: initialCenter,
       zoom: initialDestination ? 14.5 : 13.5,
       pitch: 0,
@@ -394,28 +425,78 @@ export const JeepTransitMap: React.FC<JeepTransitMapProps> = ({
       attributionControl: false
     });
 
-    map.on('load', () => {
+    const clearStyleTimeout = () => {
+      if (styleTimeoutRef.current !== null) {
+        window.clearTimeout(styleTimeoutRef.current);
+        styleTimeoutRef.current = null;
+      }
+    };
+
+    const markStyleReady = (offlineMode: boolean) => {
+      if (isUnmounted) return;
+      clearStyleTimeout();
       registerFootprintImage(map);
       setIsStyleLoaded(true);
+      setIsMapTilesLoading(false);
+      setIsOfflineBasemap(offlineMode);
       setStyleRevision(r => r + 1);
       map.resize();
+    };
+
+    const activateOfflineFallback = () => {
+      if (isUnmounted) return;
+      clearStyleTimeout();
+      if (isUsingOfflineFallbackRef.current && map.isStyleLoaded()) {
+        markStyleReady(true);
+        return;
+      }
+      isUsingOfflineFallbackRef.current = true;
+      setIsOfflineBasemap(true);
+      try {
+        const useDark = isDarkModeRef.current || currentLoadedStyleIdRef.current === 'dark';
+        map.setStyle(createOfflineBlankStyle(useDark), { diff: false });
+      } catch {}
+      // Inline styles complete synchronously on next frame even if events are deferred
+      window.setTimeout(() => {
+        if (!isUnmounted && map.isStyleLoaded()) {
+          markStyleReady(true);
+        }
+      }, 120);
+    };
+
+    const armStyleTimeout = () => {
+      clearStyleTimeout();
+      styleTimeoutRef.current = window.setTimeout(() => {
+        if (isUnmounted) return;
+        if (!map.isStyleLoaded()) {
+          activateOfflineFallback();
+        } else {
+          // Clear blocking overlay if style loaded cleanly while slow tiles stalled
+          setIsStyleLoaded(true);
+          setIsMapTilesLoading(false);
+          if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+            setIsOfflineBasemap(true);
+          }
+        }
+      }, 4500);
+    };
+
+    map.on('load', () => {
+      markStyleReady(isUsingOfflineFallbackRef.current);
     });
 
     map.on('style.load', () => {
-      registerFootprintImage(map);
-      setIsStyleLoaded(true);
-      setStyleRevision(r => r + 1);
-      map.resize();
+      markStyleReady(isUsingOfflineFallbackRef.current);
     });
 
     map.once('idle', () => {
-      setIsMapTilesLoading(false);
+      if (!isUnmounted) setIsMapTilesLoading(false);
     });
 
     map.on('styledata', () => {
+      if (isUnmounted) return;
       if (map.isStyleLoaded()) {
         setIsStyleLoaded(true);
-        // Ensure sources and layers exist if active journey or route is present
         if (activeJourneyRef.current || activeSingleRouteRef.current) {
           if (!map.getSource('ride-source') && !map.getSource('single-route-source')) {
             setStyleRevision(r => r + 1);
@@ -432,14 +513,66 @@ export const JeepTransitMap: React.FC<JeepTransitMapProps> = ({
     });
 
     map.on('webglcontextrestored', () => {
-      console.info('[JeepTransitMap] WebGL context restored');
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        activateOfflineFallback();
+        return;
+      }
       const curStyle = MAP_STYLES.find(s => s.id === currentLoadedStyleIdRef.current) || MAP_STYLES[0];
+      isUsingOfflineFallbackRef.current = false;
+      setIsOfflineBasemap(false);
       map.setStyle(curStyle.style, { diff: false });
+      armStyleTimeout();
     });
 
     map.on('error', (err) => {
       console.warn('[JeepTransitMap] MapLibre notice:', err?.error?.message || err);
+      if (isUnmounted) return;
+      const offlineNow = typeof navigator !== 'undefined' && navigator.onLine === false;
+      if (!map.isStyleLoaded()) {
+        activateOfflineFallback();
+      } else if (offlineNow) {
+        clearStyleTimeout();
+        setIsMapTilesLoading(false);
+        setIsOfflineBasemap(true);
+      }
     });
+
+    const handleOffline = () => {
+      if (isUnmounted) return;
+      if (!map.isStyleLoaded()) {
+        activateOfflineFallback();
+      } else {
+        clearStyleTimeout();
+        setIsMapTilesLoading(false);
+        setIsOfflineBasemap(true);
+      }
+    };
+
+    const handleOnline = () => {
+      if (isUnmounted) return;
+      if (isUsingOfflineFallbackRef.current) {
+        const curStyle = MAP_STYLES.find(s => s.id === currentLoadedStyleIdRef.current) || MAP_STYLES[0];
+        isUsingOfflineFallbackRef.current = false;
+        setIsOfflineBasemap(false);
+        setIsStyleLoaded(false);
+        setIsMapTilesLoading(true);
+        map.setStyle(curStyle.style, { diff: false });
+        armStyleTimeout();
+      }
+    };
+
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
+
+    if (startOffline) {
+      window.setTimeout(() => {
+        if (!isUnmounted && map.isStyleLoaded()) {
+          markStyleReady(true);
+        }
+      }, 120);
+    } else {
+      armStyleTimeout();
+    }
 
     // Handle map clicks without stale closures
     map.on('click', (e) => {
@@ -477,6 +610,11 @@ export const JeepTransitMap: React.FC<JeepTransitMapProps> = ({
     mapRef.current = map;
 
     return () => {
+      isUnmounted = true;
+      clearStyleTimeout();
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
+
       try {
         originMarkerRef.current?.remove();
         destMarkerRef.current?.remove();
@@ -511,19 +649,72 @@ export const JeepTransitMap: React.FC<JeepTransitMapProps> = ({
     setIsMapTilesLoading(true);
 
     const styleObj = MAP_STYLES.find(s => s.id === mapStyleId);
-    if (!styleObj) return;
+    if (!styleObj) {
+      setIsMapTilesLoading(false);
+      return;
+    }
 
-    // Use diff: false so MapLibre reliably reconstructs the style and triggers style.load
-    map.setStyle(styleObj.style, { diff: false });
+    let cancelled = false;
+    let fallbackTimer: number | null = null;
+    const clearFallbackTimer = () => {
+      if (fallbackTimer !== null) {
+        window.clearTimeout(fallbackTimer);
+        fallbackTimer = null;
+      }
+    };
 
     const onStyleReady = () => {
+      if (cancelled) return;
+      clearFallbackTimer();
+      registerFootprintImage(map);
       setIsStyleLoaded(true);
       setIsMapTilesLoading(false);
+      setIsOfflineBasemap(isUsingOfflineFallbackRef.current);
       setStyleRevision(r => r + 1);
     };
 
+    const onIdle = () => {
+      if (!cancelled) setIsMapTilesLoading(false);
+    };
+
     map.once('style.load', onStyleReady);
-    map.once('idle', () => setIsMapTilesLoading(false));
+    map.once('idle', onIdle);
+
+    const offlineNow = typeof navigator !== 'undefined' && navigator.onLine === false;
+    if (offlineNow) {
+      isUsingOfflineFallbackRef.current = true;
+      setIsOfflineBasemap(true);
+      map.setStyle(createOfflineBlankStyle(isDarkModeRef.current || mapStyleId === 'dark'), { diff: false });
+      fallbackTimer = window.setTimeout(() => {
+        if (!cancelled && map.isStyleLoaded()) onStyleReady();
+      }, 120);
+    } else {
+      isUsingOfflineFallbackRef.current = false;
+      setIsOfflineBasemap(false);
+      map.setStyle(styleObj.style, { diff: false });
+      fallbackTimer = window.setTimeout(() => {
+        if (cancelled) return;
+        if (!map.isStyleLoaded()) {
+          isUsingOfflineFallbackRef.current = true;
+          setIsOfflineBasemap(true);
+          try {
+            map.setStyle(createOfflineBlankStyle(isDarkModeRef.current || mapStyleId === 'dark'), { diff: false });
+          } catch {}
+          window.setTimeout(() => {
+            if (!cancelled && map.isStyleLoaded()) onStyleReady();
+          }, 120);
+        } else {
+          onStyleReady();
+        }
+      }, 4500);
+    }
+
+    return () => {
+      cancelled = true;
+      clearFallbackTimer();
+      map.off('style.load', onStyleReady);
+      map.off('idle', onIdle);
+    };
   }, [mapStyleId]);
 
   // Handle ResizeObserver for reliable canvas dimensions
@@ -1518,6 +1709,12 @@ export const JeepTransitMap: React.FC<JeepTransitMapProps> = ({
               </div>
             )}
           </div>
+
+          {isOfflineBasemap && isStyleLoaded && !isMapTilesLoading && (
+            <div className="self-center px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-800 dark:text-amber-200 text-[11px] font-semibold backdrop-blur-md pointer-events-none">
+              Offline basemap — routes & pins stay active
+            </div>
+          )}
         </div>
       )}
 

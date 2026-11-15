@@ -6,8 +6,13 @@
  */
 
 import { enhanceJourneyWithRoadWalking } from '../services/walkingRouteService';
-import { getOfflinePedestrianRoute, loadPedestrianGraph } from '../services/pedestrianGraphService';
+import {
+  getOfflinePedestrianRoute,
+  loadPedestrianGraph,
+  walkMetersToMinutes
+} from '../services/pedestrianGraphService';
 import { transitCacheService } from '../services/transitCacheService';
+import { getDibsServiceStatus } from './dibsSchedule';
 
 export interface LatLng {
   lat: number;
@@ -58,6 +63,7 @@ export interface TransitJourney {
   totalMinutes: number;
   walkingMinutes: number;
   ridingMinutes: number;
+  waitMinutes?: number;
   totalDistanceKm: number;
   totalWalkingMeters: number;
   totalStudentFare: number;
@@ -92,6 +98,7 @@ export interface GeoJsonFeature {
     name: string;
     mode: string;
     direction: 'going' | 'back' | 'return' | 'unknown';
+    shift?: 'AM' | 'PM';
     color?: string;
   };
   geometry: {
@@ -131,6 +138,36 @@ export function calculateStudentFare(distanceMeters: number): StudentFareEstimat
         ? `₱11.00 (first 4 km) + ₱${extraKm}.00 (${extraKm} km extra)`
         : `₱11.00 (within 4 km base)`
   };
+}
+
+// Davao City Interim Bus Service (DIBS) operates as zero-fare free public transit
+export function calculateFreeBusFare(distanceMeters: number): StudentFareEstimate {
+  const distanceKm = Math.max(0.1, distanceMeters / 1000);
+  return {
+    distanceKm: Math.round(distanceKm * 10) / 10,
+    fareKilometers: Math.max(1, Math.ceil(distanceKm)),
+    studentFare: 0,
+    formatted: '₱0.00',
+    breakdown: '₱0.00 (Free Fare • Davao City Interim Bus)'
+  };
+}
+
+function findSegmentIndexAtDistance(distAlongSegments: number[], targetDist: number): number {
+  const n = distAlongSegments.length;
+  if (n <= 1) return 0;
+  if (targetDist <= distAlongSegments[0]) return 0;
+  if (targetDist >= distAlongSegments[n - 1]) return n - 1;
+  let lo = 0;
+  let hi = n - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (distAlongSegments[mid] <= targetDist) {
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return Math.max(0, hi);
 }
 
 // Great-circle distance between two GPS coordinates (meters)
@@ -215,14 +252,17 @@ export function getAllCandidateSnaps(
   maxDistanceMeters = 800
 ): SnappedPoint[] {
   const [minLat, maxLat, minLng, maxLng] = pattern.bbox;
-  const degThreshold = maxDistanceMeters / 110000;
+  const metersPerDegLat = 111320;
+  const metersPerDegLon = Math.max(1, metersPerDegLat * Math.cos((point.lat * Math.PI) / 180));
+  const degThresholdLat = maxDistanceMeters / metersPerDegLat;
+  const degThresholdLon = maxDistanceMeters / metersPerDegLon;
 
   // Immediate bounding box reject: zero math loop overhead
   if (
-    point.lat < minLat - degThreshold ||
-    point.lat > maxLat + degThreshold ||
-    point.lng < minLng - degThreshold ||
-    point.lng > maxLng + degThreshold
+    point.lat < minLat - degThresholdLat ||
+    point.lat > maxLat + degThresholdLat ||
+    point.lng < minLng - degThresholdLon ||
+    point.lng > maxLng + degThresholdLon
   ) {
     return [];
   }
@@ -234,17 +274,19 @@ export function getAllCandidateSnaps(
     const p1 = coords[i];
     const p2 = coords[i + 1];
 
-    const dx = p2[1] - p1[1];
-    const dy = p2[0] - p1[0];
+    const dx = (p2[1] - p1[1]) * metersPerDegLon;
+    const dy = (p2[0] - p1[0]) * metersPerDegLat;
     const segLengthSq = dx * dx + dy * dy;
 
     let t = 0;
     if (segLengthSq > 0) {
-      t = Math.max(0, Math.min(1, ((point.lng - p1[1]) * dx + (point.lat - p1[0]) * dy) / segLengthSq));
+      const px = (point.lng - p1[1]) * metersPerDegLon;
+      const py = (point.lat - p1[0]) * metersPerDegLat;
+      t = Math.max(0, Math.min(1, (px * dx + py * dy) / segLengthSq));
     }
 
-    const projLat = p1[0] + t * dy;
-    const projLng = p1[1] + t * dx;
+    const projLat = p1[0] + t * (p2[0] - p1[0]);
+    const projLng = p1[1] + t * (p2[1] - p1[1]);
     const dist = haversineDistance(point.lat, point.lng, projLat, projLng);
 
     if (dist <= maxDistanceMeters) {
@@ -399,7 +441,8 @@ export function findOptimalDirectRide(
         const aSnap = pedestrianGraph.snap({ latitude: a.lat, longitude: a.lng });
         const r = aSnap ? destTree.routeTo(aSnap) : null;
         if (r && Number.isFinite(r.distanceMeters)) {
-          const coords: [number, number][] = r.coordinates.map(([lon, lat]: [number, number]) => [lat, lon]).reverse();
+          // destTree runs reverse Dijkstra toward destination, so coordinates already flow aSnap -> destination
+          const coords: [number, number][] = r.coordinates.map(([lon, lat]: [number, number]) => [lat, lon]);
           a.distanceMeters = r.distanceMeters;
           walkCache?.dest.set(key, { distance: r.distanceMeters, coords });
         } else {
@@ -576,13 +619,17 @@ export async function loadTransitData(): Promise<{
             if (bf.properties?.kind === 'line' && bf.geometry?.coordinates?.length >= 2) {
               const rCode = bf.properties.route || 'DC Bus';
               const rMeta = (DAVAO_BUS_ROUTES as Record<string, any>)[rCode];
+              const shiftVal = bf.properties.shift === 'PM' ? 'PM' : bf.properties.shift === 'AM' ? 'AM' : undefined;
+              const rawDir = bf.properties.direction;
+              const direction = (rawDir === 'back' || rawDir === 'return' || rawDir === 'going') ? rawDir : 'going';
               busFeatures.push({
                 type: 'Feature',
                 properties: {
                   routeId: bf.properties.fullCode || rCode,
                   name: rMeta?.name ? `DC Bus ${rMeta.name}` : `DC Bus ${rCode}`,
                   mode: 'dc_bus',
-                  direction: (bf.properties.shift === 'PM' ? 'back' : 'going') as any,
+                  direction,
+                  ...(shiftVal ? { shift: shiftVal } : {}),
                   color: rMeta?.color || '#2563EB'
                 },
                 geometry: bf.geometry
@@ -662,12 +709,28 @@ export async function planTransitJourneys(
   const { patterns } = await loadTransitData();
   if (!patterns.length) return [];
 
+  // Filter DC Bus patterns by active DIBS Manila operating shift (excludes Sunday/off-shift hours and inactive shift lines)
+  const dibsStatus = getDibsServiceStatus();
+  const activeBusShift: 'AM' | 'PM' | null =
+    dibsStatus.currentShift === 'morning'
+      ? 'AM'
+      : dibsStatus.currentShift === 'evening'
+        ? 'PM'
+        : null;
+
+  const activePatterns = patterns.filter((item) => {
+    if (item.feature.properties.mode !== 'dc_bus') return true;
+    if (!activeBusShift) return false;
+    const itemShift = item.feature.properties.shift;
+    return !itemShift || itemShift === activeBusShift;
+  });
+
   // Pre-initialize offline pedestrian graph search trees once for instant street routing
   const pedestrianGraph = await loadPedestrianGraph();
   const originSnap = pedestrianGraph?.snap({ latitude: origin.lat, longitude: origin.lng });
   const originTree = (originSnap && pedestrianGraph) ? pedestrianGraph.createSearchTree(originSnap) : null;
   const destSnap = pedestrianGraph?.snap({ latitude: destination.lat, longitude: destination.lng });
-  const destTree = (destSnap && pedestrianGraph) ? pedestrianGraph.createSearchTree(destSnap) : null;
+  const destTree = (destSnap && pedestrianGraph) ? pedestrianGraph.createSearchTree(destSnap, { reverse: true }) : null;
 
   const walkCache = {
     origin: new Map<string, { distance: number; coords: [number, number][] }>(),
@@ -681,7 +744,7 @@ export async function planTransitJourneys(
     destination.lng
   );
 
-  const directWalkMinutes = Math.round(directWalkDist / 75);
+  const directWalkMinutes = walkMetersToMinutes(directWalkDist, 2);
   const candidates: TransitJourney[] = [];
 
   // If destination is close (< 650m), provide direct walk option
@@ -706,6 +769,7 @@ export async function planTransitJourneys(
       totalMinutes: Math.max(2, directWalkMinutes),
       walkingMinutes: Math.max(2, directWalkMinutes),
       ridingMinutes: 0,
+      waitMinutes: 0,
       totalDistanceKm: Math.round((directWalkDist / 1000) * 10) / 10,
       totalWalkingMeters: Math.round(directWalkDist),
       totalStudentFare: 0,
@@ -738,7 +802,7 @@ export async function planTransitJourneys(
 
   for (const snapTier of SNAP_TIERS) {
     let pIdx = 0;
-    for (const item of patterns) {
+    for (const item of activePatterns) {
       pIdx++;
       if (pIdx % 14 === 0) {
         // Yield to browser event loop to prevent mobile CPU spikes and frame drops
@@ -771,11 +835,12 @@ export async function planTransitJourneys(
       seenRouteIds.add(routeKey);
 
       const isBus = item.feature.properties.mode === 'dc_bus';
-      const fare = calculateStudentFare(rideDistMeters);
+      const fare = isBus ? calculateFreeBusFare(rideDistMeters) : calculateStudentFare(rideDistMeters);
       const speedMpm = isBus ? 350 : 280;
       const rideMins = Math.max(3, Math.round(rideDistMeters / speedMpm));
-      const walkMins = Math.max(1, Math.round(walkMeters / 75));
-      const totalMins = rideMins + walkMins + (isBus ? 5 : 3);
+      const walkMins = walkMetersToMinutes(walkMeters);
+      const boardingWaitMins = isBus ? 5 : 3;
+      const totalMins = rideMins + walkMins + boardingWaitMins;
       const routeColor = item.feature.properties.color || getRouteColor(routeId);
 
       const routeName = item.feature.properties.name || item.routeInfo?.name || (isBus ? `DC Bus ${routeId}` : 'Davao Jeep');
@@ -799,7 +864,7 @@ export async function planTransitJourneys(
           toCoords: [snapOrigin.lat, snapOrigin.lng],
           distanceMeters: Math.round(snapOrigin.distanceMeters),
           distanceKm: Math.round((snapOrigin.distanceMeters / 1000) * 10) / 10,
-          durationMinutes: Math.max(1, Math.round(snapOrigin.distanceMeters / 75)),
+          durationMinutes: walkMetersToMinutes(snapOrigin.distanceMeters),
           geometry: walkOriginGeometry && walkOriginGeometry.length >= 2
             ? walkOriginGeometry
             : [
@@ -835,7 +900,7 @@ export async function planTransitJourneys(
           toCoords: [destination.lat, destination.lng],
           distanceMeters: Math.round(snapDest.distanceMeters),
           distanceKm: Math.round((snapDest.distanceMeters / 1000) * 10) / 10,
-          durationMinutes: Math.max(1, Math.round(snapDest.distanceMeters / 75)),
+          durationMinutes: walkMetersToMinutes(snapDest.distanceMeters),
           geometry: walkDestGeometry && walkDestGeometry.length >= 2
             ? walkDestGeometry
             : [
@@ -848,10 +913,11 @@ export async function planTransitJourneys(
       candidates.push({
         id: `direct-${routeKey}`,
         tier: 'best',
-        badges: [],
+        badges: ['direct-ride'],
         totalMinutes: totalMins,
         walkingMinutes: walkMins,
         ridingMinutes: rideMins,
+        waitMinutes: boardingWaitMins,
         totalDistanceKm: Math.round(((rideDistMeters + walkMeters) / 1000) * 10) / 10,
         totalWalkingMeters: Math.round(walkMeters),
         totalStudentFare: fare.studentFare,
@@ -864,8 +930,6 @@ export async function planTransitJourneys(
           : (routeCode || routeName || 'Transit Ride'),
         legs
       });
-
-      if (candidates.length >= 12) break;
     }
     if (candidates.length >= 10) break;
   }
@@ -878,7 +942,7 @@ export async function planTransitJourneys(
     // Search buffer: 600m nearby, expanding to 950m for distant trips
     const walkBuffer = directWalkDist > 3000 ? 950 : 650;
 
-    for (const item of patterns) {
+    for (const item of activePatterns) {
       const pKey = `${item.feature.properties.routeId}-pattern-${item.feature.properties.direction}`;
       const sO = findFirstContactSnap(origin, item, walkBuffer, 'board');
       if (sO) {
@@ -894,8 +958,7 @@ export async function planTransitJourneys(
     // Crucial Bug Fix: Sort destMatches so routes dropping off closest to Destination are prioritized first
     destMatches.sort((a, b) => a.snapD.distanceMeters - b.snapD.distanceMeters);
 
-    const transferCandidates: { journey: TransitJourney; score: number }[] = [];
-    const seenTransferPairs = new Set<string>();
+    const bestPairMap = new Map<string, { journey: TransitJourney; score: number }>();
 
     for (const mD of destMatches) {
       const pKey2 = mD.patternKey;
@@ -905,10 +968,9 @@ export async function planTransitJourneys(
         const pKey1 = mO.patternKey;
         const rId1 = mO.pattern.feature.properties.routeId;
 
-        // Skip same route or already evaluated route pair
+        // Skip same route
         if (rId1 === rId2) continue;
         const pairKey = `${rId1}->${rId2}`;
-        if (seenTransferPairs.has(pairKey)) continue;
 
         // Query authentic transfer junctions between Pattern 1 and Pattern 2
         const connections = cachedTransferLookup[pKey1]?.[pKey2];
@@ -942,30 +1004,36 @@ export async function planTransitJourneys(
 
         if (!bestConn) continue;
 
-        seenTransferPairs.add(pairKey);
-
         const r1Dist = bestConn.fromDist - mO.snapO.distanceAlongRouteMeters;
         const r2Dist = mD.snapD.distanceAlongRouteMeters - bestConn.toDist;
-        const fare1 = calculateStudentFare(r1Dist);
-        const fare2 = calculateStudentFare(r2Dist);
-        const totalFare = fare1.studentFare + fare2.studentFare;
-
         const isBus1 = mO.pattern.feature.properties.mode === 'dc_bus';
         const isBus2 = mD.pattern.feature.properties.mode === 'dc_bus';
+        const fare1 = isBus1 ? calculateFreeBusFare(r1Dist) : calculateStudentFare(r1Dist);
+        const fare2 = isBus2 ? calculateFreeBusFare(r2Dist) : calculateStudentFare(r2Dist);
+        const totalFare = fare1.studentFare + fare2.studentFare;
+
         const speed1 = isBus1 ? 350 : 280;
         const speed2 = isBus2 ? 350 : 280;
         const ride1Mins = Math.max(3, Math.round(r1Dist / speed1));
         const ride2Mins = Math.max(3, Math.round(r2Dist / speed2));
         const totalWalkMeters = mO.snapO.distanceMeters + bestConn.walkM + mD.snapD.distanceMeters;
-        const walkMins = Math.max(2, Math.round(totalWalkMeters / 75));
+        const walkMins = walkMetersToMinutes(totalWalkMeters, 2);
+        const boardingWaitMins = isBus1 ? 5 : 3;
         const transferWaitMins = 5;
-        const totalMins = ride1Mins + ride2Mins + walkMins + transferWaitMins;
+        const totalWaitMins = boardingWaitMins + transferWaitMins;
+        const totalMins = ride1Mins + ride2Mins + walkMins + totalWaitMins;
 
         // Walking Domination Pruning: reject if commuter would arrive faster and walk less by walking directly
-        const directWalkMins = Math.round((directWalkDist * 1.3) / 75);
+        const directWalkMins = walkMetersToMinutes(directWalkDist * 1.3);
         const timeSaved = directWalkMins - totalMins;
         const walkSaved = (directWalkDist * 1.3) - totalWalkMeters;
         if (timeSaved <= 0 && walkSaved <= 0 && directWalkDist < 1800) {
+          continue;
+        }
+
+        const generalizedScore = totalMins + (walkMins * 2.5) + (mD.snapD.distanceMeters * 0.05);
+        const prevBest = bestPairMap.get(pairKey);
+        if (prevBest && prevBest.score <= generalizedScore) {
           continue;
         }
 
@@ -974,24 +1042,27 @@ export async function planTransitJourneys(
         const routeColor1 = mO.pattern.feature.properties.color || getRouteColor(rId1, 0);
         const routeColor2 = mD.pattern.feature.properties.color || getRouteColor(rId2, 1);
 
-        const r1EndIdx = Math.min(
-          mO.pattern.coords.length - 1,
-          Math.max(mO.snapO.index + 1, Math.floor(bestConn.fromDist / (mO.pattern.totalDistance / mO.pattern.coords.length)))
-        );
-        const r2StartIdx = Math.min(
-          mD.snapD.index,
-          Math.max(0, Math.floor(bestConn.toDist / (mD.pattern.totalDistance / mD.pattern.coords.length)))
-        );
+        const r1EndSeg = findSegmentIndexAtDistance(mO.pattern.distAlongSegments, bestConn.fromDist);
+        const r1StartSlice = mO.snapO.index + 1;
+        const r1MidCoords = r1EndSeg >= r1StartSlice
+          ? mO.pattern.coords.slice(r1StartSlice, Math.min(mO.pattern.coords.length, r1EndSeg + 1))
+          : [];
 
         const rideGeo1: [number, number][] = [
           [mO.snapO.lat, mO.snapO.lng],
-          ...mO.pattern.coords.slice(mO.snapO.index + 1, r1EndIdx + 1),
+          ...r1MidCoords,
           [bestConn.lat, bestConn.lng]
         ];
 
+        const r2StartSeg = findSegmentIndexAtDistance(mD.pattern.distAlongSegments, bestConn.toDist);
+        const r2StartSlice = r2StartSeg + 1;
+        const r2MidCoords = mD.snapD.index >= r2StartSlice
+          ? mD.pattern.coords.slice(r2StartSlice, mD.snapD.index + 1)
+          : [];
+
         const rideGeo2: [number, number][] = [
           [bestConn.toLat, bestConn.toLng],
-          ...mD.pattern.coords.slice(r2StartIdx + 1, mD.snapD.index + 1),
+          ...r2MidCoords,
           [mD.snapD.lat, mD.snapD.lng]
         ];
 
@@ -1011,7 +1082,7 @@ export async function planTransitJourneys(
             toCoords: [mO.snapO.lat, mO.snapO.lng],
             distanceMeters: Math.round(mO.snapO.distanceMeters),
             distanceKm: Math.round((mO.snapO.distanceMeters / 1000) * 10) / 10,
-            durationMinutes: Math.max(1, Math.round(mO.snapO.distanceMeters / 75)),
+            durationMinutes: walkMetersToMinutes(mO.snapO.distanceMeters),
             geometry: walkO && walkO.length >= 2 ? walkO : [[origin.lat, origin.lng], [mO.snapO.lat, mO.snapO.lng]]
           },
           {
@@ -1042,7 +1113,7 @@ export async function planTransitJourneys(
             toCoords: [bestConn.toLat, bestConn.toLng],
             distanceMeters: Math.round(bestConn.walkM),
             distanceKm: Math.round((bestConn.walkM / 1000) * 10) / 10,
-            durationMinutes: Math.max(1, Math.round(bestConn.walkM / 75)),
+            durationMinutes: walkMetersToMinutes(bestConn.walkM),
             geometry: [
               [bestConn.lat, bestConn.lng],
               [bestConn.toLat, bestConn.toLng]
@@ -1076,14 +1147,12 @@ export async function planTransitJourneys(
             toCoords: [destination.lat, destination.lng],
             distanceMeters: Math.round(mD.snapD.distanceMeters),
             distanceKm: Math.round((mD.snapD.distanceMeters / 1000) * 10) / 10,
-            durationMinutes: Math.max(1, Math.round(mD.snapD.distanceMeters / 75)),
+            durationMinutes: walkMetersToMinutes(mD.snapD.distanceMeters),
             geometry: walkD && walkD.length >= 2 ? walkD : [[mD.snapD.lat, mD.snapD.lng], [destination.lat, destination.lng]]
           }
         ];
 
-        const generalizedScore = totalMins + (walkMins * 2.5) + (mD.snapD.distanceMeters * 0.05);
-
-        transferCandidates.push({
+        bestPairMap.set(pairKey, {
           journey: {
             id: `transfer-${rId1}-${rId2}`,
             tier: 'other',
@@ -1091,6 +1160,7 @@ export async function planTransitJourneys(
             totalMinutes: totalMins,
             walkingMinutes: walkMins,
             ridingMinutes: ride1Mins + ride2Mins,
+            waitMinutes: totalWaitMins,
             totalDistanceKm: Math.round(((r1Dist + r2Dist + totalWalkMeters) / 1000) * 10) / 10,
             totalWalkingMeters: Math.round(totalWalkMeters),
             totalStudentFare: totalFare,
@@ -1103,13 +1173,11 @@ export async function planTransitJourneys(
           },
           score: generalizedScore
         });
-
-        if (transferCandidates.length >= 10) break;
       }
-      if (transferCandidates.length >= 10) break;
     }
 
-    // Sort transfer candidates by generalized score (least walking & most convenient first)
+    // Sort all scored transfer candidates by generalized score before slicing top choices
+    const transferCandidates = Array.from(bestPairMap.values());
     transferCandidates.sort((a, b) => a.score - b.score);
     candidates.push(...transferCandidates.slice(0, 4).map(tc => tc.journey));
   }
@@ -1130,29 +1198,45 @@ export async function planTransitJourneys(
 
   const deduplicatedCandidates = Array.from(uniqueCandidateMap.values());
 
-  // Assign badges & Sort: direct rides first, then least total minutes
+  // Initial sort before walk enhancement: direct rides first, then least total minutes
   deduplicatedCandidates.sort((a, b) => {
     if (a.transfersCount !== b.transfersCount) {
       return a.transfersCount - b.transfersCount;
     }
-    return a.totalMinutes - b.totalMinutes;
+    if (a.totalMinutes !== b.totalMinutes) {
+      return a.totalMinutes - b.totalMinutes;
+    }
+    return a.totalWalkingMeters - b.totalWalkingMeters;
   });
 
-  if (deduplicatedCandidates.length > 0) {
-    // Find fastest & cheapest among candidates
-    const minMins = Math.min(...deduplicatedCandidates.map(c => c.totalMinutes));
-    const minFare = Math.min(...deduplicatedCandidates.map(c => c.totalStudentFare));
-    const minWalk = Math.min(...deduplicatedCandidates.map(c => c.totalWalkingMeters));
-
-    deduplicatedCandidates.forEach(c => {
-      if (c.totalMinutes === minMins && !c.badges.includes('fastest')) c.badges.push('fastest');
-      if (c.totalStudentFare === minFare && !c.badges.includes('cheapest')) c.badges.push('cheapest');
-      if (c.totalWalkingMeters === minWalk && !c.badges.includes('least-walking')) c.badges.push('least-walking');
-    });
-  }
-
-  // Select top candidate options
+  // Select top candidate options while guaranteeing cheapest (e.g. free DC Bus) and least-walking stay represented
   const topCandidates = deduplicatedCandidates.slice(0, 6);
+  if (deduplicatedCandidates.length > 6) {
+    const cheapestCandidate = deduplicatedCandidates.reduce((best, cur) =>
+      cur.totalStudentFare < best.totalStudentFare ||
+      (cur.totalStudentFare === best.totalStudentFare && cur.totalMinutes < best.totalMinutes)
+        ? cur
+        : best
+    );
+    const leastWalkCandidate = deduplicatedCandidates.reduce((best, cur) =>
+      cur.totalWalkingMeters < best.totalWalkingMeters ||
+      (cur.totalWalkingMeters === best.totalWalkingMeters && cur.totalMinutes < best.totalMinutes)
+        ? cur
+        : best
+    );
+    const mustInclude = [cheapestCandidate, leastWalkCandidate].filter(
+      (c, idx, arr) => arr.indexOf(c) === idx && !topCandidates.includes(c)
+    );
+    for (const essential of mustInclude) {
+      // Replace the lowest-priority tail candidate not holding fastest/cheapest/least-walk status
+      for (let i = topCandidates.length - 1; i >= 1; i--) {
+        if (!mustInclude.includes(topCandidates[i])) {
+          topCandidates[i] = essential;
+          break;
+        }
+      }
+    }
+  }
 
   try {
     for (const candidate of topCandidates) {
@@ -1160,16 +1244,50 @@ export async function planTransitJourneys(
       const unenhancedLegs = candidate.legs.filter(l => (l.type === 'walk' || l.type === 'transfer') && l.geometry.length <= 2);
       if (unenhancedLegs.length > 0) {
         candidate.legs = await enhanceJourneyWithRoadWalking(candidate.legs);
-        const walkingLegs = candidate.legs.filter(l => l.type === 'walk' || l.type === 'transfer');
-        const totalWalkMeters = walkingLegs.reduce((sum, l) => sum + (l.distanceMeters || 0), 0);
-        const totalWalkMinutes = walkingLegs.reduce((sum, l) => sum + (l.durationMinutes || 0), 0);
-        candidate.totalWalkingMeters = totalWalkMeters;
-        candidate.walkingMinutes = totalWalkMinutes;
-        candidate.totalMinutes = totalWalkMinutes + candidate.ridingMinutes;
       }
+      const walkingLegs = candidate.legs.filter(l => l.type === 'walk' || l.type === 'transfer');
+      const rideLegs = candidate.legs.filter(l => l.type === 'ride');
+      const totalWalkMeters = walkingLegs.reduce((sum, l) => sum + (l.distanceMeters || 0), 0);
+      const totalWalkMinutes = walkingLegs.length > 0
+        ? walkingLegs.reduce((sum, l) => sum + (l.durationMinutes || 0), 0)
+        : candidate.walkingMinutes;
+      const totalRideMeters = rideLegs.reduce((sum, l) => sum + (l.distanceMeters || 0), 0);
+      const preservedWaitMinutes = candidate.waitMinutes ?? 0;
+
+      candidate.totalWalkingMeters = totalWalkMeters;
+      candidate.walkingMinutes = totalWalkMinutes;
+      candidate.totalMinutes = totalWalkMinutes + candidate.ridingMinutes + preservedWaitMinutes;
+      candidate.totalDistanceKm = Math.round(((totalRideMeters + totalWalkMeters) / 1000) * 10) / 10;
     }
   } catch (enhanceErr) {
     console.warn('[davaoTransitRouter] Walking road enhancement skipped:', enhanceErr);
+  }
+
+  // Re-sort candidates and recompute badges using final road-snapped totals
+  topCandidates.sort((a, b) => {
+    if (a.transfersCount !== b.transfersCount) {
+      return a.transfersCount - b.transfersCount;
+    }
+    if (a.totalMinutes !== b.totalMinutes) {
+      return a.totalMinutes - b.totalMinutes;
+    }
+    return a.totalWalkingMeters - b.totalWalkingMeters;
+  });
+
+  if (topCandidates.length > 0) {
+    const minMins = Math.min(...topCandidates.map(c => c.totalMinutes));
+    const minFare = Math.min(...topCandidates.map(c => c.totalStudentFare));
+    const minWalk = Math.min(...topCandidates.map(c => c.totalWalkingMeters));
+
+    topCandidates.forEach(c => {
+      const badges: TransitJourney['badges'] = [];
+      if (c.id !== 'walk-direct' && c.transfersCount === 0) badges.push('direct-ride');
+      if (c.totalMinutes === minMins) badges.push('fastest');
+      if (c.totalStudentFare === minFare) badges.push('cheapest');
+      if (c.totalWalkingMeters === minWalk) badges.push('least-walking');
+      c.badges = badges;
+      c.tier = c.transfersCount === 0 ? 'best' : 'other';
+    });
   }
 
   return topCandidates;

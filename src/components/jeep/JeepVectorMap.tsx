@@ -27,6 +27,20 @@ const DAVAO_CENTER: [number, number] = [125.6128, 7.0734]; // [lng, lat]
 const MAPTILER_DATAVIZ_STYLE = 'https://api.maptiler.com/maps/dataviz-v4/style.json?key=lYkPykoYvdzqXhWuo3Wa';
 const MAPTILER_HYBRID_STYLE = 'https://api.maptiler.com/maps/hybrid-v4/style.json?key=lYkPykoYvdzqXhWuo3Wa';
 
+const createOfflineBlankStyle = (dark: boolean): maplibregl.StyleSpecification => ({
+  version: 8,
+  sources: {},
+  layers: [
+    {
+      id: 'background',
+      type: 'background',
+      paint: {
+        'background-color': dark ? '#0f172a' : '#f3f4f6'
+      }
+    }
+  ]
+});
+
 // High-resolution MapTiler fallback raster style if vector tiles encounter issues
 const FALLBACK_RASTER_STYLE: maplibregl.StyleSpecification = {
   version: 8,
@@ -64,58 +78,117 @@ export const JeepVectorMap: React.FC<JeepVectorMapProps> = ({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
   const [mapLoaded, setMapLoaded] = useState<boolean>(false);
+  const [styleRevision, setStyleRevision] = useState<number>(0);
+  const [isOfflineBasemap, setIsOfflineBasemap] = useState<boolean>(
+    () => typeof navigator !== 'undefined' && navigator.onLine === false
+  );
   const [hasError, setHasError] = useState<boolean>(false);
 
   // Initialize MapLibre GL
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
-    let hasFallbackTriggered = false;
+    let isUnmounted = false;
+    let fallbackStage = 0; // 0 = remote vector, 1 = remote raster, 2 = inline blank offline
+    let timeoutTimer: number | null = null;
+    let map: maplibregl.Map | null = null;
+
+    const clearTimeoutTimer = () => {
+      if (timeoutTimer !== null) {
+        window.clearTimeout(timeoutTimer);
+        timeoutTimer = null;
+      }
+    };
+
+    const armFallbackTimer = (targetMap: maplibregl.Map, nextStageFn: () => void) => {
+      clearTimeoutTimer();
+      timeoutTimer = window.setTimeout(() => {
+        if (!isUnmounted && !targetMap.isStyleLoaded()) {
+          nextStageFn();
+        }
+      }, 4000);
+    };
 
     try {
-      const map = new maplibregl.Map({
+      const startOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+      fallbackStage = startOffline ? 2 : 0;
+      if (startOffline) setIsOfflineBasemap(true);
+
+      const createdMap = new maplibregl.Map({
         container: mapContainerRef.current,
-        style: MAPTILER_DATAVIZ_STYLE,
+        style: startOffline ? createOfflineBlankStyle(isDark) : MAPTILER_DATAVIZ_STYLE,
         center: DAVAO_CENTER,
         zoom: 13,
         pitch: 0,
         bearing: 0,
         attributionControl: false
       });
+      map = createdMap;
 
-      // Handle style errors with automatic raster fallback
-      map.on('error', (e) => {
-        if (!hasFallbackTriggered && e.error) {
-          console.warn('[JeepVectorMap] Loading fallback raster style:', e.error);
-          hasFallbackTriggered = true;
+      const advanceFallbackStyle = () => {
+        if (isUnmounted) return;
+        clearTimeoutTimer();
+
+        if (fallbackStage === 0 && (typeof navigator === 'undefined' || navigator.onLine !== false)) {
+          fallbackStage = 1;
           try {
-            map.setStyle(FALLBACK_RASTER_STYLE);
+            createdMap.setStyle(FALLBACK_RASTER_STYLE);
+            armFallbackTimer(createdMap, advanceFallbackStyle);
+            return;
+          } catch {
+            // Proceed to offline blank style below
+          }
+        }
+
+        if (fallbackStage < 2) {
+          fallbackStage = 2;
+          setIsOfflineBasemap(true);
+          try {
+            createdMap.setStyle(createOfflineBlankStyle(isDark));
+            window.setTimeout(() => {
+              if (!isUnmounted && createdMap.isStyleLoaded()) {
+                setMapLoaded(true);
+                setStyleRevision(r => r + 1);
+              }
+            }, 120);
           } catch {
             setHasError(true);
           }
         }
-      });
+      };
 
-      // 4-second timeout to fall back if vector tiles are stalled
-      const timeoutTimer = setTimeout(() => {
-        if (!map.isStyleLoaded() && !hasFallbackTriggered) {
-          hasFallbackTriggered = true;
-          console.warn('[JeepVectorMap] Vector style timed out, using fallback raster');
-          try {
-            map.setStyle(FALLBACK_RASTER_STYLE);
-          } catch {
-            setHasError(true);
-          }
-        }
-      }, 4000);
-
-      map.on('load', () => {
-        clearTimeout(timeoutTimer);
+      const markStyleReady = () => {
+        if (isUnmounted || !createdMap.isStyleLoaded()) return;
+        clearTimeoutTimer();
         setMapLoaded(true);
-        requestAnimationFrame(() => map.resize());
+        setStyleRevision(r => r + 1);
+        requestAnimationFrame(() => createdMap.resize());
+      };
+
+      createdMap.on('error', (e) => {
+        if (isUnmounted) return;
+        if (fallbackStage < 2 && (!createdMap.isStyleLoaded() || (e?.error && fallbackStage === 0) || (typeof navigator !== 'undefined' && navigator.onLine === false))) {
+          advanceFallbackStyle();
+        }
       });
 
-      mapRef.current = map;
+      createdMap.on('load', markStyleReady);
+      createdMap.on('style.load', markStyleReady);
+
+      if (startOffline) {
+        window.setTimeout(markStyleReady, 120);
+      } else {
+        armFallbackTimer(createdMap, advanceFallbackStyle);
+      }
+
+      mapRef.current = createdMap;
+
+      const handleOffline = () => {
+        if (!isUnmounted && !createdMap.isStyleLoaded()) {
+          advanceFallbackStyle();
+        }
+      };
+      window.addEventListener('offline', handleOffline);
 
       // Keep map sized properly as containers expand or animate
       const resizeObserver = new ResizeObserver(() => {
@@ -127,15 +200,23 @@ export const JeepVectorMap: React.FC<JeepVectorMapProps> = ({
 
       // Delayed resizes to catch tab transitions
       const timers = [
-        setTimeout(() => map.resize(), 100),
-        setTimeout(() => map.resize(), 300),
-        setTimeout(() => map.resize(), 600)
+        setTimeout(() => createdMap.resize(), 100),
+        setTimeout(() => createdMap.resize(), 300),
+        setTimeout(() => createdMap.resize(), 600)
       ];
 
       return () => {
-        clearTimeout(timeoutTimer);
+        isUnmounted = true;
+        clearTimeoutTimer();
         timers.forEach(t => clearTimeout(t));
+        window.removeEventListener('offline', handleOffline);
         resizeObserver.disconnect();
+        markersRef.current.forEach(m => m.remove());
+        markersRef.current = [];
+        try {
+          createdMap.remove();
+        } catch {}
+        mapRef.current = null;
       };
     } catch (err) {
       console.error('[JeepVectorMap] Failed to initialize MapLibre GL:', err);
@@ -143,10 +224,14 @@ export const JeepVectorMap: React.FC<JeepVectorMapProps> = ({
     }
 
     return () => {
+      isUnmounted = true;
+      clearTimeoutTimer();
       markersRef.current.forEach(m => m.remove());
       markersRef.current = [];
       if (mapRef.current) {
-        mapRef.current.remove();
+        try {
+          mapRef.current.remove();
+        } catch {}
         mapRef.current = null;
       }
     };
@@ -190,7 +275,7 @@ export const JeepVectorMap: React.FC<JeepVectorMapProps> = ({
   // Render Journey or Single Route when data changes
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !mapLoaded) return;
+    if (!map || !mapLoaded || !map.isStyleLoaded()) return;
 
     clearMapLayers();
 
@@ -469,7 +554,7 @@ export const JeepVectorMap: React.FC<JeepVectorMapProps> = ({
         duration: 900
       });
     }
-  }, [journey, singleRouteGeometry, singleRouteColor, mapLoaded, isDark, clearMapLayers]);
+  }, [journey, singleRouteGeometry, singleRouteColor, mapLoaded, styleRevision, isDark, clearMapLayers]);
 
   // Controls
   const handleZoomIn = () => mapRef.current?.zoomIn({ duration: 300 });
@@ -516,6 +601,13 @@ export const JeepVectorMap: React.FC<JeepVectorMapProps> = ({
         <div className="absolute top-4 left-4 z-10 px-3.5 py-1.5 rounded-full bg-[var(--card-bg)] text-[var(--text-primary)] border border-[var(--card-border)] shadow-xl text-xs font-semibold flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: singleRouteColor }} />
           <span>{singleRouteName}</span>
+        </div>
+      )}
+
+      {/* Subtle Offline Basemap Notice */}
+      {isOfflineBasemap && !hasError && (
+        <div className="absolute bottom-4 left-4 z-10 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-800 dark:text-amber-200 text-[11px] font-semibold backdrop-blur-md pointer-events-none">
+          Offline basemap
         </div>
       )}
 

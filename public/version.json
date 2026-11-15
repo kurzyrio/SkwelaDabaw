@@ -1,6 +1,6 @@
 {
-  "version": "1.11.5.12",
-  "versionCode": 141,
+  "version": "1.11.5.13",
+  "versionCode": 142,
   "releaseDate": "2026-11-16",
   "versionScheme": {
     "digit1": "App Version",
@@ -13,15 +13,15 @@
   "forceUpdate": false,
   "developer": "Kurzyrio",
   "supportEmail": "jerriviencenatad@gmail.com",
-  "title": "Offline Sync, Account Switching & Chat Queue Reliability",
+  "title": "Offline Maps, DC Bus Shift Routing & Transit Accuracy",
   "releaseNotes": [
-    "Ensured offline edits and task completions push safely before syncing cloud data so recent changes are never overwritten.",
-    "Preserved full saved expense history and distinct task due times vs. reminder alerts across devices.",
-    "Protected unsynced schedules, grades, and expenses when switching accounts offline and improved queued chat message delivery."
+    "Unblocked Jeepney and DC Bus maps when offline so computed routes, pins, and stops stay visible without waiting on map tiles.",
+    "Filtered DC Bus route suggestions strictly by active AM/PM operating shifts and ₱0.00 fare rules.",
+    "Improved walking path recovery, transfer polyline accuracy, and boarding/transfer wait time estimates across Davao routes."
   ],
   "downloadUrl": "https://skweladabaw.kurzyrio.site/download",
-  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.12.apk",
-  "sizeBytes": 26622409,
+  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.13.apk",
+  "sizeBytes": 26626552,
   "sizeFormatted": "25.4 MB",
-  "sha256": "a19ba9043b4c30265b62a0fe01dd6baab294b62b618cfcb12f80801139147528"
+  "sha256": "7cad9457698df27f09b745b278d531487ac744084cf641cc3799de801ab7eec7"
 }

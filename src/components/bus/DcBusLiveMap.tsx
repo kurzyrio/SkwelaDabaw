@@ -46,6 +46,7 @@ import {
   requestAppLocationPermissions 
 } from '../../services/locationService';
 import { WidgetBridge } from '../../services/widgetService';
+import { transitCacheService } from '../../services/transitCacheService';
 
 export type MapStyleId = 'detailed' | 'minimal' | 'satellite' | 'dark';
 
@@ -56,6 +57,61 @@ export interface MapStyleConfig {
   url: string;
   options: L.TileLayerOptions;
   badgeBg: string;
+}
+
+const BUS_TELEMETRY_CACHE_KEY = 'skweladabaw_cached_bus_telemetry';
+const TELEMETRY_STALE_MS = 25000;
+
+interface CachedBusTelemetry {
+  buses: BusPosition[];
+  fetchedAt: number;
+  source?: string;
+}
+
+function readCachedBusTelemetry(): CachedBusTelemetry | null {
+  try {
+    const raw = localStorage.getItem(BUS_TELEMETRY_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return { buses: parsed, fetchedAt: 0 };
+    }
+    if (parsed && Array.isArray(parsed.buses)) {
+      return {
+        buses: parsed.buses,
+        fetchedAt: Number(parsed.fetchedAt) || 0,
+        source: typeof parsed.source === 'string' ? parsed.source : undefined
+      };
+    }
+  } catch {}
+  return null;
+}
+
+class OfflineBasemapGridLayer extends L.GridLayer {
+  private readonly dark: boolean;
+  constructor(dark: boolean, options?: L.GridLayerOptions) {
+    super(options);
+    this.dark = dark;
+  }
+  protected createTile(): HTMLElement {
+    const tile = document.createElement('canvas');
+    const size = this.getTileSize();
+    tile.width = size.x;
+    tile.height = size.y;
+    const ctx = tile.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = this.dark ? '#0f172a' : '#f3f4f6';
+      ctx.fillRect(0, 0, size.x, size.y);
+      ctx.strokeStyle = this.dark ? 'rgba(148, 163, 184, 0.12)' : 'rgba(100, 116, 139, 0.12)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(0.5, 0.5, size.x - 1, size.y - 1);
+    }
+    return tile;
+  }
+}
+
+function createOfflineBasemapLayer(dark: boolean): L.GridLayer {
+  return new OfflineBasemapGridLayer(dark, { maxZoom: 20 });
 }
 
 export const MAP_STYLES: Record<MapStyleId, MapStyleConfig> = {
@@ -472,7 +528,7 @@ export const DcBusLiveMap: React.FC<DcBusLiveMapProps> = ({
   const polylinesLayerRef = useRef<L.LayerGroup | null>(null);
   const stopsLayerRef = useRef<L.LayerGroup | null>(null);
   const userLocationMarkerRef = useRef<L.Marker | null>(null);
-  const currentTileLayerRef = useRef<L.TileLayer | null>(null);
+  const currentTileLayerRef = useRef<L.Layer | null>(null);
 
   // Map Style & Layer Overlays State with LocalStorage Persistence
   const [mapStyle, setMapStyle] = useState<MapStyleId>(() => {
@@ -500,16 +556,13 @@ export const DcBusLiveMap: React.FC<DcBusLiveMapProps> = ({
   // Active requestAnimationFrame driving animations keyed by bus fleet
   const activeAnimationsRef = useRef<Map<string, number>>(new Map());
   const trafficLayerRef = useRef<L.TileLayer | null>(null);
+  const isTelemetryFetchingRef = useRef<boolean>(false);
+  const lastLiveSuccessAtRef = useRef<number>(0);
 
-  // Clean initialization: Real live telemetry or fresh cached telemetry, with resilient default fleet fallback
+  // Clean initialization: Show cached/default fleet on map without claiming live connection until verified
   const [buses, setBuses] = useState<BusPosition[]>(() => {
-    try {
-      const cached = localStorage.getItem('skweladabaw_cached_bus_telemetry');
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch {}
+    const cached = readCachedBusTelemetry();
+    if (cached && cached.buses.length > 0) return cached.buses;
     return DEFAULT_BUSES;
   });
   const [reloadProgress, setReloadProgress] = useState<number>(0);
@@ -528,14 +581,25 @@ export const DcBusLiveMap: React.FC<DcBusLiveMapProps> = ({
     message: string;
   } | null>(null);
   const [userCoords, setUserCoords] = useState<[number, number] | null>(null);
+  const [isOfflineBasemap, setIsOfflineBasemap] = useState<boolean>(
+    () => typeof navigator !== 'undefined' && navigator.onLine === false
+  );
   const [isLiveConnected, setIsLiveConnected] = useState<boolean>(() => {
-    try {
-      return Boolean(localStorage.getItem('skweladabaw_cached_bus_telemetry'));
-    } catch {
-      return false;
-    }
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
+    const cached = readCachedBusTelemetry();
+    if (!cached || !cached.fetchedAt) return false;
+    return Date.now() - cached.fetchedAt <= TELEMETRY_STALE_MS;
   });
-  const [telemetrySource, setTelemetrySource] = useState<string>('DIBS Telemetry');
+  const [telemetrySource, setTelemetrySource] = useState<string>(() => {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      return 'Offline • Cached Basemap';
+    }
+    const cached = readCachedBusTelemetry();
+    if (cached && cached.fetchedAt && Date.now() - cached.fetchedAt <= TELEMETRY_STALE_MS) {
+      return cached.source || 'DIBS Telemetry';
+    }
+    return cached?.buses.length ? 'Cached Snapshot' : 'DIBS Telemetry';
+  });
 
   // Monitor official schedule status for information only - never erase active buses
   useEffect(() => {
@@ -548,37 +612,77 @@ export const DcBusLiveMap: React.FC<DcBusLiveMapProps> = ({
     return () => clearInterval(interval);
   }, []);
 
-  // 1. Fetch Official Road GeoJSON (polylines & 125 stops)
+  // 1. Fetch Official Road GeoJSON (polylines & 125 stops) with local CacheStorage fallback
   useEffect(() => {
-    fetch('https://davaobus.kurzyrio.site/api/v1/routes?format=geojson')
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      })
-      .then((data: DavaoBusGeoJson) => {
-        setGeoData(data);
-      })
-      .catch(() => {
-        let baseUrl = '/';
-        try {
-          baseUrl = import.meta.env.BASE_URL || '/';
-        } catch {
-          baseUrl = '/';
+    let cancelled = false;
+    let baseUrl = '/';
+    try {
+      baseUrl = import.meta.env.BASE_URL || '/';
+    } catch {
+      baseUrl = '/';
+    }
+    const base = baseUrl.replace(/\/$/, '') + '/';
+    const localPrimaryUrl = `${base}data/davaoBusRoutes.json`;
+    const localFallbackUrl = '/data/davaoBusRoutes.json';
+
+    const loadCachedOrLocalGeoJson = async (): Promise<DavaoBusGeoJson | null> => {
+      try {
+        const res = await transitCacheService.getTransitAssetWithCache(localPrimaryUrl, async (url) => {
+          try {
+            const r = await fetch(url);
+            if (r && r.ok) return r;
+          } catch {}
+          return fetch(localFallbackUrl);
+        });
+        if (!res.ok) return null;
+        return (await res.json()) as DavaoBusGeoJson;
+      } catch {
+        return null;
+      }
+    };
+
+    const loadRoutes = async () => {
+      // Load local/cached dataset immediately so corridors work instantly offline
+      const localData = await loadCachedOrLocalGeoJson();
+      if (!cancelled && localData && Array.isArray(localData.features)) {
+        setGeoData(localData);
+      }
+
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        return;
+      }
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
+      try {
+        const liveUrl = 'https://davaobus.kurzyrio.site/api/v1/routes?format=geojson';
+        const res = await fetch(liveUrl, { signal: controller.signal });
+        if (!res.ok) return;
+        const text = await res.text();
+        const data = JSON.parse(text) as DavaoBusGeoJson;
+        if (!cancelled && data && Array.isArray(data.features) && data.features.length > 0) {
+          setGeoData(data);
+          // Refresh local CacheStorage entry with latest corridor GeoJSON
+          if ('caches' in window) {
+            caches.open('skweladabaw-transit-v1').then((cache) => {
+              cache.put(
+                localPrimaryUrl,
+                new Response(text, { headers: { 'Content-Type': 'application/json' } })
+              ).catch(() => {});
+            }).catch(() => {});
+          }
         }
-        const base = baseUrl.replace(/\/$/, '') + '/';
-        const fetchLocal = () => fetch(`${base}data/davaoBusRoutes.json`).catch(() => fetch('/data/davaoBusRoutes.json'));
-        fetchLocal()
-          .then((res) => {
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            return res.json();
-          })
-          .then((data: DavaoBusGeoJson) => {
-            setGeoData(data);
-          })
-          .catch((err) => {
-            console.warn('Local routes fetch fallback:', err);
-          });
-      });
+      } catch {
+        // Offline or timeout - local cached dataset remains active
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    };
+
+    loadRoutes();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Normalizer for heterogeneous bus payloads with official DCBUS-xx naming, authentic route colors & ignition filtering
@@ -630,108 +734,199 @@ export const DcBusLiveMap: React.FC<DcBusLiveMapProps> = ({
   };
 
   // 2. High-Speed Direct Telemetry Pipeline with Native CapacitorHttp & Fast Relay Failover
+  // 2. High-Speed Direct Telemetry Pipeline with Native CapacitorHttp, Online Guard, and In-Flight Mutex
   const fetchBusPositions = useCallback(async () => {
-    setIsRefreshing(true);
+    if (isTelemetryFetchingRef.current) return;
 
-    // 1. Android Native Direct Query (Bypasses Browser CORS with Zero Delay)
-    if (Capacitor.isNativePlatform()) {
-      try {
-        const nativeRes = await CapacitorHttp.get({
-          url: 'https://davaobus.kurzyrio.site/api/v1/buses',
-          connectTimeout: 4000,
-          readTimeout: 4000
-        });
-        if (nativeRes.status === 200 && nativeRes.data) {
-          const raw = nativeRes.data.buses || nativeRes.data.data;
-          if (Array.isArray(raw) && raw.length > 0) {
-            const parsed = normalizeBusList(raw);
-            if (parsed.length > 0) {
-              setBuses(parsed);
-              setIsLiveConnected(true);
-              setTelemetrySource('DavaoBus Live Telemetry');
-              try {
-                localStorage.setItem('skweladabaw_cached_bus_telemetry', JSON.stringify(parsed));
-              } catch {}
-              setIsRefreshing(false);
-              return;
-            }
-          }
-        }
-      } catch (nativeErr) {
-        console.warn('Native direct telemetry fetch notice:', nativeErr);
-      }
+    const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    if (isOffline) {
+      setIsLiveConnected(false);
+      setIsRefreshing(false);
+      setTelemetrySource((prev) => (prev.includes('Basemap') ? prev : 'Offline • Cached Snapshot'));
+      return;
     }
 
-    const fetchEndpoint = async (url: string, timeoutMs = 2500): Promise<{ buses: any[]; source: string }> => {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
-      try {
-        const res = await fetch(url, { signal: controller.signal, cache: 'no-store' });
-        clearTimeout(timer);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        const raw = json.buses || json.data;
-        if (Array.isArray(raw) && raw.length > 0) {
-          return { buses: raw, source: json.source || 'DavaoBus Telemetry' };
-        }
-        throw new Error('Empty telemetry payload');
-      } catch (err) {
-        clearTimeout(timer);
-        throw err;
+    isTelemetryFetchingRef.current = true;
+    setIsRefreshing(true);
+
+    const commitTelemetry = (parsed: BusPosition[], sourceLabel: string) => {
+      const now = Date.now();
+      const hasFreshUnit = parsed.some((b) => !b.stale);
+      setBuses(parsed);
+      if (hasFreshUnit) {
+        lastLiveSuccessAtRef.current = now;
+        setIsLiveConnected(true);
+        setTelemetrySource(sourceLabel);
+      } else {
+        setIsLiveConnected(false);
+        setTelemetrySource('Stale Telemetry Snapshot');
       }
+      try {
+        localStorage.setItem(
+          BUS_TELEMETRY_CACHE_KEY,
+          JSON.stringify({ buses: parsed, fetchedAt: hasFreshUnit ? now : 0, source: sourceLabel })
+        );
+      } catch {}
     };
 
     try {
-      // Race DavaoBus primary, backup mirror, and relay proxy
-      const primaryCandidates = [
-        fetchEndpoint('https://davaobus.kurzyrio.site/api/v1/buses', 3000),
-        fetchEndpoint('https://busapi.kurzyrio.site/api/v1/buses', 3000),
-        fetchEndpoint('https://skweladabaw.kurzyrio.site/api/dibs_proxy.php', 3000),
-        fetchEndpoint('/api/dcbus-live', 2000)
-      ];
-
-      const winner = await ((Promise as any).any ? (Promise as any).any(primaryCandidates) : Promise.race(primaryCandidates));
-      const parsed = normalizeBusList(winner.buses);
-      if (parsed.length > 0) {
-        setBuses(parsed);
-        setIsLiveConnected(true);
-        setTelemetrySource(winner.source || 'DavaoBus Live Telemetry');
+      // 1. Android Native Direct Query (Bypasses Browser CORS with Zero Delay)
+      if (Capacitor.isNativePlatform()) {
         try {
-          localStorage.setItem('skweladabaw_cached_bus_telemetry', JSON.stringify(parsed));
-        } catch {}
+          const nativeRes = await CapacitorHttp.get({
+            url: 'https://davaobus.kurzyrio.site/api/v1/buses',
+            connectTimeout: 4000,
+            readTimeout: 4000
+          });
+          if (nativeRes.status === 200 && nativeRes.data) {
+            const raw = nativeRes.data.buses || nativeRes.data.data;
+            if (Array.isArray(raw) && raw.length > 0) {
+              const parsed = normalizeBusList(raw);
+              if (parsed.length > 0) {
+                commitTelemetry(parsed, 'DavaoBus Live Telemetry');
+                return;
+              }
+            }
+          }
+        } catch (nativeErr) {
+          console.warn('Native direct telemetry fetch notice:', nativeErr);
+        }
       }
-    } catch (e) {
-      // Fallback: CORS proxy with short timeout if direct is unreachable
+
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        setIsLiveConnected(false);
+        setTelemetrySource('Offline • Cached Snapshot');
+        return;
+      }
+
+      const fetchEndpoint = async (url: string, timeoutMs = 2500): Promise<{ buses: any[]; source: string }> => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          const res = await fetch(url, { signal: controller.signal, cache: 'no-store' });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const json = await res.json();
+          const raw = json.buses || json.data;
+          if (Array.isArray(raw) && raw.length > 0) {
+            return { buses: raw, source: json.source || 'DavaoBus Telemetry' };
+          }
+          throw new Error('Empty telemetry payload');
+        } finally {
+          clearTimeout(timer);
+        }
+      };
+
       try {
-        const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent('https://davaobus.kurzyrio.site/api/v1/buses');
-        const winner = await fetchEndpoint(proxyUrl, 3500);
+        // Race DavaoBus primary, backup mirror, and relay proxy
+        const primaryCandidates = [
+          fetchEndpoint('https://davaobus.kurzyrio.site/api/v1/buses', 3000),
+          fetchEndpoint('https://busapi.kurzyrio.site/api/v1/buses', 3000),
+          fetchEndpoint('https://skweladabaw.kurzyrio.site/api/dibs_proxy.php', 3000),
+          fetchEndpoint('/api/dcbus-live', 2000)
+        ];
+
+        const winner = await ((Promise as any).any ? (Promise as any).any(primaryCandidates) : Promise.race(primaryCandidates));
         const parsed = normalizeBusList(winner.buses);
         if (parsed.length > 0) {
-          setBuses(parsed);
-          setIsLiveConnected(true);
-          setTelemetrySource('DavaoBus Live Telemetry');
-          try {
-            localStorage.setItem('skweladabaw_cached_bus_telemetry', JSON.stringify(parsed));
-          } catch {}
+          commitTelemetry(parsed, winner.source || 'DavaoBus Live Telemetry');
+          return;
         }
-      } catch (err) {
-        console.warn('Telemetry refresh notice:', err);
+      } catch {
+        // Fallback: CORS proxy only when browser confirms connectivity
+        if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+          try {
+            const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent('https://davaobus.kurzyrio.site/api/v1/buses');
+            const winner = await fetchEndpoint(proxyUrl, 3500);
+            const parsed = normalizeBusList(winner.buses);
+            if (parsed.length > 0) {
+              commitTelemetry(parsed, 'DavaoBus Live Telemetry');
+              return;
+            }
+          } catch (err) {
+            console.warn('Telemetry refresh notice:', err);
+          }
+        }
+      }
+
+      // Mark disconnected if telemetry has expired past freshness threshold or never connected
+      if (!lastLiveSuccessAtRef.current || Date.now() - lastLiveSuccessAtRef.current > TELEMETRY_STALE_MS) {
+        setIsLiveConnected(false);
+        setTelemetrySource(
+          typeof navigator !== 'undefined' && navigator.onLine === false
+            ? 'Offline • Cached Snapshot'
+            : 'Telemetry Reconnecting...'
+        );
       }
     } finally {
+      isTelemetryFetchingRef.current = false;
       setIsRefreshing(false);
     }
   }, []);
 
-  // Telemetry refresh cycle (strictly every 5s always)
+  // Telemetry refresh cycle (strictly every 5s when online)
   useEffect(() => {
     fetchBusPositions();
     const timer = setInterval(() => {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
       fetchBusPositions();
     }, 5000);
     return () => clearInterval(timer);
   }, [fetchBusPositions]);
 
-  // 3. Initialize Leaflet Map with Custom Panes (Stops, Routes, Traffic)
+  // 3. Initialize Leaflet Map with Custom Panes (Stops, Routes, Traffic) and Offline Basemap Fallback
+  const mountBasemapLayer = useCallback((map: L.Map, styleId: MapStyleId) => {
+    if (currentTileLayerRef.current) {
+      try {
+        map.removeLayer(currentTileLayerRef.current);
+      } catch {}
+      currentTileLayerRef.current = null;
+    }
+
+    const isDarkStyle = styleId === 'dark';
+    const offlineNow = typeof navigator !== 'undefined' && navigator.onLine === false;
+    if (offlineNow) {
+      const offlineGrid = createOfflineBasemapLayer(isDarkStyle).addTo(map);
+      if ((offlineGrid as any).bringToBack) (offlineGrid as any).bringToBack();
+      currentTileLayerRef.current = offlineGrid;
+      setIsOfflineBasemap(true);
+      return;
+    }
+
+    const config = MAP_STYLES[styleId] || MAP_STYLES.detailed;
+    let consecutiveErrors = 0;
+    let switchedOffline = false;
+    const tile = L.tileLayer(config.url, config.options);
+
+    tile.on('tileload', () => {
+      consecutiveErrors = 0;
+      if (!switchedOffline) {
+        setIsOfflineBasemap(false);
+      }
+    });
+
+    tile.on('tileerror', () => {
+      consecutiveErrors += 1;
+      const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+      if (!switchedOffline && (offline || consecutiveErrors >= 4)) {
+        switchedOffline = true;
+        try {
+          if (currentTileLayerRef.current === tile) {
+            map.removeLayer(tile);
+          }
+        } catch {}
+        const offlineGrid = createOfflineBasemapLayer(isDarkStyle).addTo(map);
+        if ((offlineGrid as any).bringToBack) (offlineGrid as any).bringToBack();
+        currentTileLayerRef.current = offlineGrid;
+        setIsOfflineBasemap(true);
+      }
+    });
+
+    tile.addTo(map);
+    if ((tile as any).bringToBack) (tile as any).bringToBack();
+    currentTileLayerRef.current = tile;
+    setIsOfflineBasemap(false);
+  }, []);
+
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
 
@@ -753,10 +948,8 @@ export const DcBusLiveMap: React.FC<DcBusLiveMapProps> = ({
     map.createPane('stopsPane');
     map.getPane('stopsPane')!.style.zIndex = '450';
 
-    // Initialize Base Tile Layer from Active Style Preference
-    const initialConfig = MAP_STYLES[mapStyle] || MAP_STYLES.detailed;
-    const tile = L.tileLayer(initialConfig.url, initialConfig.options).addTo(map);
-    currentTileLayerRef.current = tile;
+    // Initialize Base Layer from Active Style Preference or Offline Fallback
+    mountBasemapLayer(map, mapStyle);
 
     const polyGroup = L.layerGroup();
     const stopsGroup = L.layerGroup();
@@ -774,6 +967,26 @@ export const DcBusLiveMap: React.FC<DcBusLiveMapProps> = ({
     map.on('zoomend', () => {
       setCurrentZoom(map.getZoom());
     });
+
+    const handleOffline = () => {
+      setIsLiveConnected(false);
+      setTelemetrySource('Offline • Cached Snapshot');
+      mountBasemapLayer(map, mapStyle);
+      if (trafficLayerRef.current && map.hasLayer(trafficLayerRef.current)) {
+        map.removeLayer(trafficLayerRef.current);
+      }
+    };
+
+    const handleOnline = () => {
+      mountBasemapLayer(map, mapStyle);
+      if (showTraffic && trafficLayerRef.current && !map.hasLayer(trafficLayerRef.current)) {
+        trafficLayerRef.current.addTo(map);
+      }
+      fetchBusPositions();
+    };
+
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
 
     // Immediate and multi-stage invalidation to force Leaflet to recalculate canvas dimensions and render tiles
     map.invalidateSize();
@@ -797,6 +1010,8 @@ export const DcBusLiveMap: React.FC<DcBusLiveMapProps> = ({
     }
 
     return () => {
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
       invalidateTimers.forEach((t) => clearTimeout(t));
       if (resizeObserver) {
         resizeObserver.disconnect();
@@ -814,27 +1029,19 @@ export const DcBusLiveMap: React.FC<DcBusLiveMapProps> = ({
     const map = mapInstanceRef.current;
     if (!map) return;
 
-    const config = MAP_STYLES[mapStyle] || MAP_STYLES.detailed;
-
-    if (currentTileLayerRef.current) {
-      map.removeLayer(currentTileLayerRef.current);
-    }
-
-    const newTile = L.tileLayer(config.url, config.options).addTo(map);
-    newTile.bringToBack();
-    currentTileLayerRef.current = newTile;
-
+    mountBasemapLayer(map, mapStyle);
     localStorage.setItem('skweladabaw_map_style', mapStyle);
-  }, [mapStyle]);
+  }, [mapStyle, mountBasemapLayer]);
 
   // Synchronize Live Traffic Layer
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
 
-    if (showTraffic) {
+    const offlineNow = typeof navigator !== 'undefined' && navigator.onLine === false;
+    if (showTraffic && !offlineNow) {
       if (!trafficLayerRef.current) {
-        trafficLayerRef.current = L.tileLayer(
+        const trafficLayer = L.tileLayer(
           'https://{s}.google.com/vt?lyrs=traffic&x={x}&y={y}&z={z}',
           {
             maxZoom: 20,
@@ -843,6 +1050,12 @@ export const DcBusLiveMap: React.FC<DcBusLiveMapProps> = ({
             opacity: 0.85
           }
         );
+        trafficLayer.on('tileerror', () => {
+          if (typeof navigator !== 'undefined' && navigator.onLine === false && map.hasLayer(trafficLayer)) {
+            map.removeLayer(trafficLayer);
+          }
+        });
+        trafficLayerRef.current = trafficLayer;
       }
       if (!map.hasLayer(trafficLayerRef.current)) {
         trafficLayerRef.current.addTo(map);
@@ -1822,7 +2035,9 @@ export const DcBusLiveMap: React.FC<DcBusLiveMapProps> = ({
               <span className={`w-2.5 h-2.5 rounded-full ${isLiveConnected ? 'bg-[#30D158] animate-pulse shadow-[0_0_8px_#30D158]' : 'bg-[#FF9F0A]'}`} />
               <span className="font-bold">{filteredBuses.length} Buses Live</span>
               <span className="text-[var(--text-secondary)]">•</span>
-              <span className="text-[11px] text-[var(--text-secondary)] truncate max-w-[150px] sm:max-w-none">{telemetrySource}</span>
+              <span className="text-[11px] text-[var(--text-secondary)] truncate max-w-[150px] sm:max-w-none">
+                {isOfflineBasemap && !telemetrySource.includes('Offline') ? `${telemetrySource} • Offline Basemap` : telemetrySource}
+              </span>
             </span>
             <span className="relative z-10 font-bold text-[#30D158] shrink-0">Zero Fare Transit</span>
           </div>
