@@ -6,6 +6,7 @@ import { DayReminderItem, DayOfWeek } from '../../types';
 import { scheduleDayReminder, cancelDayReminder } from '../../services/notificationService';
 import { CustomTimePicker } from '../common/CustomTimePicker';
 import { queueCloudSync } from '../../services/cloudSyncService';
+import { generateSyncUUID, recordSyncDeletion } from '../../services/userScope';
 import { syncRoutinesToWidgets } from '../../services/widgetService';
 import { getSavedSession } from '../../services/authService';
 
@@ -40,12 +41,17 @@ export const DayReminderManager: React.FC = () => {
     e.preventDefault();
     if (!title.trim() || !time) return;
 
+    const now = new Date().toISOString();
     const reminderData: DayReminderItem = {
+      uuid: generateSyncUUID('routine'),
       title: title.trim(),
       dayOfWeek: selectedDay,
       time,
       enabled: true,
-      notes: notes.trim() || undefined
+      notes: notes.trim() || undefined,
+      createdAt: now,
+      updatedAt: now,
+      syncStatus: 'pending'
     };
 
     const reminderId = (await db.dayReminders.add(reminderData)) as number;
@@ -72,7 +78,11 @@ export const DayReminderManager: React.FC = () => {
   const toggleReminder = async (reminder: DayReminderItem) => {
     if (!reminder.id) return;
     const nextEnabled = !reminder.enabled;
-    await db.dayReminders.update(reminder.id, { enabled: nextEnabled });
+    await db.dayReminders.update(reminder.id, {
+      enabled: nextEnabled,
+      updatedAt: new Date().toISOString(),
+      syncStatus: 'pending'
+    });
 
     if (nextEnabled) {
       await scheduleDayReminder({ ...reminder, enabled: true });
@@ -84,6 +94,10 @@ export const DayReminderManager: React.FC = () => {
   };
 
   const deleteReminder = async (id: number) => {
+    const existing = await db.dayReminders.get(id);
+    if (existing?.uuid) {
+      recordSyncDeletion('routines', existing.uuid);
+    }
     await cancelDayReminder(id);
     await db.dayReminders.delete(id);
     await syncRoutineCache();
@@ -105,10 +119,13 @@ export const DayReminderManager: React.FC = () => {
 
     const updatedData: DayReminderItem = {
       ...editingReminder,
+      uuid: editingReminder.uuid || generateSyncUUID('routine'),
       title: title.trim(),
       dayOfWeek: selectedDay,
       time,
-      notes: notes.trim() || undefined
+      notes: notes.trim() || undefined,
+      updatedAt: new Date().toISOString(),
+      syncStatus: 'pending'
     };
 
     await db.dayReminders.update(editingReminder.id, updatedData);

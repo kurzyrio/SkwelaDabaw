@@ -17,10 +17,39 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.5.12',
+    releaseDate: 'November 16, 2026',
+    title: 'Offline Sync, Account Switching & Chat Queue Reliability',
+    isLatest: true,
+    tagline: 'Protected offline edits, full expense history, saved route isolation across accounts, and queued campus chat delivery.',
+    highlights: [
+      'Pushed offline edits and deletions to the cloud before pulling updates to avoid losing recent changes',
+      'Preserved older expense history and kept task due times separate from reminder alert times',
+      'Safeguarded unsynced student data during offline account switches and stabilized offline chat retries'
+    ],
+    items: [
+      {
+        type: 'fix',
+        title: 'Offline-First Cloud Sync Protection',
+        description: 'Local edits, completed tasks, and deletions now upload before cloud updates hydrate so reconnecting never overwrites recent work.'
+      },
+      {
+        type: 'improvement',
+        title: 'Full Expense History & Distinct Task Times',
+        description: 'Removed the 100-item expense sync cap and kept task due times separate from reminder times across synced devices.'
+      },
+      {
+        type: 'fix',
+        title: 'Safe Account Switching & Chat Queue',
+        description: 'Blocked destructive account switches while offline with unsynced changes, isolated saved places and routes per account, and preserved unsent chat messages until confirmed delivered.'
+      }
+    ]
+  },
+  {
     version: '1.11.5.11',
     releaseDate: 'November 16, 2026',
     title: 'Schedule Scanner, Task Sync & Security Hardening',
-    isLatest: true,
+    isLatest: false,
     tagline: 'Strengthened authentication, task isolation, schedule share ownership, and multi-format schedule photo scanning.',
     highlights: [
       'Supported JPEG, PNG, and WebP schedule images cleanly in the AI timetable scanner',

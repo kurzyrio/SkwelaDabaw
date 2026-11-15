@@ -16,10 +16,19 @@ import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
 import { syncTasksToWidgets } from './widgetService';
 import { scheduleTaskReminder, cancelTaskReminder } from './notificationService';
+import {
+  clearSyncDeletion,
+  clearSyncedTombstones,
+  parseUtcTimestampMs,
+  readSyncTombstones,
+  recordSyncDeletion,
+  scopedKey
+} from './userScope';
 
 const TASKS_SYNC_API_URL = 'https://skweladabaw.kurzyrio.site/api/tasks_sync.php';
 
 let isSyncing = false;
+let pendingResyncAfterCurrent = false;
 let syncTimeout: ReturnType<typeof setTimeout> | null = null;
 let isBackgroundSyncInitialized = false;
 
@@ -46,9 +55,12 @@ export function syncTaskLocalCache(tasks: TaskItem[]): void {
     if (session?.uid && typeof localStorage !== 'undefined') {
       const activeTasks = tasks.filter((t) => t.sync_status !== 'pending_delete');
       localStorage.setItem(`skweladabaw_cached_tasks_${session.uid}`, JSON.stringify(activeTasks));
+      const scopedEmptyKey = scopedKey('skweladabaw_explicit_empty_tasks', session.uid);
       if (activeTasks.length === 0) {
+        localStorage.setItem(scopedEmptyKey, 'true');
         localStorage.setItem('skweladabaw_explicit_empty_tasks', 'true');
       } else {
+        localStorage.removeItem(scopedEmptyKey);
         localStorage.removeItem('skweladabaw_explicit_empty_tasks');
       }
     }
@@ -143,6 +155,7 @@ export async function createTask(data: CreateTaskInput): Promise<TaskItem> {
   const now = new Date().toISOString();
   const uuid = data.uuid || generateTaskUUID();
   const isCompleted = Boolean(data.is_completed ?? data.completed ?? false);
+  clearSyncDeletion('tasks', uuid, getSavedSession()?.uid);
 
   const newTask: TaskItem = {
     ...data,
@@ -244,23 +257,14 @@ export async function updateTask(task: TaskItem, updates: Partial<TaskItem>): Pr
 export async function deleteTask(task: TaskItem): Promise<void> {
   const taskId = task.id;
   const taskUuid = task.uuid;
+  const uid = getSavedSession()?.uid;
 
   // Cancel local notification
   if (taskId) {
     await cancelTaskReminder(taskId);
   }
 
-  // Immediately remove from account-specific cache in localStorage so it cannot resurrect
-  (async () => {
-    try {
-      const all = await db.tasks.toArray();
-      const remaining = all.filter(
-        (t) => (taskId ? t.id !== taskId : true) && (taskUuid ? t.uuid !== taskUuid : true) && t.sync_status !== 'pending_delete'
-      );
-      syncTaskLocalCache(remaining);
-    } catch (_) {}
-  })();
-
+  // Await Dexie persistence BEFORE updating cache/widgets or flushing to server
   if (task.sync_status === 'pending_create' || !taskUuid) {
     // Never synced to cloud or missing UUID -> hard delete immediately
     if (taskId) {
@@ -269,7 +273,7 @@ export async function deleteTask(task: TaskItem): Promise<void> {
       await db.tasks.where('uuid').equals(taskUuid).delete();
     }
   } else {
-    // Soft mark as pending_delete
+    // Soft mark as pending_delete and record tombstone for unified cloud sync fallback
     const now = new Date().toISOString();
     if (taskId) {
       await db.tasks.update(taskId, {
@@ -282,19 +286,18 @@ export async function deleteTask(task: TaskItem): Promise<void> {
         updated_at: now
       });
     }
+    recordSyncDeletion('tasks', taskUuid, uid);
   }
 
-  // Update widgets with active tasks
-  (async () => {
-    try {
-      const allTasks = await db.tasks.toArray();
-      const active = allTasks.filter((t) => t.sync_status !== 'pending_delete');
-      syncTaskLocalCache(active);
-      syncTasksToWidgets(active);
-    } catch (e) {
-      console.debug('[taskSyncService] Task delete widget note:', e);
-    }
-  })();
+  // Update local cache and Android widgets from committed Dexie state
+  try {
+    const allTasks = await db.tasks.toArray();
+    const active = allTasks.filter((t) => t.sync_status !== 'pending_delete');
+    syncTaskLocalCache(active);
+    syncTasksToWidgets(active);
+  } catch (e) {
+    console.debug('[taskSyncService] Task delete widget note:', e);
+  }
 
   // Immediately flush sync so database deletes the task without delay
   flushPendingSync().catch((err) => {
@@ -307,7 +310,10 @@ export async function deleteTask(task: TaskItem): Promise<void> {
  * Silent background batch flush to MySQL tasks_sync.php endpoint
  */
 export async function flushPendingSync(): Promise<void> {
-  if (isSyncing) return;
+  if (isSyncing) {
+    pendingResyncAfterCurrent = true;
+    return;
+  }
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     return;
   }
@@ -321,24 +327,39 @@ export async function flushPendingSync(): Promise<void> {
   isSyncing = true;
 
   try {
+    const tombstones = readSyncTombstones(session.uid);
     const pendingTasks = await db.tasks
       .where('sync_status')
       .anyOf(['pending_create', 'pending_update', 'pending_delete'])
       .toArray();
 
-    if (pendingTasks.length === 0) {
-      isSyncing = false;
+    if (pendingTasks.length === 0 && tombstones.tasks.length === 0) {
       return;
     }
 
     const token = await getFirebaseIdToken();
     if (!token) {
-      isSyncing = false;
       return;
     }
 
     const tasksToUpsert = pendingTasks.filter((t) => t.sync_status !== 'pending_delete');
     const tasksToDelete = pendingTasks.filter((t) => t.sync_status === 'pending_delete');
+
+    // Snapshot updated_at per UUID so edits made while HTTP POST is in-flight stay queued
+    const sentVersionByUuid = new Map<string, string>();
+    for (const t of tasksToUpsert) {
+      if (t.uuid) {
+        sentVersionByUuid.set(t.uuid, t.updated_at);
+      }
+    }
+
+    const deletedEntriesMap = new Map<string, { uuid: string; deletedAt: string }>();
+    for (const entry of tombstones.tasks) {
+      if (entry.uuid) deletedEntriesMap.set(entry.uuid, entry);
+    }
+    for (const td of tasksToDelete) {
+      if (td.uuid) deletedEntriesMap.set(td.uuid, { uuid: td.uuid, deletedAt: td.updated_at });
+    }
 
     const payload = {
       tasks: tasksToUpsert.map((t) => ({
@@ -357,7 +378,7 @@ export async function flushPendingSync(): Promise<void> {
         created_at: t.created_at,
         updated_at: t.updated_at
       })),
-      deleted_uuids: tasksToDelete.map((t) => t.uuid)
+      deleted_uuids: Array.from(deletedEntriesMap.values())
     };
 
     let responseData: any = null;
@@ -369,32 +390,64 @@ export async function flushPendingSync(): Promise<void> {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        data: payload
+        data: payload,
+        connectTimeout: 8000,
+        readTimeout: 8000
       });
-      responseData = res.data;
+      if (res.status >= 200 && res.status < 300) {
+        responseData = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
+      }
     } else {
-      const res = await fetch(TASKS_SYNC_API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(payload)
-      });
-      if (res.ok) {
-        responseData = await res.json();
+      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const timer = controller ? setTimeout(() => controller.abort(), 10000) : null;
+      try {
+        const res = await fetch(TASKS_SYNC_API_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(payload),
+          signal: controller?.signal
+        });
+        if (res.ok) {
+          responseData = await res.json();
+        }
+      } finally {
+        if (timer) clearTimeout(timer);
       }
     }
 
     if (responseData && responseData.success) {
-      // 1. Mark acknowledged upserted tasks as 'synced'
+      // Clear only the snapshotted task tombstones acknowledged in this push
+      if (tombstones.tasks.length > 0) {
+        clearSyncedTombstones(
+          {
+            schedules: [],
+            routines: [],
+            expenses: [],
+            transit: [],
+            grades: [],
+            places: [],
+            tasks: tombstones.tasks,
+            bookmarks: []
+          },
+          session.uid
+        );
+      }
+
+      // 1. Mark acknowledged upserted tasks as 'synced' ONLY if updated_at still matches the sent snapshot
       const syncedUuids: string[] = responseData.synced_uuids || tasksToUpsert.map((t) => t.uuid);
       if (syncedUuids.length > 0) {
         await db.transaction('rw', db.tasks, async () => {
           for (const uuid of syncedUuids) {
             const current = await db.tasks.where('uuid').equals(uuid).first();
-            // Only mark synced if user didn't mark it pending_delete while request was in-flight
-            if (current && current.sync_status !== 'pending_delete') {
+            const sentUpdatedAt = sentVersionByUuid.get(uuid);
+            if (
+              current &&
+              current.sync_status !== 'pending_delete' &&
+              (!sentUpdatedAt || current.updated_at === sentUpdatedAt)
+            ) {
               await db.tasks.where('uuid').equals(uuid).modify({ sync_status: 'synced' });
             }
           }
@@ -406,15 +459,18 @@ export async function flushPendingSync(): Promise<void> {
       await db.transaction('rw', db.tasks, async () => {
         for (const uuid of confirmedDeletedUuids) {
           if (uuid) {
-            await db.tasks.where('uuid').equals(uuid).delete();
+            const cur = await db.tasks.where('uuid').equals(uuid).first();
+            if (cur && cur.sync_status === 'pending_delete') {
+              await db.tasks.where('uuid').equals(uuid).delete();
+            }
           }
         }
-        // Also clean up by taskId to prevent orphan records
         for (const td of tasksToDelete) {
           if (td.id) {
-            await db.tasks.delete(td.id);
-          } else if (td.uuid) {
-            await db.tasks.where('uuid').equals(td.uuid).delete();
+            const cur = await db.tasks.get(td.id);
+            if (cur && cur.sync_status === 'pending_delete') {
+              await db.tasks.delete(td.id);
+            }
           }
         }
       });
@@ -427,6 +483,10 @@ export async function flushPendingSync(): Promise<void> {
     console.debug('[taskSyncService] Background sync caught error silently:', err);
   } finally {
     isSyncing = false;
+    if (pendingResyncAfterCurrent) {
+      pendingResyncAfterCurrent = false;
+      scheduleSilentSync(250);
+    }
   }
 }
 
@@ -436,49 +496,81 @@ export async function flushPendingSync(): Promise<void> {
 export async function pullCloudTasks(): Promise<void> {
   const session = getSavedSession();
   if (!session || !session.isLoggedIn) return;
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return;
 
   try {
     const token = await getFirebaseIdToken();
     if (!token) return;
 
     let serverTasks: any[] = [];
+    let fetchSucceeded = false;
 
     if (Capacitor.isNativePlatform()) {
       const res = await CapacitorHttp.get({
         url: TASKS_SYNC_API_URL,
         headers: {
           'Authorization': `Bearer ${token}`
-        }
+        },
+        connectTimeout: 8000,
+        readTimeout: 8000
       });
-      if (res.data && res.data.success && Array.isArray(res.data.tasks)) {
-        serverTasks = res.data.tasks;
+      const parsed = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
+      if (res.status >= 200 && res.status < 300 && parsed && parsed.success && Array.isArray(parsed.tasks)) {
+        serverTasks = parsed.tasks;
+        fetchSucceeded = true;
       }
     } else {
-      const res = await fetch(TASKS_SYNC_API_URL, {
-        headers: {
-          'Authorization': `Bearer ${token}`
+      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const timer = controller ? setTimeout(() => controller.abort(), 10000) : null;
+      try {
+        const res = await fetch(TASKS_SYNC_API_URL, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          signal: controller?.signal
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && Array.isArray(json.tasks)) {
+            serverTasks = json.tasks;
+            fetchSucceeded = true;
+          }
         }
-      });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && Array.isArray(json.tasks)) {
-          serverTasks = json.tasks;
-        }
+      } finally {
+        if (timer) clearTimeout(timer);
       }
     }
 
-    if (serverTasks.length === 0) return;
+    if (!fetchSucceeded) return;
+
+    const tombstones = readSyncTombstones(session.uid);
+    const survivingServerTasks = serverTasks.filter((st) => {
+      if (!st.uuid) return false;
+      const entry = tombstones.tasks.find((e) => e.uuid === st.uuid);
+      if (!entry) return true;
+      const delMs = parseUtcTimestampMs(entry.deletedAt);
+      const updMs = parseUtcTimestampMs(st.updated_at);
+      return updMs > 0 && delMs > 0 && updMs > delMs;
+    });
 
     await db.transaction('rw', db.tasks, async () => {
-      for (const st of serverTasks) {
-        const existing = await db.tasks.where('uuid').equals(st.uuid).first();
+      const localTasks = await db.tasks.toArray();
+      const localByUuid = new Map<string, TaskItem>();
+      for (const lt of localTasks) {
+        if (lt.uuid) localByUuid.set(lt.uuid, lt);
+      }
+      const serverUuidSet = new Set(survivingServerTasks.map((st) => String(st.uuid)));
+
+      for (const st of survivingServerTasks) {
+        const existing = localByUuid.get(String(st.uuid));
         if (!existing) {
           await db.tasks.add({
             uuid: st.uuid,
             title: st.title,
             subjectCode: st.subject_code || undefined,
             dueDate: st.due_date || '',
-            dueTime: st.reminder_time || '23:59',
+            dueTime: st.due_time || st.dueTime || '23:59',
+            reminderTime: st.reminder_time || st.reminderTime || '',
             priority: st.priority || 'medium',
             completed: Boolean(st.is_completed ?? st.completed),
             is_completed: Boolean(st.is_completed ?? st.completed),
@@ -489,12 +581,12 @@ export async function pullCloudTasks(): Promise<void> {
             notes: st.description || undefined
           });
         } else if (existing.sync_status === 'synced') {
-          // Update only if existing task has no un-synced local edits
           await db.tasks.where('uuid').equals(st.uuid).modify({
             title: st.title,
             subjectCode: st.subject_code || undefined,
             dueDate: st.due_date || existing.dueDate,
-            dueTime: st.reminder_time || existing.dueTime,
+            dueTime: st.due_time || st.dueTime || existing.dueTime || '23:59',
+            reminderTime: st.reminder_time !== undefined ? (st.reminder_time || '') : existing.reminderTime,
             priority: st.priority || existing.priority,
             completed: Boolean(st.is_completed ?? st.completed),
             is_completed: Boolean(st.is_completed ?? st.completed),
@@ -504,11 +596,21 @@ export async function pullCloudTasks(): Promise<void> {
           });
         }
       }
+
+      // Reconcile deletions (including empty server array): delete ONLY local 'synced' tasks missing on server
+      for (const lt of localTasks) {
+        if (lt.sync_status === 'synced' && lt.uuid && !serverUuidSet.has(lt.uuid) && lt.id) {
+          await db.tasks.delete(lt.id);
+        }
+      }
     });
 
     const currentTasks = await db.tasks.toArray();
     syncTaskLocalCache(currentTasks);
     syncTasksToWidgets(currentTasks.filter((t) => t.sync_status !== 'pending_delete'));
+    if (currentTasks.some((t) => t.sync_status !== 'synced')) {
+      scheduleSilentSync(500);
+    }
   } catch (err) {
     console.debug('[taskSyncService] Pull cloud tasks note:', err);
   }

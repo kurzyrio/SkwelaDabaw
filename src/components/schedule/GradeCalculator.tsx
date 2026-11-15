@@ -14,6 +14,7 @@ import { GradeItem } from '../../types';
 import { useLiveQuery } from 'dexie-react-hooks';
 import confetti from 'canvas-confetti';
 import { queueCloudSync } from '../../services/cloudSyncService';
+import { generateSyncUUID, recordSyncDeletion } from '../../services/userScope';
 
 export const GradeCalculator: React.FC = () => {
   const [isAdding, setIsAdding] = useState(false);
@@ -61,8 +62,10 @@ export const GradeCalculator: React.FC = () => {
 
     const rawAvg = (Number(prelim) + Number(midterm) + Number(prefinal) + Number(finals)) / 4;
     const transmuted = calculateTransmuted(rawAvg, gradingScale);
+    const now = new Date().toISOString();
 
     await db.grades.add({
+      uuid: generateSyncUUID('grade'),
       subjectCode: subjectCode.trim(),
       subjectName: subjectName.trim() || subjectCode.trim(),
       units: Number(units) || 3,
@@ -72,7 +75,10 @@ export const GradeCalculator: React.FC = () => {
       finals: Number(finals),
       rawAverage: Number(rawAvg.toFixed(2)),
       transmutedGrade: transmuted,
-      gradingScale
+      gradingScale,
+      createdAt: now,
+      updatedAt: now,
+      syncStatus: 'pending'
     });
     queueCloudSync();
 
@@ -91,6 +97,10 @@ export const GradeCalculator: React.FC = () => {
 
   const handleDelete = async (id?: number) => {
     if (!id) return;
+    const existing = await db.grades.get(id);
+    if (existing?.uuid) {
+      recordSyncDeletion('grades', existing.uuid);
+    }
     await db.grades.delete(id);
     queueCloudSync();
   };

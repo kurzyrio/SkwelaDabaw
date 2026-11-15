@@ -1137,7 +1137,7 @@ export function App() {
         }}
         onContinueGuest={() => {
           setIsSessionExpiredModalOpen(false);
-          signOutUser();
+          signOutUser().catch(() => signOutUser(undefined, { skipAccountSync: true }).catch(() => {}));
         }}
       />
 

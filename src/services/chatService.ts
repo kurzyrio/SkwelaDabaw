@@ -13,6 +13,24 @@ import { compressImageForChat } from '../utils/imageCompressor';
 
 const CHAT_API_URL = 'https://skweladabaw.kurzyrio.site/api/chat.php';
 const FEEDBACK_API_URL = 'https://skweladabaw.kurzyrio.site/api/feedback.php';
+const DEFAULT_HTTP_TIMEOUT_MS = 8000;
+
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit = {},
+  timeoutMs = DEFAULT_HTTP_TIMEOUT_MS
+): Promise<Response> {
+  if (typeof AbortController === 'undefined') {
+    return fetch(url, options);
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export const INITIAL_CHANNEL_MESSAGES: Record<string, ChatMessage[]> = {};
 
@@ -35,7 +53,7 @@ export async function fetchChannelsFromMySQL(): Promise<ChatChannel[]> {
         rawData = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
       }
     } else {
-      const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      const res = await fetchWithTimeout(url, { headers: { 'Accept': 'application/json' } }, 6000);
       if (res.ok) {
         rawData = await res.json();
       }
@@ -110,7 +128,7 @@ export async function fetchMessagesFromMySQL(
         rawData = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
       }
     } else {
-      const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      const res = await fetchWithTimeout(url, { headers: { 'Accept': 'application/json' } }, 6000);
       if (res.ok) {
         rawData = await res.json();
       }
@@ -197,6 +215,87 @@ export const subscribeToChannel = (
 };
 
 /**
+ * Internal server POST helper that throws on error instead of silently re-queuing.
+ */
+async function postMessageToServer(
+  message: Omit<ChatMessage, 'id'>,
+  tempId: string,
+  senderUid?: string
+): Promise<ChatMessage> {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    throw new Error('Device is offline');
+  }
+
+  const token = await getFirebaseIdToken();
+  const chatPayload = {
+    channelId: message.channelId,
+    senderUid: senderUid || message.senderUid || '',
+    content: message.content,
+    senderUsername: message.senderUsername || '',
+    senderName: message.senderName || 'Student',
+    senderSchool: message.senderSchool || 'Davao Student',
+    senderAvatar: message.senderAvatar || '🎓',
+    messageType: message.messageType || 'text',
+    mediaUrl: message.mediaUrl || null,
+    payloadJson: message.payloadJson || null,
+    replyToId: message.replyToId || null
+  };
+
+  const postUrl = token
+    ? `${CHAT_API_URL}?token=${encodeURIComponent(token)}`
+    : CHAT_API_URL;
+
+  let responseData: any = null;
+
+  if (Capacitor.isNativePlatform()) {
+    const res = await CapacitorHttp.post({
+      url: postUrl,
+      headers: {
+        'Authorization': token ? `Bearer ${token}` : '',
+        'Content-Type': 'application/json'
+      },
+      data: chatPayload,
+      connectTimeout: 8000,
+      readTimeout: 8000
+    });
+    if (res.status === 200 || res.status === 201) {
+      responseData = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
+    }
+  } else {
+    const res = await fetchWithTimeout(postUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': token ? `Bearer ${token}` : '',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(chatPayload)
+    }, 8000);
+    if (res.ok) {
+      responseData = await res.json();
+    }
+  }
+
+  const isSuccess = responseData && (responseData.success === true || responseData.messageId);
+  if (!isSuccess) {
+    throw new Error(responseData?.error || 'Server rejected message insertion');
+  }
+
+  const assignedId = String(responseData.messageId || tempId);
+  const finalMsg: ChatMessage = {
+    ...message,
+    id: assignedId,
+    isOfflineQueued: false
+  };
+
+  // Update local cache cleanly, replacing any tempId placeholder
+  const currentCached = getCachedChannelMessages(message.channelId);
+  const updated = [...currentCached.filter(m => m.id !== tempId && m.id !== assignedId), finalMsg];
+  setCachedChannelMessages(message.channelId, updated);
+
+  return finalMsg;
+}
+
+/**
  * Send a message directly to MySQL chat API
  */
 export const sendChannelMessage = async (
@@ -221,79 +320,16 @@ export const sendChannelMessage = async (
   }
 
   try {
-    const token = await getFirebaseIdToken();
-    const chatPayload = {
-      channelId: message.channelId,
-      senderUid: senderUid || message.senderUid || '',
-      content: message.content,
-      senderUsername: message.senderUsername || '',
-      senderName: message.senderName || 'Student',
-      senderSchool: message.senderSchool || 'Davao Student',
-      senderAvatar: message.senderAvatar || '🎓',
-      messageType: message.messageType || 'text',
-      mediaUrl: message.mediaUrl || null,
-      payloadJson: message.payloadJson || null,
-      replyToId: message.replyToId || null
-    };
-
-    const postUrl = token 
-      ? `${CHAT_API_URL}?token=${encodeURIComponent(token)}` 
-      : CHAT_API_URL;
-
-    let responseData: any = null;
-
-    if (Capacitor.isNativePlatform()) {
-      const res = await CapacitorHttp.post({
-        url: postUrl,
-        headers: {
-          'Authorization': token ? `Bearer ${token}` : '',
-          'Content-Type': 'application/json'
-        },
-        data: chatPayload,
-        connectTimeout: 8000,
-        readTimeout: 8000
-      });
-      if (res.status === 200 || res.status === 201) {
-        responseData = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
-      }
-    } else {
-      const res = await fetch(postUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': token ? `Bearer ${token}` : '',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(chatPayload)
-      });
-      if (res.ok) {
-        responseData = await res.json();
-      }
-    }
-
-    const isSuccess = responseData && (responseData.success === true || responseData.messageId);
-    if (!isSuccess) {
-      throw new Error(responseData?.error || 'Server rejected message insertion');
-    }
-
-    const assignedId = String(responseData.messageId || tempId);
-    const finalMsg: ChatMessage = {
-      ...newMsg,
-      id: assignedId,
-      isOfflineQueued: false
-    };
-
-    // Update local cache
-    const currentCached = getCachedChannelMessages(message.channelId);
-    const updated = [...currentCached.filter(m => m.id !== tempId && m.id !== assignedId), finalMsg];
-    setCachedChannelMessages(message.channelId, updated);
-
-    return finalMsg;
+    return await postMessageToServer(message, tempId, senderUid);
   } catch (err) {
     console.warn('MySQL chat send error, queued locally:', err);
+    const queuedMsg: ChatMessage = { ...newMsg, isOfflineQueued: true };
     const queue = getOfflineQueue();
-    queue.push(newMsg);
-    saveOfflineQueue(queue);
-    return newMsg;
+    if (!queue.some((q) => q.id === tempId)) {
+      queue.push(queuedMsg);
+      saveOfflineQueue(queue);
+    }
+    return queuedMsg;
   }
 };
 
@@ -326,11 +362,11 @@ export const submitChatReport = async (report: {
       });
       return res.status === 200;
     } else {
-      const res = await fetch(FEEDBACK_API_URL, {
+      const res = await fetchWithTimeout(FEEDBACK_API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
-      });
+      }, 8000);
       return res.ok;
     }
   } catch (err) {
@@ -368,11 +404,11 @@ export const submitStudentFeedback = async (feedback: {
       });
       return res.status === 200;
     } else {
-      const res = await fetch(FEEDBACK_API_URL, {
+      const res = await fetchWithTimeout(FEEDBACK_API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
-      });
+      }, 8000);
       return res.ok;
     }
   } catch (err) {
@@ -381,25 +417,56 @@ export const submitStudentFeedback = async (feedback: {
   }
 };
 
+let isFlushingOfflineQueue = false;
+let pendingFlushCallback: ((sentItem: ChatMessage, tempId?: string) => void) | undefined;
+let hasPendingReflush = false;
+
 /**
- * Flush offline queued messages directly to MySQL
+ * Flush offline queued messages directly to MySQL with an in-flight mutex.
+ * Removes each message individually by tempId ONLY after confirmed server receipt.
  */
 export const flushOfflineQueue = async (
-  onItemSent?: (sentItem: ChatMessage) => void
+  onItemSent?: (sentItem: ChatMessage, originalTempId?: string) => void
 ): Promise<void> => {
-  const queue = getOfflineQueue();
-  if (queue.length === 0) return;
+  if (isFlushingOfflineQueue) {
+    hasPendingReflush = true;
+    if (onItemSent) pendingFlushCallback = onItemSent;
+    return;
+  }
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return;
+  }
 
-  const remaining: ChatMessage[] = [];
-  for (const item of queue) {
-    try {
-      const sent = await sendChannelMessage(item, true, item.senderUid);
-      if (onItemSent) onItemSent(sent);
-    } catch {
-      remaining.push(item);
+  const snapshot = getOfflineQueue();
+  if (snapshot.length === 0) return;
+
+  isFlushingOfflineQueue = true;
+  pendingFlushCallback = onItemSent;
+
+  try {
+    for (const item of snapshot) {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        break;
+      }
+      try {
+        const sent = await postMessageToServer(item, item.id, item.senderUid);
+        // Remove ONLY this confirmed item from the live queue so newly queued items are preserved
+        const liveQueue = getOfflineQueue();
+        saveOfflineQueue(liveQueue.filter((q) => q.id !== item.id));
+        if (onItemSent) onItemSent(sent, item.id);
+      } catch (err) {
+        console.warn('Offline chat item flush failed, keeping in queue:', item.id, err);
+      }
+    }
+  } finally {
+    isFlushingOfflineQueue = false;
+    if (hasPendingReflush && (typeof navigator === 'undefined' || navigator.onLine)) {
+      hasPendingReflush = false;
+      const cb = pendingFlushCallback;
+      pendingFlushCallback = undefined;
+      flushOfflineQueue(cb).catch(() => {});
     }
   }
-  saveOfflineQueue(remaining);
 };
 
 export interface UploadMediaProgress {
@@ -458,7 +525,7 @@ export async function uploadChatMedia(
         });
         responseData = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
       } else {
-        const res = await fetch(apiUrl, {
+        const res = await fetchWithTimeout(apiUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -466,7 +533,7 @@ export async function uploadChatMedia(
             ...(token ? { Authorization: `Bearer ${token}` } : {})
           },
           body: JSON.stringify(payload)
-        });
+        }, 10000);
         responseData = await res.json();
       }
 

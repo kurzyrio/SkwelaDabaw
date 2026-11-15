@@ -1,11 +1,12 @@
 import { StudentAuthSession, getSavedSession, saveSession, signOutUser } from './authService';
 import { ClassSchedule } from '../types';
 import { db, initializeDatabaseWithSeedData } from '../db';
-import { queueCloudSync, syncLocalDataToCloud, restoreUserData, getFirebaseIdToken } from './cloudSyncService';
+import { PENDING_SYNC_KEY, queueCloudSync, syncLocalDataToCloud, restoreUserData, getFirebaseIdToken } from './cloudSyncService';
 import { cancelAllAccountReminders, scheduleAllClassSchedulesReminders, refreshUnremovableClassNotification } from './notificationService';
 import { syncScheduleToWidgets, syncTasksToWidgets } from './widgetService';
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { imageCacheService } from './imageCacheService';
+import { hasPendingTombstones, purgeUserScopedStorage } from './userScope';
 
 const USER_API_URL = 'https://skweladabaw.kurzyrio.site/api/user.php';
 const REGISTERED_USERS_KEY = 'skweladabaw_registered_accounts';
@@ -212,7 +213,7 @@ export function getLocalUserRegistry(): Record<string, UserAccountRecord> {
 export async function checkUsernameAvailable(
   rawUsername: string,
   currentUid?: string
-): Promise<{ available: boolean; reason?: string }> {
+): Promise<{ available: boolean; reason?: string; networkError?: boolean }> {
   const username = rawUsername.trim().toLowerCase();
 
   // 1. Format validations (Instant)
@@ -236,18 +237,40 @@ export async function checkUsernameAvailable(
     }
   }
 
-  // 3. Fast lookup in MySQL user database with timeout guard
-  try {
-    const url = `${USER_API_URL}?action=check_username&username=${encodeURIComponent(username)}&current_uid=${encodeURIComponent(currentUid || '')}`;
-    const result = await httpGet(url);
-    if (result && typeof result.available === 'boolean') {
-      return result;
-    }
-  } catch (err) {
-    console.warn('MySQL username check note:', err);
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return {
+      available: false,
+      networkError: true,
+      reason: 'Offline — connect to the internet to check username availability.'
+    };
   }
 
-  return { available: true };
+  // 3. Fast lookup in MySQL user database with strict status verification (never assume available offline)
+  try {
+    const url = `${USER_API_URL}?action=check_username&username=${encodeURIComponent(username)}&current_uid=${encodeURIComponent(currentUid || '')}`;
+    const httpRes = await httpGetWithStatus(url);
+    if (
+      !httpRes.isNetworkError &&
+      httpRes.status >= 200 &&
+      httpRes.status < 300 &&
+      httpRes.data &&
+      typeof httpRes.data.available === 'boolean'
+    ) {
+      return httpRes.data;
+    }
+    return {
+      available: false,
+      networkError: true,
+      reason: httpRes.error || 'Could not reach server to verify username availability.'
+    };
+  } catch (err) {
+    console.warn('MySQL username check note:', err);
+    return {
+      available: false,
+      networkError: true,
+      reason: 'Could not reach server to verify username availability.'
+    };
+  }
 }
 
 /**
@@ -309,16 +332,10 @@ export async function checkExistingUserDetailed(
         if (data.status === 'NETWORK_OR_DB_ERROR' || data.success === false) {
           console.error('[userService] Backend reported database error:', data);
           const registry = getLocalUserRegistry();
-          const localUser = (uid && registry[uid]) || (email && registry[email.toLowerCase()]);
-          if (localUser) {
-            return {
-              state: 'PROFILE_COMPLETE',
-              user: localUser,
-              missingFields: []
-            };
-          }
+          const localUser = (uid && registry[uid]) || (email && registry[email.toLowerCase()]) || undefined;
           return {
             state: 'NETWORK_OR_DB_ERROR',
+            user: localUser,
             missingFields: [],
             error: data.error || data.message || 'Database error occurred'
           };
@@ -335,36 +352,21 @@ export async function checkExistingUserDetailed(
     // Case C: Server error (HTTP 500+) or Network Failure (status === 0 / isNetworkError)
     console.error(`[userService] MySQL user lookup failed. HTTP Status: ${httpRes.status}, Error:`, httpRes.error || httpRes.data);
 
-    // Offline / Local Registry Fallback
     const registry = getLocalUserRegistry();
-    const localUser = (uid && registry[uid]) || (email && registry[email.toLowerCase()]);
-    if (localUser) {
-      return {
-        state: 'PROFILE_COMPLETE',
-        user: localUser,
-        missingFields: []
-      };
-    }
-
+    const localUser = (uid && registry[uid]) || (email && registry[email.toLowerCase()]) || undefined;
     return {
       state: 'NETWORK_OR_DB_ERROR',
+      user: localUser,
       missingFields: [],
       error: httpRes.error || `Server error (HTTP ${httpRes.status})`
     };
   } catch (apiErr: any) {
     console.error('[userService] MySQL user lookup unexpected exception:', apiErr);
-    // Offline / Local Registry Fallback
     const registry = getLocalUserRegistry();
-    const localUser = (uid && registry[uid]) || (email && registry[email.toLowerCase()]);
-    if (localUser) {
-      return {
-        state: 'PROFILE_COMPLETE',
-        user: localUser,
-        missingFields: []
-      };
-    }
+    const localUser = (uid && registry[uid]) || (email && registry[email.toLowerCase()]) || undefined;
     return {
       state: 'NETWORK_OR_DB_ERROR',
+      user: localUser,
       missingFields: [],
       error: apiErr?.message || 'Network request failed'
     };
@@ -446,7 +448,7 @@ export async function updateUsername(
   uid: string,
   newUsername: string,
   currentLastChange?: string
-): Promise<{ success: boolean; message: string; nextAllowedDate?: Date }> {
+): Promise<{ success: boolean; message: string; nextAllowedDate?: Date; offline?: boolean }> {
   // Check 7-day cooldown locally
   if (currentLastChange) {
     const lastDate = new Date(currentLastChange).getTime();
@@ -462,71 +464,78 @@ export async function updateUsername(
     }
   }
 
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return {
+      success: false,
+      offline: true,
+      message: 'You are offline. Please connect to the internet to update your username.'
+    };
+  }
+
   const check = await checkUsernameAvailable(newUsername, uid);
   if (!check.available) {
-    return { success: false, message: check.reason || 'Username is not available.' };
+    return {
+      success: false,
+      offline: Boolean(check.networkError),
+      message: check.reason || 'Username is not available.'
+    };
   }
 
   const cleanUsername = newUsername.trim().toLowerCase();
   const now = new Date().toISOString();
 
-  // Save in local registry
-  const registry = getLocalUserRegistry();
-  if (registry[uid]) {
-    registry[uid].username = cleanUsername;
-    registry[uid].lastUsernameChange = now;
-    registry[uid].updatedAt = now;
-    localStorage.setItem(REGISTERED_USERS_KEY, JSON.stringify(registry));
-  }
-
-  // Update in MySQL server
+  // Require server confirmation before mutating local username registry or returning success
   try {
     const token = await getFirebaseIdToken();
-    if (token) {
-      const res = await httpPost(USER_API_URL, {
-        action: 'update_username',
-        newUsername: cleanUsername
-      }, token);
-
-      if (res && res.success) {
-        const savedSession = getSavedSession();
-        if (savedSession && savedSession.isLoggedIn) {
-          savedSession.username = cleanUsername;
-          savedSession.lastUsernameChange = res.lastUsernameChange || now;
-          saveSession(savedSession);
-        }
-        return { 
-          success: true, 
-          message: 'Username updated successfully!',
-          nextAllowedDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-        };
-      } else if (res && !res.success) {
-        return {
-          success: false,
-          message: res.message || 'Unable to update username.',
-          nextAllowedDate: res.nextAllowedDate ? new Date(res.nextAllowedDate) : undefined
-        };
-      }
+    if (!token) {
+      return {
+        success: false,
+        offline: true,
+        message: 'Authentication session could not be verified online. Please try again.'
+      };
     }
+
+    const res = await httpPost(USER_API_URL, {
+      action: 'update_username',
+      newUsername: cleanUsername
+    }, token);
+
+    if (res && res.success) {
+      const registry = getLocalUserRegistry();
+      if (registry[uid]) {
+        registry[uid].username = cleanUsername;
+        registry[uid].lastUsernameChange = res.lastUsernameChange || now;
+        registry[uid].updatedAt = now;
+        localStorage.setItem(REGISTERED_USERS_KEY, JSON.stringify(registry));
+      }
+
+      const savedSession = getSavedSession();
+      if (savedSession && savedSession.isLoggedIn) {
+        savedSession.username = cleanUsername;
+        savedSession.lastUsernameChange = res.lastUsernameChange || now;
+        saveSession(savedSession);
+      }
+
+      return {
+        success: true,
+        message: 'Username updated successfully!',
+        nextAllowedDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+      };
+    }
+
+    return {
+      success: false,
+      message: res?.message || 'Unable to reach server to update username. Please try again online.',
+      nextAllowedDate: res?.nextAllowedDate ? new Date(res.nextAllowedDate) : undefined
+    };
   } catch (err: any) {
     console.warn('MySQL update username note:', err);
     return {
       success: false,
+      offline: true,
       message: err?.message || 'Connection error while contacting server. Please check your network.'
     };
   }
-
-  const savedSession = getSavedSession();
-  if (savedSession && savedSession.isLoggedIn) {
-    savedSession.username = cleanUsername;
-    savedSession.lastUsernameChange = now;
-    saveSession(savedSession);
-  }
-  return { 
-    success: true, 
-    message: 'Username updated successfully!',
-    nextAllowedDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-  };
 }
 
 /**
@@ -579,12 +588,12 @@ export async function backupSchedulesToCloud(
  * 4. If guest (no newUid), loads guest cache or leaves empty so new account/guest never sees previous account's classes.
  */
 export async function switchAccountSchedules(
-  oldUid?: string, 
+  oldUid?: string,
   newUid?: string,
   session?: StudentAuthSession,
   token?: string
-): Promise<void> {
-  // 1. Back up or preserve previous schedules and tasks
+): Promise<{ success: boolean; abortedOffline?: boolean; message?: string }> {
+  // 1. Back up or preserve previous schedules, tasks, routines, expenses, and grades
   try {
     if (!oldUid) {
       // Switching from guest mode: preserve local schedules and tasks in pending guest storage
@@ -603,13 +612,13 @@ export async function switchAccountSchedules(
       } else {
         localStorage.removeItem('skweladabaw_pending_guest_tasks');
       }
-    } else if (session && session.uid === oldUid && session.isLoggedIn) {
-      // Switching from registered user: save to that account's specific cache and cloud
-      const [currentSchedules, currentTasks, currentRoutines, currentExpenses] = await Promise.all([
+    } else if (oldUid !== newUid && session && session.uid === oldUid && session.isLoggedIn) {
+      const [currentSchedules, currentTasks, currentRoutines, currentExpenses, currentGrades] = await Promise.all([
         db.schedules.toArray(),
         db.tasks.toArray(),
         db.dayReminders.toArray(),
-        db.expenses.toArray()
+        db.expenses.toArray(),
+        db.grades.toArray()
       ]);
 
       const activeTasks = currentTasks.filter((t) => t.sync_status !== 'pending_delete');
@@ -617,25 +626,64 @@ export async function switchAccountSchedules(
       localStorage.setItem(`skweladabaw_cached_tasks_${oldUid}`, JSON.stringify(activeTasks));
       localStorage.setItem(`skweladabaw_cached_routines_${oldUid}`, JSON.stringify(currentRoutines));
       localStorage.setItem(`skweladabaw_cached_expenses_${oldUid}`, JSON.stringify(currentExpenses));
+      localStorage.setItem(`skweladabaw_cached_grades_${oldUid}`, JSON.stringify(currentGrades));
 
-      // Direct, blocking sync so cloud receives data before logout/switch
-      try {
-        await syncLocalDataToCloud(session);
-      } catch (_) {}
+      const hasUnsyncedChanges =
+        localStorage.getItem(PENDING_SYNC_KEY) === 'true' ||
+        localStorage.getItem('skweladabaw_pending_sync') === 'true' ||
+        localStorage.getItem('skweladabaw_profile_dirty') === 'true' ||
+        hasPendingTombstones(oldUid) ||
+        currentTasks.some((t) => t.sync_status !== 'synced') ||
+        currentSchedules.some((s) => s.syncStatus === 'pending') ||
+        currentRoutines.some((r) => r.syncStatus === 'pending') ||
+        currentExpenses.some((e) => e.syncStatus === 'pending') ||
+        currentGrades.some((g) => g.syncStatus === 'pending');
+
+      if (hasUnsyncedChanges) {
+        const syncedOk = await syncLocalDataToCloud(session);
+        if (!syncedOk) {
+          return {
+            success: false,
+            abortedOffline: true,
+            message: 'You have unsynced offline changes. Please connect to the internet to back them up before switching accounts.'
+          };
+        }
+      } else if (typeof navigator === 'undefined' || navigator.onLine) {
+        try {
+          await syncLocalDataToCloud(session);
+        } catch (_) {}
+      }
     }
   } catch (err) {
     console.warn('Error saving old account data during switch:', err);
+    return {
+      success: false,
+      abortedOffline: true,
+      message: 'Could not verify backup for your current account. Please try again.'
+    };
   }
 
-  // 2. Clear guest cache & ALWAYS wipe Dexie tables so schedules/tasks NEVER bleed into other accounts
+  // 2. Clear transient global flags & atomically wipe all 5 Dexie tables so accounts never bleed
   try {
     localStorage.removeItem('skweladabaw_cached_schedules_guest');
-    await Promise.all([
-      db.schedules.clear(),
-      db.tasks.clear(),
-      db.dayReminders.clear(),
-      db.expenses.clear()
-    ]);
+    localStorage.removeItem(PENDING_SYNC_KEY);
+    localStorage.removeItem('skweladabaw_pending_sync');
+    localStorage.removeItem('skweladabaw_profile_dirty');
+    localStorage.removeItem('skweladabaw_explicit_empty_schedules');
+    localStorage.removeItem('skweladabaw_explicit_empty_tasks');
+    await db.transaction(
+      'rw',
+      [db.schedules, db.tasks, db.dayReminders, db.expenses, db.grades],
+      async () => {
+        await Promise.all([
+          db.schedules.clear(),
+          db.tasks.clear(),
+          db.dayReminders.clear(),
+          db.expenses.clear(),
+          db.grades.clear()
+        ]);
+      }
+    );
   } catch (e) {
     console.warn('Error clearing tables on switch:', e);
   }
@@ -651,38 +699,69 @@ export async function switchAccountSchedules(
 
   // 4. If logging out (no newUid), clean state is ready
   if (!newUid) {
-    return;
+    return { success: true };
   }
 
-  // 5. If switching to a new registered user (newUid)
-  // Check new user's local account cache first (instant 0ms response)
+  // 5. Switch to registered user: restore all 5 Dexie stores atomically with bulkPut
+  let restoredSchedules: any[] = [];
+  let restoredTasks: any[] = [];
   try {
-    const cachedSchedRaw = localStorage.getItem(`skweladabaw_cached_schedules_${newUid}`);
-    if (cachedSchedRaw) {
-      const cached = JSON.parse(cachedSchedRaw);
-      if (Array.isArray(cached) && cached.length > 0) {
-        await db.schedules.bulkAdd(cached);
-        await scheduleAllClassSchedulesReminders(cached);
-        await refreshUnremovableClassNotification(cached);
-        syncScheduleToWidgets(cached);
+    const parseArray = (key: string): any[] => {
+      const raw = localStorage.getItem(key);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    };
+
+    const cachedScheds = parseArray(`skweladabaw_cached_schedules_${newUid}`);
+    const rawTasks = parseArray(`skweladabaw_cached_tasks_${newUid}`);
+    const taskByUuid = new Map<string, any>();
+    for (const t of rawTasks) {
+      if (t && t.sync_status !== 'pending_delete' && t.uuid) {
+        taskByUuid.set(t.uuid, t);
       }
     }
+    const cachedTasks = Array.from(taskByUuid.values());
+    const cachedRoutines = parseArray(`skweladabaw_cached_routines_${newUid}`);
+    const cachedExpenses = parseArray(`skweladabaw_cached_expenses_${newUid}`);
+    const cachedGrades = parseArray(`skweladabaw_cached_grades_${newUid}`);
 
-    const cachedTasksRaw = localStorage.getItem(`skweladabaw_cached_tasks_${newUid}`);
-    if (cachedTasksRaw) {
-      const cached = JSON.parse(cachedTasksRaw);
-      if (Array.isArray(cached) && cached.length > 0) {
-        await db.tasks.bulkAdd(cached);
-        syncTasksToWidgets(cached);
+    await db.transaction(
+      'rw',
+      [db.schedules, db.tasks, db.dayReminders, db.expenses, db.grades],
+      async () => {
+        if (cachedScheds.length > 0) {
+          await db.schedules.bulkPut(cachedScheds);
+        }
+        if (cachedTasks.length > 0) {
+          await db.tasks.bulkPut(cachedTasks);
+        }
+        if (cachedRoutines.length > 0) {
+          await db.dayReminders.bulkPut(cachedRoutines);
+        }
+        if (cachedExpenses.length > 0) {
+          await db.expenses.bulkPut(cachedExpenses);
+        }
+        if (cachedGrades.length > 0) {
+          await db.grades.bulkPut(cachedGrades);
+        }
       }
+    );
+
+    restoredSchedules = cachedScheds;
+    restoredTasks = cachedTasks;
+  } catch (restoreErr) {
+    console.warn('Account cache restore note:', restoreErr);
+  }
+
+  try {
+    if (restoredSchedules.length > 0) {
+      await scheduleAllClassSchedulesReminders(restoredSchedules);
+      await refreshUnremovableClassNotification(restoredSchedules);
+      syncScheduleToWidgets(restoredSchedules);
     }
-
-    const cachedRoutinesRaw = localStorage.getItem(`skweladabaw_cached_routines_${newUid}`);
-    if (cachedRoutinesRaw) {
-      const cached = JSON.parse(cachedRoutinesRaw);
-      if (Array.isArray(cached) && cached.length > 0) {
-        await db.dayReminders.bulkAdd(cached);
-      }
+    if (restoredTasks.length > 0) {
+      syncTasksToWidgets(restoredTasks);
     }
   } catch (_) {}
 
@@ -692,6 +771,8 @@ export async function switchAccountSchedules(
   } catch (err) {
     console.warn('MySQL cloud sync on account switch note:', err);
   }
+
+  return { success: true };
 }
 
 const profileRevalidateThrottle: Record<string, number> = {};
@@ -905,7 +986,7 @@ export async function verifyProfileIntegrity(
 export async function verifySessionWithServer(
   uid: string,
   email?: string
-): Promise<{ exists: boolean; missingFields: string[]; user?: UserAccountRecord }> {
+): Promise<{ exists: boolean; missingFields: string[]; user?: UserAccountRecord; offline?: boolean }> {
   const result = await verifyProfileIntegrity(uid, email);
   if (result.state === 'PROFILE_COMPLETE') {
     return {
@@ -921,13 +1002,14 @@ export async function verifySessionWithServer(
       user: result.user
     };
   }
-  // On network or DB error: default to safe existing profile without hallucinating missing fields
+  // On network or DB error: report offline explicitly and never pretend uncached sessions exist
   const registry = getLocalUserRegistry();
   const cached = (uid && registry[uid]) || (email && registry[email.toLowerCase()]) || undefined;
   return {
-    exists: true,
+    exists: Boolean(cached),
     missingFields: [],
-    user: cached
+    user: cached,
+    offline: true
   };
 }
 
@@ -947,12 +1029,20 @@ export async function updateUserProfileFields(
       localStorage.setItem('skweladabaw_user_session', JSON.stringify(updated));
     } catch (_) {}
   }
-  // Mark profile dirty so startup hydration never overwrites with older MySQL data
+  // Mark profile dirty and queue background retry so offline edits synchronize on reconnect
   localStorage.setItem('skweladabaw_profile_dirty', 'true');
   localStorage.setItem('skweladabaw_profile_updated_at', String(Date.now()));
+  localStorage.setItem(PENDING_SYNC_KEY, 'true');
+
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return false;
+  }
 
   try {
     const token = await getFirebaseIdToken();
+    if (!token) {
+      return false;
+    }
     const payload = {
       action: 'update_profile',
       uid,
@@ -980,11 +1070,34 @@ export async function updateUserProfileFields(
  * in compliance with Google Play Store Account Deletion requirements.
  */
 export async function deleteUserAccount(): Promise<{ success: boolean; message: string }> {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return {
+      success: false,
+      message: 'You are offline. Please connect to the internet to permanently delete your account.'
+    };
+  }
+
+  const activeSession = getSavedSession();
+  const uid = activeSession.uid;
+
   try {
     const token = await getFirebaseIdToken();
+    if (activeSession.isLoggedIn && !token) {
+      return {
+        success: false,
+        message: 'Could not verify your authentication token with the server. Please try again.'
+      };
+    }
+
     if (token) {
       const payload = { action: 'delete_account', idToken: token };
-      await httpPost(USER_API_URL, payload, token);
+      const res = await httpPost(USER_API_URL, payload, token);
+      if (!res || !res.success) {
+        return {
+          success: false,
+          message: res?.message || res?.error || 'Could not delete account on server. Please check your connection and try again.'
+        };
+      }
     }
 
     try {
@@ -995,6 +1108,12 @@ export async function deleteUserAccount(): Promise<{ success: boolean; message: 
       console.warn('Local database purge error during account deletion:', e);
     }
 
+    // Purge all user-scoped storage, sync, route, chat queue, and cache keys
+    if (uid) {
+      purgeUserScopedStorage(uid);
+    }
+    purgeUserScopedStorage('guest');
+
     const keysToRemove = [
       'skweladabaw_user_session',
       'skweladabaw_registered_accounts',
@@ -1002,14 +1121,39 @@ export async function deleteUserAccount(): Promise<{ success: boolean; message: 
       'skweladabaw_profile_dirty',
       'skweladabaw_profile_updated_at',
       'skweladabaw_pending_guest_schedules',
-      'skweladabaw_last_sync_timestamp'
+      'skweladabaw_pending_guest_tasks',
+      'skweladabaw_last_sync_timestamp',
+      'skweladabaw_pending_sync',
+      PENDING_SYNC_KEY,
+      'skweladabaw_explicit_empty_schedules',
+      'skweladabaw_explicit_empty_tasks',
+      'skweladabaw_offline_chat_queue',
+      'skweladabaw_saved_places',
+      'skweladabaw_favorite_routes',
+      'skweladabaw_recent_trips',
+      'skweladabaw_bookmarked_bulletins',
+      'skweladabaw_auth_token'
     ];
     for (const key of keysToRemove) {
       try { localStorage.removeItem(key); } catch (_) {}
     }
 
+    // Remove any cached chat channels or legacy prefixed items safely
     try {
-      await signOutUser();
+      const allKeys: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k) allKeys.push(k);
+      }
+      for (const k of allKeys) {
+        if (k.startsWith('skweladabaw_chat_cache_') || (uid && k.endsWith(`_${uid}`))) {
+          localStorage.removeItem(k);
+        }
+      }
+    } catch (_) {}
+
+    try {
+      await signOutUser(undefined, { skipAccountSync: true });
     } catch (_) {}
 
     return { success: true, message: 'Account and all data successfully deleted.' };

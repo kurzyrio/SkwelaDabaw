@@ -1,14 +1,18 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { checkDeviceNetworkStatus } from '../services/widgetService';
 
 export function useOnlineStatus() {
   const [isOnline, setIsOnline] = useState<boolean>(() => {
     return typeof navigator !== 'undefined' ? navigator.onLine : true;
   });
+  const checkSeqRef = useRef<number>(0);
 
   const verifyConnectivity = useCallback(async () => {
+    const seq = ++checkSeqRef.current;
     const status = await checkDeviceNetworkStatus();
-    setIsOnline(status.connected);
+    if (seq === checkSeqRef.current) {
+      setIsOnline(status.connected);
+    }
   }, []);
 
   useEffect(() => {
@@ -16,18 +20,22 @@ export function useOnlineStatus() {
     verifyConnectivity();
 
     // 2. Standard browser network events
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = async () => {
-      // Re-verify with native Android ConnectivityManager before committing to offline
-      const status = await checkDeviceNetworkStatus();
-      setIsOnline(status.connected);
+    const handleOnline = () => {
+      ++checkSeqRef.current;
+      setIsOnline(true);
+    };
+    const handleOffline = () => {
+      // Re-verify with native Android ConnectivityManager while guarding against stale responses
+      verifyConnectivity();
     };
 
-    // 3. Custom event dispatched by successful HTTP / API calls
+    // 3. Custom event dispatched by confirmed HTTP / API calls
     const handleNetworkActivity = (event: Event) => {
       const customEvent = event as CustomEvent<{ isOnline?: boolean }>;
-      const online = customEvent.detail?.isOnline ?? true;
-      setIsOnline(online);
+      if (typeof customEvent.detail?.isOnline === 'boolean') {
+        ++checkSeqRef.current;
+        setIsOnline(customEvent.detail.isOnline);
+      }
     };
 
     // 4. Window focus & app visibility resume

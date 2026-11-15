@@ -787,6 +787,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
       // Check if this Google account already exists in MySQL
       const checkResult = await checkExistingUserDetailed(googleSession.uid || '', googleSession.email || '');
+      if (checkResult.state === 'NETWORK_OR_DB_ERROR') {
+        setLoginErrorToast(checkResult.error || 'Could not reach server to verify account. Check your connection and try again.');
+        setTimeout(() => setLoginErrorToast(null), 4000);
+        setIsLoggingIn(false);
+        return;
+      }
+
       const existingCloud = checkResult.user;
       const hasCloudData = Boolean(
         existingCloud &&
@@ -866,9 +873,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       await saveUserProfile(merged);
       await syncLocalDataToCloud(merged);
       onUpdateSession(merged);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Google login error:', err);
-      setLoginErrorToast('Google Sign-in was cancelled or could not connect.');
+      setLoginErrorToast(err?.message || 'Google Sign-in was cancelled or could not connect.');
       setTimeout(() => setLoginErrorToast(null), 4000);
     } finally {
       setIsLoggingIn(false);
@@ -969,10 +976,15 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
   const handleConfirmLogout = async () => {
     setIsLogoutModalOpen(false);
-    const reset = await signOutUser();
-    setOnboardingCompleted(false);
-    onUpdateSession(reset);
-    onLogout?.();
+    try {
+      const reset = await signOutUser();
+      setOnboardingCompleted(false);
+      onUpdateSession(reset);
+      onLogout?.();
+    } catch (err: any) {
+      setDeleteToast(err?.message || 'Unable to sign out right now.');
+      setTimeout(() => setDeleteToast(null), 4500);
+    }
   };
 
   const handleConfirmDeleteAccount = async () => {

@@ -4,6 +4,13 @@
  */
 
 import { queueCloudSync } from './cloudSyncService';
+import {
+  readScopedJson,
+  writeScopedJson,
+  recordSyncDeletion,
+  clearSyncDeletion,
+  getCurrentStorageUid
+} from './userScope';
 
 export interface SavedPlace {
   id: string;
@@ -40,20 +47,15 @@ export interface RecentTrip {
   date: string;
 }
 
-// User-defined saved places (No hardcoded presets)
-const DEFAULT_SAVED_PLACES: SavedPlace[] = [];
-
-export function getSavedPlaces(): SavedPlace[] {
+export function getSavedPlaces(explicitUid?: string): SavedPlace[] {
   try {
-    const raw = localStorage.getItem(SAVED_PLACES_KEY);
-    if (!raw) {
-      return [];
-    }
-    const places: SavedPlace[] = JSON.parse(raw);
+    const uid = getCurrentStorageUid(explicitUid);
+    const places = readScopedJson<SavedPlace[]>(SAVED_PLACES_KEY, [], uid, true);
+    if (!Array.isArray(places)) return [];
     // Sanitize legacy hardcoded default "Home (Toril)"
     const sanitized = places.filter(p => !(p.id === 'place-home' && p.name === 'Home (Toril)' && p.address?.includes('Toril')));
     if (sanitized.length !== places.length) {
-      localStorage.setItem(SAVED_PLACES_KEY, JSON.stringify(sanitized));
+      writeScopedJson(SAVED_PLACES_KEY, sanitized, uid);
     }
     return sanitized;
   } catch {
@@ -73,87 +75,101 @@ export function setHomePlace(name: string, address: string, lat: number, lng: nu
   });
 }
 
-export function savePlace(place: SavedPlace): SavedPlace[] {
+export function savePlace(place: SavedPlace, explicitUid?: string): SavedPlace[] {
   try {
-    const places = getSavedPlaces();
-    const existingIdx = places.findIndex(p => p.id === place.id || p.type === place.type && p.type !== 'custom');
+    const uid = getCurrentStorageUid(explicitUid);
+    const places = getSavedPlaces(uid);
+    const now = new Date().toISOString();
+    const existingIdx = places.findIndex(p => p.id === place.id || (p.type === place.type && p.type !== 'custom'));
+    const removedExisting = existingIdx >= 0 && places[existingIdx].id !== place.id ? places[existingIdx].id : null;
     if (existingIdx >= 0) {
-      places[existingIdx] = { ...place, updatedAt: new Date().toISOString() };
+      places[existingIdx] = { ...place, updatedAt: now };
     } else {
-      places.push({ ...place, updatedAt: new Date().toISOString() });
+      places.push({ ...place, updatedAt: now });
     }
-    localStorage.setItem(SAVED_PLACES_KEY, JSON.stringify(places));
+    if (removedExisting) {
+      recordSyncDeletion('places', removedExisting, uid);
+    }
+    clearSyncDeletion('places', place.id, uid);
+    writeScopedJson(SAVED_PLACES_KEY, places, uid);
     queueCloudSync();
     return places;
   } catch (e) {
     console.error('Error saving place:', e);
-    return getSavedPlaces();
+    return getSavedPlaces(explicitUid);
   }
 }
 
-export function deletePlace(id: string): SavedPlace[] {
+export function deletePlace(id: string, explicitUid?: string): SavedPlace[] {
   try {
-    const places = getSavedPlaces().filter(p => p.id !== id);
-    localStorage.setItem(SAVED_PLACES_KEY, JSON.stringify(places));
+    const uid = getCurrentStorageUid(explicitUid);
+    const places = getSavedPlaces(uid).filter(p => p.id !== id);
+    recordSyncDeletion('places', id, uid);
+    writeScopedJson(SAVED_PLACES_KEY, places, uid);
     queueCloudSync();
     return places;
   } catch {
-    return getSavedPlaces();
+    return getSavedPlaces(explicitUid);
   }
 }
 
-export function getFavoriteRoutes(): FavoriteRoute[] {
+export function getFavoriteRoutes(explicitUid?: string): FavoriteRoute[] {
   try {
-    const raw = localStorage.getItem(FAVORITE_ROUTES_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw);
+    const routes = readScopedJson<FavoriteRoute[]>(FAVORITE_ROUTES_KEY, [], explicitUid, true);
+    return Array.isArray(routes) ? routes : [];
   } catch {
     return [];
   }
 }
 
-export function toggleFavoriteRoute(route: { id: string; name: string; mode: string; color?: string; origin?: string; destination?: string }): { isFavorite: boolean; favorites: FavoriteRoute[] } {
+export function toggleFavoriteRoute(
+  route: { id: string; name: string; mode: string; color?: string; origin?: string; destination?: string },
+  explicitUid?: string
+): { isFavorite: boolean; favorites: FavoriteRoute[] } {
   try {
-    const favorites = getFavoriteRoutes();
+    const uid = getCurrentStorageUid(explicitUid);
+    const favorites = getFavoriteRoutes(uid);
     const idx = favorites.findIndex(f => f.id === route.id);
     let isFavorite = false;
     if (idx >= 0) {
       favorites.splice(idx, 1);
       isFavorite = false;
+      recordSyncDeletion('transit', route.id, uid);
     } else {
+      clearSyncDeletion('transit', route.id, uid);
       favorites.push({
         ...route,
         starredAt: new Date().toISOString()
       });
       isFavorite = true;
     }
-    localStorage.setItem(FAVORITE_ROUTES_KEY, JSON.stringify(favorites));
+    writeScopedJson(FAVORITE_ROUTES_KEY, favorites, uid);
     queueCloudSync();
     return { isFavorite, favorites };
   } catch (e) {
     console.error('Error toggling favorite route:', e);
-    return { isFavorite: false, favorites: getFavoriteRoutes() };
+    return { isFavorite: false, favorites: getFavoriteRoutes(explicitUid) };
   }
 }
 
-export function isRouteFavorite(routeId: string): boolean {
-  const favorites = getFavoriteRoutes();
+export function isRouteFavorite(routeId: string, explicitUid?: string): boolean {
+  const favorites = getFavoriteRoutes(explicitUid);
   return favorites.some(f => f.id === routeId);
 }
 
-export function getRecentTrips(): RecentTrip[] {
+export function getRecentTrips(explicitUid?: string): RecentTrip[] {
   try {
-    const raw = localStorage.getItem(RECENT_TRIPS_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw);
+    const trips = readScopedJson<RecentTrip[]>(RECENT_TRIPS_KEY, [], explicitUid, true);
+    return Array.isArray(trips) ? trips : [];
   } catch {
     return [];
   }
 }
 
-export function addRecentTrip(trip: Omit<RecentTrip, 'id' | 'date'>): RecentTrip[] {
+export function addRecentTrip(trip: Omit<RecentTrip, 'id' | 'date'>, explicitUid?: string): RecentTrip[] {
   try {
-    let trips = getRecentTrips();
+    const uid = getCurrentStorageUid(explicitUid);
+    let trips = getRecentTrips(uid);
     // Remove duplicate
     trips = trips.filter(t => !(t.originName === trip.originName && t.destName === trip.destName));
     trips.unshift({
@@ -163,9 +179,9 @@ export function addRecentTrip(trip: Omit<RecentTrip, 'id' | 'date'>): RecentTrip
     });
     // Keep top 6
     trips = trips.slice(0, 6);
-    localStorage.setItem(RECENT_TRIPS_KEY, JSON.stringify(trips));
+    writeScopedJson(RECENT_TRIPS_KEY, trips, uid);
     return trips;
   } catch {
-    return getRecentTrips();
+    return getRecentTrips(explicitUid);
   }
 }

@@ -2,6 +2,7 @@ export type DayOfWeek = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Frida
 
 export interface ClassSchedule {
   id?: number;
+  uuid?: string;
   ofrCode?: string;     // e.g. "1048", "CS-A1", "SEC-01", "OFR-994"
   subjectCode: string;  // e.g. "CS 101", "ENG 10", "MATH 21"
   subjectName: string;  // e.g. "Data Structures and Algorithms"
@@ -15,6 +16,9 @@ export interface ClassSchedule {
   units?: number;       // e.g. 3
   notes?: string;
   reminderMinutes?: number; // 0 = none, 15 = 15m before, 30 = 30m before, 60 = 1h before
+  createdAt?: string;
+  updatedAt?: string;
+  syncStatus?: 'pending' | 'synced';
 }
 
 export type TaskSyncStatus = 'pending_create' | 'pending_update' | 'pending_delete' | 'synced';
@@ -42,6 +46,7 @@ export interface TaskItem {
 
 export interface GradeItem {
   id?: number;
+  uuid?: string;
   subjectCode: string;
   subjectName: string;
   units: number;
@@ -53,6 +58,9 @@ export interface GradeItem {
   rawAverage?: number;
   transmutedGrade?: string; // e.g. "1.25", "A", "94"
   gradingScale: '1.0-5.0' | 'qpi-4.0' | 'percentage';
+  createdAt?: string;
+  updatedAt?: string;
+  syncStatus?: 'pending' | 'synced';
 }
 
 export interface DavaoJeepRoute {
@@ -148,10 +156,14 @@ export interface StudySpot {
 
 export interface ExpenseItem {
   id?: number;
+  uuid?: string;
   date: string;            // YYYY-MM-DD
   category: 'jeep' | 'food' | 'supplies' | 'photocopy' | 'coffee' | 'other';
   amount: number;
   note: string;
+  createdAt?: string;
+  updatedAt?: string;
+  syncStatus?: 'pending' | 'synced';
 }
 
 export interface ChatMessage {
@@ -190,11 +202,15 @@ export interface ChatChannel {
 
 export interface DayReminderItem {
   id?: number;
+  uuid?: string;
   title: string;
   dayOfWeek: DayOfWeek;
   time: string; // "HH:mm" 24h format
   enabled: boolean;
   notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  syncStatus?: 'pending' | 'synced';
 }
 
 export interface StudentFeedbackRecord {

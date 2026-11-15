@@ -212,12 +212,17 @@ const performGoogleSignIn = async (currentCampusId: string): Promise<StudentAuth
             gender: prevSession.gender
           };
           saveSession(session);
-          try {
-            const idToken = nativeResult.idToken || (await firebaseUser.getIdToken(false).catch(() => undefined));
-            await switchAccountSchedules(prevUid, firebaseUser.uid, prevSession.isLoggedIn ? prevSession : undefined, idToken);
-          } catch (_) {}
+          const idToken = nativeResult.idToken || (await firebaseUser.getIdToken(false).catch(() => undefined));
+          const switchRes = await switchAccountSchedules(prevUid, firebaseUser.uid, prevSession.isLoggedIn ? prevSession : undefined, idToken);
+          if (!switchRes.success) {
+            saveSession(prevSession);
+            throw new Error(switchRes.message || 'Please connect to the internet to back up unsynced data before switching accounts.');
+          }
           return session;
         } catch (syncErr: any) {
+          if (String(syncErr?.message || '').includes('unsynced')) {
+            throw syncErr;
+          }
           console.warn('Firebase JS SDK signInWithCredential warning (falling back to native user session):', syncErr);
           // Fallback session using native Google credentials so user login never loops or breaks
           const uid = nativeResult.uid || ('usr_' + Date.now());
@@ -239,9 +244,11 @@ const performGoogleSignIn = async (currentCampusId: string): Promise<StudentAuth
             gender: prevSession.gender
           };
           saveSession(session);
-          try {
-            await switchAccountSchedules(prevUid, uid, prevSession.isLoggedIn ? prevSession : undefined, nativeResult.idToken);
-          } catch (_) {}
+          const switchRes = await switchAccountSchedules(prevUid, uid, prevSession.isLoggedIn ? prevSession : undefined, nativeResult.idToken);
+          if (!switchRes.success) {
+            saveSession(prevSession);
+            throw new Error(switchRes.message || 'Please connect to the internet to back up unsynced data before switching accounts.');
+          }
           return session;
         }
       } else {
@@ -264,9 +271,11 @@ const performGoogleSignIn = async (currentCampusId: string): Promise<StudentAuth
           gender: prevSession.gender
         };
         saveSession(session);
-        try {
-          await switchAccountSchedules(prevUid, session.uid, prevSession.isLoggedIn ? prevSession : undefined, nativeResult.idToken);
-        } catch (_) {}
+        const switchRes = await switchAccountSchedules(prevUid, session.uid, prevSession.isLoggedIn ? prevSession : undefined, nativeResult.idToken);
+        if (!switchRes.success) {
+          saveSession(prevSession);
+          throw new Error(switchRes.message || 'Please connect to the internet to back up unsynced data before switching accounts.');
+        }
         return session;
       }
     }
@@ -295,10 +304,12 @@ const performGoogleSignIn = async (currentCampusId: string): Promise<StudentAuth
       gender: prevSession.gender
     };
     saveSession(session);
-    try {
-      const idToken = await user.getIdToken(false).catch(() => undefined);
-      await switchAccountSchedules(prevUid, user.uid, prevSession.isLoggedIn ? prevSession : undefined, idToken);
-    } catch (_) {}
+    const idToken = await user.getIdToken(false).catch(() => undefined);
+    const switchRes = await switchAccountSchedules(prevUid, user.uid, prevSession.isLoggedIn ? prevSession : undefined, idToken);
+    if (!switchRes.success) {
+      saveSession(prevSession);
+      throw new Error(switchRes.message || 'Please connect to the internet to back up unsynced data before switching accounts.');
+    }
     return session;
   }
 
@@ -440,9 +451,11 @@ export const verifyPhoneOtpCode = async (
     const prevSession = getSavedSession();
     const prevUid = prevSession.isLoggedIn ? prevSession.uid : undefined;
     saveSession(session);
-    try {
-      await switchAccountSchedules(prevUid, session.uid, prevSession.isLoggedIn ? prevSession : undefined);
-    } catch (_) {}
+    const switchRes = await switchAccountSchedules(prevUid, session.uid, prevSession.isLoggedIn ? prevSession : undefined);
+    if (!switchRes.success) {
+      saveSession(prevSession);
+      throw new Error(switchRes.message || 'Please connect to the internet to back up unsynced data before switching accounts.');
+    }
 
     return session;
   }
@@ -485,9 +498,11 @@ export const verifyPhoneOtpCode = async (
   const prevSession = getSavedSession();
   const prevUid = prevSession.isLoggedIn ? prevSession.uid : undefined;
   saveSession(session);
-  try {
-    await switchAccountSchedules(prevUid, user.uid, prevSession.isLoggedIn ? prevSession : undefined);
-  } catch (_) {}
+  const switchRes = await switchAccountSchedules(prevUid, user.uid, prevSession.isLoggedIn ? prevSession : undefined);
+  if (!switchRes.success) {
+    saveSession(prevSession);
+    throw new Error(switchRes.message || 'Please connect to the internet to back up unsynced data before switching accounts.');
+  }
 
   return session;
 };
@@ -618,14 +633,16 @@ export const linkFirebasePassword = async (email: string, password: string): Pro
   return { success: true };
 };
 
-export const signOutUser = async (currentUid?: string): Promise<StudentAuthSession> => {
+export const signOutUser = async (
+  currentUid?: string,
+  options?: { skipAccountSync?: boolean }
+): Promise<StudentAuthSession> => {
   const activeSession = getSavedSession();
   const uid = currentUid || (activeSession.isLoggedIn ? activeSession.uid : undefined);
-  if (uid) {
-    try {
-      await switchAccountSchedules(uid, undefined, activeSession);
-    } catch (e) {
-      console.warn('Error during schedule isolation on logout:', e);
+  if (uid && !options?.skipAccountSync) {
+    const switchRes = await switchAccountSchedules(uid, undefined, activeSession);
+    if (!switchRes.success) {
+      throw new Error(switchRes.message || 'You have unsynced offline changes. Please connect to the internet before signing out.');
     }
   }
 

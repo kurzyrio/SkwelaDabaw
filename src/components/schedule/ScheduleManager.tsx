@@ -30,6 +30,13 @@ import {
 } from 'lucide-react';
 import { db } from '../../db';
 import { ClassSchedule, DayOfWeek } from '../../types';
+import {
+  generateSyncUUID,
+  recordSyncDeletion,
+  recordClearAllSchedules,
+  clearSyncDeletion,
+  scopedKey
+} from '../../services/userScope';
 import { DayReminderManager } from './DayReminderManager';
 import { PageIntroGuide } from '../common/PageIntroGuide';
 import { ScheduleImportModal } from './ScheduleImportModal';
@@ -392,13 +399,16 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
   // Delete All Schedules Handler
   const handleConfirmDeleteAll = async () => {
     try {
+      const userSession = getSavedSession();
+      const targetUid = userSession.isLoggedIn && userSession.uid ? userSession.uid : undefined;
       for (const s of schedules) {
         if (s.id) cancelScheduleReminder(s.id);
       }
+      recordClearAllSchedules(schedules.map((s) => s.uuid), targetUid);
       await db.schedules.clear();
 
+      localStorage.setItem(scopedKey('skweladabaw_explicit_empty_schedules', targetUid), 'true');
       localStorage.setItem('skweladabaw_explicit_empty_schedules', 'true');
-      const userSession = getSavedSession();
       const cacheKey = userSession.isLoggedIn && userSession.uid
         ? `skweladabaw_cached_schedules_${userSession.uid}`
         : 'skweladabaw_cached_schedules_guest';
@@ -448,13 +458,17 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
     }
   }, [schedules]);
 
-  // One-time safe mount check: If user is logged in, device is online, and Dexie is truly empty
+  // One-time safe mount check: If user is logged in, device is online, and Dexie is truly empty (unless intentionally emptied)
   useEffect(() => {
     let isCancelled = false;
     const checkInitialSync = async () => {
       if (typeof navigator !== 'undefined' && !navigator.onLine) return;
       const userSession = getSavedSession();
       if (!userSession.isLoggedIn || !userSession.uid) return;
+      const isExplicitEmpty =
+        localStorage.getItem(scopedKey('skweladabaw_explicit_empty_schedules', userSession.uid)) === 'true' ||
+        localStorage.getItem('skweladabaw_explicit_empty_schedules') === 'true';
+      if (isExplicitEmpty) return;
       try {
         const count = await db.schedules.count();
         if (count === 0 && !isCancelled) {
@@ -554,7 +568,10 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
     e.preventDefault();
     if (!subjectCode.trim() || selectedDays.length === 0) return;
 
+    const now = new Date().toISOString();
+    const recordUuid = editingSchedule?.uuid || generateSyncUUID('sched');
     const data: ClassSchedule = {
+      uuid: recordUuid,
       ofrCode: ofrCode.trim(),
       subjectCode: subjectCode.toUpperCase().trim(),
       subjectName: subjectName.trim() || subjectCode.toUpperCase().trim(),
@@ -567,8 +584,13 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
       color,
       units: Number(units) || 3,
       notes: notes.trim(),
-      reminderMinutes: reminderMinutes || 0
+      reminderMinutes: reminderMinutes || 0,
+      createdAt: editingSchedule?.createdAt || now,
+      updatedAt: now,
+      syncStatus: 'pending'
     };
+
+    clearSyncDeletion('schedules', recordUuid);
 
     if (editingSchedule?.id) {
       await db.schedules.update(editingSchedule.id, data as any);
@@ -586,9 +608,11 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
 
     // Sync to account-scoped local cache & cloud
     try {
+      const userSession = getSavedSession();
+      const targetUid = userSession.isLoggedIn && userSession.uid ? userSession.uid : undefined;
+      localStorage.removeItem(scopedKey('skweladabaw_explicit_empty_schedules', targetUid));
       localStorage.removeItem('skweladabaw_explicit_empty_schedules');
       const allNow = await db.schedules.toArray();
-      const userSession = getSavedSession();
       const cacheKey = userSession.isLoggedIn && userSession.uid
         ? `skweladabaw_cached_schedules_${userSession.uid}`
         : 'skweladabaw_cached_schedules_guest';
@@ -605,6 +629,11 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
 
   const handleConfirmDelete = async () => {
     if (!scheduleToDelete?.id) return;
+    const userSession = getSavedSession();
+    const targetUid = userSession.isLoggedIn && userSession.uid ? userSession.uid : undefined;
+    if (scheduleToDelete.uuid) {
+      recordSyncDeletion('schedules', scheduleToDelete.uuid, targetUid);
+    }
     await db.schedules.delete(scheduleToDelete.id);
     await cancelScheduleReminder(scheduleToDelete.id);
     setScheduleToDelete(null);
@@ -612,14 +641,15 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
     // Sync to account-scoped local cache & cloud
     try {
       const allNow = await db.schedules.toArray();
-      const userSession = getSavedSession();
       const cacheKey = userSession.isLoggedIn && userSession.uid
         ? `skweladabaw_cached_schedules_${userSession.uid}`
         : 'skweladabaw_cached_schedules_guest';
       localStorage.setItem(cacheKey, JSON.stringify(allNow));
       if (allNow.length === 0) {
+        localStorage.setItem(scopedKey('skweladabaw_explicit_empty_schedules', targetUid), 'true');
         localStorage.setItem('skweladabaw_explicit_empty_schedules', 'true');
       } else {
+        localStorage.removeItem(scopedKey('skweladabaw_explicit_empty_schedules', targetUid));
         localStorage.removeItem('skweladabaw_explicit_empty_schedules');
       }
       refreshUnremovableClassNotification(allNow);

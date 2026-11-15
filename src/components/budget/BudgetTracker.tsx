@@ -15,6 +15,7 @@ import { db } from '../../db';
 import { ExpenseItem } from '../../types';
 import { PageIntroGuide } from '../common/PageIntroGuide';
 import { queueCloudSync } from '../../services/cloudSyncService';
+import { generateSyncUUID, recordSyncDeletion } from '../../services/userScope';
 
 type AllowanceFrequency = 'daily' | 'weekly' | 'monthly' | 'custom_days';
 
@@ -101,11 +102,16 @@ export const BudgetTracker: React.FC = () => {
     const finalAmount = Number(amountInput) || amount;
     if (!finalAmount || finalAmount <= 0) return;
 
+    const now = new Date().toISOString();
     await db.expenses.add({
+      uuid: generateSyncUUID('exp'),
       date: todayStr,
       category,
       amount: finalAmount,
-      note: note.trim() || getDefaultNote(category)
+      note: note.trim() || getDefaultNote(category),
+      createdAt: now,
+      updatedAt: now,
+      syncStatus: 'pending'
     });
     queueCloudSync();
 
@@ -117,6 +123,10 @@ export const BudgetTracker: React.FC = () => {
 
   const handleDeleteExpense = async (id?: number) => {
     if (!id) return;
+    const existing = await db.expenses.get(id);
+    if (existing?.uuid) {
+      recordSyncDeletion('expenses', existing.uuid);
+    }
     await db.expenses.delete(id);
     queueCloudSync();
   };

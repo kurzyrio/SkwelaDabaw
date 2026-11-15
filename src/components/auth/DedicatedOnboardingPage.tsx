@@ -443,8 +443,8 @@ export const DedicatedOnboardingPage: React.FC<DedicatedOnboardingPageProps> = (
         setGoogleAuthError('Google Sign-In setup error (Code 10). App SHA-1 must be registered in Firebase Console.');
       } else if (msg.includes('Code 12500')) {
         setGoogleAuthError('Google Play Services sign-in error (Code 12500). Check connection and Play Services.');
-      } else if (msg.toLowerCase().includes('network')) {
-        setGoogleAuthError('Network connection error. Check internet.');
+      } else if (msg.toLowerCase().includes('network') || msg.includes('unsynced') || msg.includes('back them up')) {
+        setGoogleAuthError(msg.includes('unsynced') ? msg : 'Network connection error. Check internet.');
       } else {
         setGoogleAuthError('Sign-in was cancelled or dismissed.');
       }

@@ -460,11 +460,13 @@ export const StudentCommunityChat: React.FC<StudentCommunityChatProps> = ({
 
   useEffect(() => {
     if (isOnline) {
-      flushOfflineQueue((sentMsg) => {
+      flushOfflineQueue((sentMsg, originalTempId) => {
         setMessages((prev) => ({
           ...prev,
           [sentMsg.channelId]: (prev[sentMsg.channelId] || []).map((m) =>
-            m.id === sentMsg.id ? { ...m, isOfflineQueued: false } : m
+            (m.id === sentMsg.id || (originalTempId && m.id === originalTempId))
+              ? { ...sentMsg, isOfflineQueued: false }
+              : m
           )
         }));
       });

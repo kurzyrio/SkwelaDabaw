@@ -24,11 +24,14 @@ import { PageIntroGuide } from '../common/PageIntroGuide';
 import { shareContent } from '../../services/shareService';
 import { fetchAllAnnouncements } from '../../services/announcementService';
 import { queueCloudSync } from '../../services/cloudSyncService';
+import { readScopedJson, writeScopedJson, recordBookmarkDeletion } from '../../services/userScope';
 
 interface AnnouncementBoardProps {
   userSession?: StudentAuthSession;
   onNavigateToCommunity?: () => void;
 }
+
+const BOOKMARKED_BULLETINS_KEY = 'skweladabaw_bookmarked_bulletins';
 
 export const AnnouncementBoard: React.FC<AnnouncementBoardProps> = ({ 
   userSession,
@@ -39,19 +42,19 @@ export const AnnouncementBoard: React.FC<AnnouncementBoardProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [expandedIds, setExpandedIds] = useState<string[]>([]);
   const [bookmarkedIds, setBookmarkedIds] = useState<string[]>(() => {
-    const saved = localStorage.getItem('skweladabaw_bookmarked_bulletins');
-    return saved ? JSON.parse(saved) : [];
+    const saved = readScopedJson<string[]>(BOOKMARKED_BULLETINS_KEY, [], userSession?.uid, true);
+    return Array.isArray(saved) ? saved : [];
   });
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [viewingImage, setViewingImage] = useState<string | null>(null);
 
   const userCampus = DAVAO_CAMPUSES.find((c) => c.id === userSession?.campusId);
 
-  // Save bookmarks to localStorage and trigger cloud sync
+  // Reload bookmarks when active user account changes (without queueing spurious sync on mount)
   useEffect(() => {
-    localStorage.setItem('skweladabaw_bookmarked_bulletins', JSON.stringify(bookmarkedIds));
-    queueCloudSync();
-  }, [bookmarkedIds]);
+    const saved = readScopedJson<string[]>(BOOKMARKED_BULLETINS_KEY, [], userSession?.uid, true);
+    setBookmarkedIds(Array.isArray(saved) ? saved : []);
+  }, [userSession?.uid]);
 
   // Sync cloud bulletins on mount
   useEffect(() => {
@@ -71,9 +74,14 @@ export const AnnouncementBoard: React.FC<AnnouncementBoardProps> = ({
   }, [userSession?.campusId]);
 
   const toggleBookmark = (id: string) => {
-    setBookmarkedIds((prev) =>
-      prev.includes(id) ? prev.filter((b) => b !== id) : [...prev, id]
-    );
+    setBookmarkedIds((prev) => {
+      const isRemoving = prev.includes(id);
+      const next = isRemoving ? prev.filter((b) => b !== id) : [...prev, id];
+      writeScopedJson(BOOKMARKED_BULLETINS_KEY, next, userSession?.uid);
+      recordBookmarkDeletion(id, isRemoving, userSession?.uid);
+      queueCloudSync();
+      return next;
+    });
   };
 
   const toggleExpand = (id: string) => {

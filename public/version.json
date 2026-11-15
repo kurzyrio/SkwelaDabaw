@@ -1,6 +1,6 @@
 {
-  "version": "1.11.5.11",
-  "versionCode": 140,
+  "version": "1.11.5.12",
+  "versionCode": 141,
   "releaseDate": "2026-11-16",
   "versionScheme": {
     "digit1": "App Version",
@@ -13,15 +13,15 @@
   "forceUpdate": false,
   "developer": "Kurzyrio",
   "supportEmail": "jerriviencenatad@gmail.com",
-  "title": "Schedule Scanner, Task Sync & Security Hardening",
+  "title": "Offline Sync, Account Switching & Chat Queue Reliability",
   "releaseNotes": [
-    "Added support for PNG and WebP schedule screenshots in the AI scanner alongside hardened token verification.",
-    "Protected student tasks and shared timetable codes with per-account isolation and ownership validation.",
-    "Strengthened account session verification, TLS checks, and reserved handle safeguards."
+    "Ensured offline edits and task completions push safely before syncing cloud data so recent changes are never overwritten.",
+    "Preserved full saved expense history and distinct task due times vs. reminder alerts across devices.",
+    "Protected unsynced schedules, grades, and expenses when switching accounts offline and improved queued chat message delivery."
   ],
   "downloadUrl": "https://skweladabaw.kurzyrio.site/download",
-  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.11.apk",
-  "sizeBytes": 26668202,
+  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.12.apk",
+  "sizeBytes": 26622409,
   "sizeFormatted": "25.4 MB",
-  "sha256": "08d8d6becc63e2f4f632ccb7ec41477fb2afa41d15f24ebfae231031d5fe47a0"
+  "sha256": "a19ba9043b4c30265b62a0fe01dd6baab294b62b618cfcb12f80801139147528"
 }
