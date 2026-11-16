@@ -295,9 +295,16 @@ export const JeepTransitMap: React.FC<JeepTransitMapProps> = ({
 
   // GPS User location & Navigation Tracking
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const userLocationRef = useRef<{ lat: number; lng: number } | null>(null);
+  userLocationRef.current = userLocation;
+  const [isPageVisible, setIsPageVisible] = useState<boolean>(() =>
+    typeof document !== 'undefined' ? !document.hidden : true
+  );
   const [isNavigating, setIsNavigating] = useState<boolean>(false);
   const isNavigatingRef = useRef<boolean>(false);
   isNavigatingRef.current = isNavigating;
+  const isWatchActiveRef = useRef<boolean>(false);
+  const hasRequestedInitialFixRef = useRef<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isLocating, setIsLocating] = useState<boolean>(false);
   const [gpsModalState, setGpsModalState] = useState<{
@@ -329,15 +336,26 @@ export const JeepTransitMap: React.FC<JeepTransitMapProps> = ({
     'jeep_pin_placement_mode'
   );
 
-  // Subscribe to device orientation compass heading
+  // Track page visibility to suspend active compass & GPS hardware when backgrounded
   useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const handleVisibility = () => {
+      setIsPageVisible(!document.hidden);
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
+
+  // Subscribe to device orientation compass heading only while map page is visible
+  useEffect(() => {
+    if (!isPageVisible) return;
     const unsubscribe = subscribeToDeviceHeading((heading) => {
       if (userHeadingBeamRef.current) {
         userHeadingBeamRef.current.style.transform = `rotate(${heading}deg)`;
       }
     });
     return () => unsubscribe();
-  }, []);
+  }, [isPageVisible]);
 
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
@@ -359,13 +377,18 @@ export const JeepTransitMap: React.FC<JeepTransitMapProps> = ({
     }
   }, [isDarkMode]);
 
-  // Request GPS automatically and keep continuous smooth watch tracking while active
+  // Gate continuous high-accuracy GPS watch strictly to active navigation while page is visible
   useEffect(() => {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) return;
+    if (typeof navigator === 'undefined' || !navigator.geolocation || !isPageVisible) {
+      isWatchActiveRef.current = false;
+      return;
+    }
 
+    let isCancelled = false;
     let watchId: number | null = null;
 
     const handlePos = (pos: GeolocationPosition) => {
+      if (isCancelled) return;
       const { latitude: lat, longitude: lng } = pos.coords;
       setUserLocation({ lat, lng });
 
@@ -394,28 +417,35 @@ export const JeepTransitMap: React.FC<JeepTransitMapProps> = ({
       }
     };
 
-    // 1. Initial immediate location check
-    navigator.geolocation.getCurrentPosition(
-      handlePos,
-      () => {},
-      { enableHighAccuracy: true, timeout: 8000 }
-    );
-
-    // 2. Continuous real-time movement watching
-    try {
-      watchId = navigator.geolocation.watchPosition(
+    if (isNavigating) {
+      try {
+        watchId = navigator.geolocation.watchPosition(
+          handlePos,
+          () => {},
+          { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
+        );
+        isWatchActiveRef.current = true;
+      } catch (_) {
+        isWatchActiveRef.current = false;
+      }
+    } else if (!hasRequestedInitialFixRef.current && !isWatchActiveRef.current && !userLocationRef.current) {
+      // Single passive initial fix when browsing map (avoids continuous high-accuracy GPS drain)
+      hasRequestedInitialFixRef.current = true;
+      navigator.geolocation.getCurrentPosition(
         handlePos,
         () => {},
-        { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
+        { enableHighAccuracy: false, maximumAge: 60000, timeout: 8000 }
       );
-    } catch (_) {}
+    }
 
     return () => {
+      isCancelled = true;
+      isWatchActiveRef.current = false;
       if (watchId !== null && navigator.geolocation) {
         navigator.geolocation.clearWatch(watchId);
       }
     };
-  }, []);
+  }, [isNavigating, isPageVisible]);
 
   // ─────────────────────────────────────────────────────────────────────────────
   // MAP INITIALIZATION (MapLibre GL with OpenFreeMap Web Worker)
@@ -828,6 +858,12 @@ export const JeepTransitMap: React.FC<JeepTransitMapProps> = ({
 
       showToast(toastText);
     };
+
+    // Reuse active high-accuracy GPS watch position instead of spawning overlapping getCurrentPosition requests
+    if (isWatchActiveRef.current && userLocationRef.current) {
+      applyLocation(userLocationRef.current.lat, userLocationRef.current.lng, 'Location centered');
+      return;
+    }
 
     // 1. Direct native Android/Capacitor path
     if (Capacitor.isNativePlatform()) {

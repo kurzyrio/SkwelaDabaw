@@ -68,8 +68,8 @@ public class MainActivity extends BridgeActivity {
             WindowCompat.setDecorFitsSystemWindows(getWindow(), true);
         }
 
-        // Initialize 5-minute background weather monitoring service
-        WeatherBackgroundReceiver.scheduleNextWeatherAlarm(this, System.currentTimeMillis() + 10000L);
+        // Schedule battery-aware periodic background weather monitoring via WorkManager
+        WeatherBackgroundReceiver.scheduleWeatherWork(this);
 
         // Configure WebView settings for WebRTC video playback and permissions
         if (bridge != null && bridge.getWebView() != null) {

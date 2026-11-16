@@ -9,11 +9,16 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Build;
-import android.os.PowerManager;
 import android.util.Log;
 
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
+import androidx.work.Constraints;
+import androidx.work.ExistingPeriodicWorkPolicy;
+import androidx.work.NetworkType;
+import androidx.work.OneTimeWorkRequest;
+import androidx.work.PeriodicWorkRequest;
+import androidx.work.WorkManager;
 
 import org.json.JSONObject;
 
@@ -25,13 +30,12 @@ import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.Locale;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 /**
- * 5-Minute Native Android Background Weather Monitoring Receiver
- * Runs reliably every 5 minutes in background to fetch real-time Davao weather
- * and dispatches system notifications for extreme heat or commute rain advisories.
+ * Native Android Weather Monitoring Scheduler & Broadcast Receiver
+ * Uses WorkManager with NetworkType.CONNECTED constraints (no 5-minute RTC_WAKEUP / WakeLock loops)
+ * and dispatches standard system notifications via NotificationManager when enabled.
  */
 public class WeatherBackgroundReceiver extends BroadcastReceiver {
     private static final String TAG = "WeatherBackgroundRcvr";
@@ -40,105 +44,138 @@ public class WeatherBackgroundReceiver extends BroadcastReceiver {
     public static final String CHANNEL_ID = "skweladabaw_weather";
     public static final int NOTIF_HEAT_ID = 95001;
     public static final int NOTIF_RAIN_ID = 95002;
-    public static final long INTERVAL_MS = 5 * 60 * 1000L; // 5 minutes
+    public static final long INTERVAL_MINUTES = 20L;
+    private static final String UNIQUE_WEATHER_WORK = "skweladabaw_weather_periodic_work";
+    private static final int LEGACY_ALARM_REQUEST_CODE = 7788;
     private static final String WEATHER_URL = "https://skweladabaw.kurzyrio.site/api/weather.php";
 
-    private static final ExecutorService executor = Executors.newSingleThreadExecutor();
+    public static boolean areWeatherAlertsEnabled(Context context) {
+        if (context == null) return false;
+        SharedPreferences widgetPrefs = context.getSharedPreferences("SkwelaWidgetPrefs", Context.MODE_PRIVATE);
+        String alertsEnabledStr = widgetPrefs.getString("skweladabaw_weather_alerts_enabled", "true");
+        return !"false".equalsIgnoreCase(alertsEnabledStr);
+    }
 
     @Override
     public void onReceive(Context context, Intent intent) {
         if (context == null) return;
+        Context appContext = context.getApplicationContext();
         String action = intent != null ? intent.getAction() : null;
-        Log.d(TAG, "WeatherBackgroundReceiver woke up with action: " + action);
+        Log.d(TAG, "WeatherBackgroundReceiver triggered with action: " + action);
 
-        final PendingResult pendingResult = goAsync();
+        cancelLegacyAlarm(appContext);
 
-        PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
-        final PowerManager.WakeLock wakeLock = (pm != null)
-            ? pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "skweladabaw:weather_bg_wakelock")
-            : null;
-
-        if (wakeLock != null) {
-            try {
-                wakeLock.acquire(45000L); // 45s safety timeout
-            } catch (Exception ignored) {}
+        if (!areWeatherAlertsEnabled(appContext)) {
+            cancelWeatherWork(appContext);
+            return;
         }
 
-        // Run fetch and threshold evaluation on background thread
-        executor.execute(() -> {
-            try {
-                Context appContext = context.getApplicationContext();
-                fetchAndEvaluateWeather(appContext);
+        scheduleWeatherWork(appContext);
 
-                // Also trigger background widget & ongoing timetable notification synchronization
-                try {
-                    WidgetScheduleHelper.evaluateAndUpdateAllWidgets(appContext);
-                    SharedPreferences ongoingPrefs = appContext.getSharedPreferences("skweladabaw_ongoing_service_prefs", Context.MODE_PRIVATE);
-                    if (ongoingPrefs.getBoolean("pref_is_active", false)) {
-                        Intent serviceIntent = new Intent(appContext, SkwelaOngoingService.class);
-                        serviceIntent.setAction(SkwelaOngoingService.ACTION_UPDATE);
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            appContext.startForegroundService(serviceIntent);
-                        } else {
-                            appContext.startService(serviceIntent);
-                        }
-                    }
-                } catch (Exception ignored) {}
+        if (ACTION_WEATHER_CHECK.equals(action)) {
+            try {
+                Constraints constraints = new Constraints.Builder()
+                    .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .build();
+                OneTimeWorkRequest immediateWork = new OneTimeWorkRequest.Builder(WeatherSyncWorker.class)
+                    .setConstraints(constraints)
+                    .build();
+                WorkManager.getInstance(appContext).enqueue(immediateWork);
             } catch (Exception e) {
-                Log.w(TAG, "Error evaluating background weather", e);
-            } finally {
-                // Guarantee next alarm in exactly 5 minutes
-                scheduleNextWeatherAlarm(context.getApplicationContext(), System.currentTimeMillis() + INTERVAL_MS);
-                if (wakeLock != null && wakeLock.isHeld()) {
-                    try {
-                        wakeLock.release();
-                    } catch (Exception ignored) {}
-                }
-                try {
-                    pendingResult.finish();
-                } catch (Exception ignored) {}
+                Log.w(TAG, "Failed to enqueue one-time weather check", e);
             }
-        });
+        }
     }
 
     /**
-     * Schedules the next weather monitoring alarm with battery-aware Android idle support
+     * Cancels any legacy 5-minute AlarmManager weather wakeup from earlier app versions.
      */
-    public static void scheduleNextWeatherAlarm(Context context, long triggerAtMillis) {
+    public static void cancelLegacyAlarm(Context context) {
         try {
             AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
             if (alarmManager == null) return;
 
             Intent intent = new Intent(context, WeatherBackgroundReceiver.class);
             intent.setAction(ACTION_WEATHER_CHECK);
-
-            int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+            int flags = PendingIntent.FLAG_NO_CREATE;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 flags |= PendingIntent.FLAG_IMMUTABLE;
             }
-
-            PendingIntent pi = PendingIntent.getBroadcast(context, 7788, intent, flags);
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    if (alarmManager.canScheduleExactAlarms()) {
-                        alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pi);
-                    } else {
-                        alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pi);
-                    }
-                } else {
-                    alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pi);
-                }
-            } else {
-                alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAtMillis, pi);
+            PendingIntent pi = PendingIntent.getBroadcast(context, LEGACY_ALARM_REQUEST_CODE, intent, flags);
+            if (pi != null) {
+                alarmManager.cancel(pi);
+                pi.cancel();
             }
-            Log.d(TAG, "Next background weather alarm set for: " + new Date(triggerAtMillis));
+        } catch (Exception ignored) {}
+    }
+
+    /**
+     * Schedules battery-friendly WorkManager periodic weather monitoring (cancelled when disabled).
+     */
+    public static void scheduleWeatherWork(Context context) {
+        if (context == null) return;
+        Context appContext = context.getApplicationContext();
+        cancelLegacyAlarm(appContext);
+
+        if (!areWeatherAlertsEnabled(appContext)) {
+            cancelWeatherWork(appContext);
+            return;
+        }
+
+        try {
+            Constraints constraints = new Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .build();
+
+            PeriodicWorkRequest workRequest = new PeriodicWorkRequest.Builder(
+                WeatherSyncWorker.class,
+                INTERVAL_MINUTES,
+                TimeUnit.MINUTES,
+                5L,
+                TimeUnit.MINUTES
+            )
+                .setConstraints(constraints)
+                .build();
+
+            WorkManager.getInstance(appContext).enqueueUniquePeriodicWork(
+                UNIQUE_WEATHER_WORK,
+                ExistingPeriodicWorkPolicy.KEEP,
+                workRequest
+            );
+            Log.d(TAG, "Scheduled WorkManager periodic weather check (" + INTERVAL_MINUTES + "m)");
         } catch (Exception e) {
-            Log.w(TAG, "Failed to schedule weather alarm", e);
+            Log.w(TAG, "Failed to schedule WorkManager weather work", e);
         }
     }
 
-    private void fetchAndEvaluateWeather(Context context) {
+    /**
+     * Immediately cancels periodic background weather work when disabled in user preferences.
+     */
+    public static void cancelWeatherWork(Context context) {
+        if (context == null) return;
+        Context appContext = context.getApplicationContext();
+        cancelLegacyAlarm(appContext);
+        try {
+            WorkManager.getInstance(appContext).cancelUniqueWork(UNIQUE_WEATHER_WORK);
+            Log.d(TAG, "Cancelled WorkManager periodic weather work");
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to cancel WorkManager weather work", e);
+        }
+    }
+
+    /**
+     * Backward-compatible entrypoint preserving existing callers while using WorkManager.
+     */
+    public static void scheduleNextWeatherAlarm(Context context, long _ignoredTriggerAtMillis) {
+        scheduleWeatherWork(context);
+    }
+
+    public static boolean evaluateWeatherAndNotify(Context context) {
+        if (!areWeatherAlertsEnabled(context)) {
+            cancelWeatherWork(context);
+            return true;
+        }
+
         HttpURLConnection conn = null;
         try {
             URL url = new URL(WEATHER_URL);
@@ -152,7 +189,7 @@ public class WeatherBackgroundReceiver extends BroadcastReceiver {
             int responseCode = conn.getResponseCode();
             if (responseCode != HttpURLConnection.HTTP_OK) {
                 Log.w(TAG, "Weather API returned HTTP code: " + responseCode);
-                return;
+                return false;
             }
 
             BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
@@ -167,7 +204,7 @@ public class WeatherBackgroundReceiver extends BroadcastReceiver {
             JSONObject json = new JSONObject(jsonStr);
 
             JSONObject current = json.optJSONObject("current");
-            if (current == null) return;
+            if (current == null) return true;
 
             double temperature = current.has("temp") ? current.optDouble("temp") : current.optDouble("temperature", 30.0);
             double heatIndex = current.has("heatIndex") ? current.optDouble("heatIndex") : current.optDouble("apparentTemperature", temperature);
@@ -197,13 +234,11 @@ public class WeatherBackgroundReceiver extends BroadcastReceiver {
                 .putString("last_condition", condition)
                 .apply();
 
-            // Check if user has weather alerts enabled in Settings
-            SharedPreferences widgetPrefs = context.getSharedPreferences("SkwelaWidgetPrefs", Context.MODE_PRIVATE);
-            String alertsEnabledStr = widgetPrefs.getString("skweladabaw_weather_alerts_enabled", "true");
-            boolean alertsEnabled = !"false".equalsIgnoreCase(alertsEnabledStr);
-            if (!alertsEnabled) {
+            // Re-verify weather alerts enabled before posting notifications
+            if (!areWeatherAlertsEnabled(context)) {
                 Log.d(TAG, "Weather alerts disabled by user preference, skipping notification evaluation");
-                return;
+                cancelWeatherWork(context);
+                return true;
             }
 
             // Evaluate Notification Thresholds
@@ -254,8 +289,10 @@ public class WeatherBackgroundReceiver extends BroadcastReceiver {
                 );
             }
 
+            return true;
         } catch (Exception e) {
             Log.w(TAG, "Failed to fetch and evaluate background weather", e);
+            return false;
         } finally {
             if (conn != null) {
                 try {
@@ -265,7 +302,7 @@ public class WeatherBackgroundReceiver extends BroadcastReceiver {
         }
     }
 
-    private void ensureNotificationChannel(Context context) {
+    private static void ensureNotificationChannel(Context context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm != null) {
@@ -285,7 +322,7 @@ public class WeatherBackgroundReceiver extends BroadcastReceiver {
         }
     }
 
-    private void sendWeatherNotification(Context context, int notificationId, String title, String body) {
+    private static void sendWeatherNotification(Context context, int notificationId, String title, String body) {
         try {
             Intent intent = new Intent(context, MainActivity.class);
             intent.putExtra("target_tab", "weather");

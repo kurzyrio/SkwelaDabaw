@@ -530,6 +530,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const handleTogglePersistentNextClass = async (enabled: boolean) => {
     setPersistentNextClass(enabled);
     localStorage.setItem('skweladabaw_persistent_next_class', enabled ? 'true' : 'false');
+    window.dispatchEvent(new Event('skweladabaw_persistent_notif_changed'));
     queueCloudSync();
     if (enabled) {
       try {

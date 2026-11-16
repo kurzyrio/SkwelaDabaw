@@ -17,10 +17,38 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.5.15',
+    releaseDate: 'November 16, 2026',
+    title: 'Battery Efficiency, Background Sync & Smooth Maps',
+    isLatest: true,
+    tagline: 'Longer battery life with WorkManager background weather sync, idle-paused animations, and smoother maps and chat.',
+    highlights: [
+      'Replaced continuous background weather wake-ups with efficient Android WorkManager scheduling and background-safe ongoing class updates',
+      'Paused tap effects, mascot animations, high-accuracy GPS, and chat/bus/weather polling when idle or off-screen',
+      'Fixed simultaneous class alerts, chat scroll jumps while reading older messages, and photo EXIF metadata stripping'
+    ],
+    items: [
+      {
+        type: 'improvement',
+        title: 'Battery & Background Weather Optimization',
+        description: 'Switched weather checks to Android WorkManager when connected and eliminated idle 60fps animation loops and unnecessary background wake-ups.'
+      },
+      {
+        type: 'fix',
+        title: 'Smart GPS, Smoother DC Bus & Jeep Maps',
+        description: 'Kept continuous high-accuracy GPS active only during navigation and stopped DC Bus routes and stops from redrawing every 5 seconds.'
+      },
+      {
+        type: 'fix',
+        title: 'Simultaneous Class Alerts, Chat Scroll & Media Cleanup',
+        description: 'Delivered all overlapping class reminders in sequence, stopped chat from auto-scrolling while reading history, and stripped photo metadata on upload.'
+      }
+    ]
+  },
+  {
     version: '1.11.5.14',
     releaseDate: 'November 16, 2026',
     title: 'Edge-to-Edge Safe Areas, Mobile UI & Fallback Fixes',
-    isLatest: true,
     tagline: 'Full-screen edge-to-edge safe areas, clean small-screen layouts, clear retry states, and reliable back navigation.',
     highlights: [
       'Added Android 15/16 edge-to-edge safe-area spacing and smooth keyboard resizing across onboarding, chat, maps, and navigation',

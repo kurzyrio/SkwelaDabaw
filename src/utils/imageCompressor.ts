@@ -63,29 +63,7 @@ export async function compressImageForChat(
     }
   }
 
-  // 1.5. Clean Bypass: If file is already optimized (< 1.5MB and standard web format), preserve original quality
-  if (source instanceof Blob && source.size <= 1.5 * 1024 * 1024) {
-    const isCleanFormat = ['image/webp', 'image/jpeg', 'image/png'].includes(source.type);
-    if (isCleanFormat) {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => reject(new Error('Failed to read image data'));
-        reader.readAsDataURL(source);
-      });
-      const fmt = source.type === 'image/png' ? 'png' : (source.type === 'image/webp' ? 'webp' : 'jpeg');
-      return {
-        blob: source,
-        dataUrl,
-        width: 0,
-        height: 0,
-        sizeBytes: source.size,
-        format: fmt
-      };
-    }
-  }
-
-  // 2. Non-GIF: Process via HTML5 Canvas with alpha transparency support
+  // 2. Non-GIF: Always process via HTML5 Canvas to enforce dimension/size bounds and strip EXIF metadata
   return new Promise((resolve, reject) => {
     let img: HTMLImageElement;
 
@@ -129,6 +107,7 @@ export async function compressImageForChat(
 
         // Try WebP first (preserves alpha and achieves ~85% smaller file size)
         let mimeType = 'image/webp';
+        let outputCanvas = canvas;
         let dataUrl = canvas.toDataURL(mimeType, quality);
 
         // Fallback to JPEG if WebP is unsupported
@@ -143,11 +122,12 @@ export async function compressImageForChat(
             fallbackCtx.fillStyle = '#FFFFFF';
             fallbackCtx.fillRect(0, 0, width, height);
             fallbackCtx.drawImage(canvas, 0, 0);
+            outputCanvas = fallbackCanvas;
             dataUrl = fallbackCanvas.toDataURL('image/jpeg', quality);
           }
         }
 
-        canvas.toBlob(
+        outputCanvas.toBlob(
           (blob) => {
             if (!blob) {
               reject(new Error('Failed to create image blob'));

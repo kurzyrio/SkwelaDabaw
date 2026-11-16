@@ -26,9 +26,15 @@ const DAY_NAME_MAP: DayOfWeek[] = [
 export function useScheduleAlarm() {
   const [activeAlert, setActiveAlert] = useState<ActiveAlarmAlert | null>(null);
   const alertedIdsRef = useRef<Set<string>>(new Set());
+  const alertQueueRef = useRef<ActiveAlarmAlert[]>([]);
 
   useEffect(() => {
+    let isCancelled = false;
+
     const checkAlarms = async () => {
+      if (isCancelled) return;
+      if (typeof document !== 'undefined' && document.hidden) return;
+
       try {
         const now = new Date();
         const currentDay = DAY_NAME_MAP[now.getDay()];
@@ -38,11 +44,14 @@ export function useScheduleAlarm() {
         const dateKey = `${now.toISOString().split('T')[0]}`;
 
         const schedules = await db.schedules.toArray();
+        if (isCancelled) return;
+
         const todaySchedules = schedules.filter((s) => {
           const rem = (s.reminderMinutes !== undefined && s.reminderMinutes !== null) ? s.reminderMinutes : 0;
           return s.days.includes(currentDay) && rem > 0;
         });
 
+        const newlyTriggered: ActiveAlarmAlert[] = [];
         for (const schedule of todaySchedules) {
           const [sHourStr, sMinStr] = schedule.startTime.split(':');
           const sHour = parseInt(sHourStr, 10);
@@ -60,8 +69,7 @@ export function useScheduleAlarm() {
             const alertKey = `${dateKey}-${schedule.id}-${schedule.startTime}`;
             if (!alertedIdsRef.current.has(alertKey)) {
               alertedIdsRef.current.add(alertKey);
-
-              setActiveAlert({
+              newlyTriggered.push({
                 id: alertKey,
                 subjectCode: schedule.subjectCode,
                 subjectName: schedule.subjectName,
@@ -70,31 +78,47 @@ export function useScheduleAlarm() {
                 startTime: schedule.startTime,
                 minutesLeft: diffMinutes
               });
-
-              if (isAudioEnabled()) {
-                playEagleSound('alert');
-              }
-              break;
             }
           }
+        }
+
+        if (newlyTriggered.length > 0 && !isCancelled) {
+          if (isAudioEnabled()) {
+            playEagleSound('alert');
+          }
+          alertQueueRef.current.push(...newlyTriggered);
+          setActiveAlert((prev) => prev ?? (alertQueueRef.current.shift() || null));
         }
       } catch (err) {
         console.debug('Schedule alarm check error:', err);
       }
     };
 
-    // Initial check after 3 seconds, then every 30 seconds
+    const handleVisibility = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        checkAlarms();
+      }
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibility);
+    }
+
+    // Initial check after 3 seconds, then every 30 seconds while visible
     const initialTimer = setTimeout(checkAlarms, 3000);
     const interval = setInterval(checkAlarms, 30000);
 
     return () => {
+      isCancelled = true;
       clearTimeout(initialTimer);
       clearInterval(interval);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibility);
+      }
     };
   }, []);
 
   const dismissAlert = () => {
-    setActiveAlert(null);
+    setActiveAlert(() => alertQueueRef.current.shift() || null);
   };
 
   return {

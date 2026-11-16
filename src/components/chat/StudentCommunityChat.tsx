@@ -338,6 +338,13 @@ export const StudentCommunityChat: React.FC<StudentCommunityChatProps> = ({
   // Refs
   const localSentIdsRef = useRef<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const isNearBottomRef = useRef<boolean>(true);
+  const lastScrollStateRef = useRef<{ channelId: string; count: number; lastId?: string }>({
+    channelId: '',
+    count: 0,
+    lastId: undefined
+  });
 
   useEffect(() => {
     const hasModalOpen = isAttachmentDrawerOpen || isRoutePickerOpen || isAlertPickerOpen || isSpotPickerOpen || isChannelsDrawerOpen;
@@ -421,13 +428,56 @@ export const StudentCommunityChat: React.FC<StudentCommunityChatProps> = ({
     }
   }, [userSession?.uid]);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+    messagesEndRef.current?.scrollIntoView({ behavior });
   };
 
   useEffect(() => {
-    scrollToBottom();
-  }, [channelMessages, activeChannelId]);
+    const lastMsg = channelMessages[channelMessages.length - 1];
+    const channelChanged = lastScrollStateRef.current.channelId !== activeChannelId;
+    const hasNewTrailingMsg = Boolean(
+      lastMsg &&
+      lastMsg.id !== lastScrollStateRef.current.lastId &&
+      channelMessages.length >= lastScrollStateRef.current.count
+    );
+    const isOwnLastMsg = Boolean(
+      lastMsg &&
+      (lastMsg.isOwn ||
+        (userSession?.uid && lastMsg.senderUid === userSession.uid) ||
+        (lastMsg.id && localSentIdsRef.current.has(lastMsg.id)))
+    );
+
+    lastScrollStateRef.current = {
+      channelId: activeChannelId,
+      count: channelMessages.length,
+      lastId: lastMsg?.id
+    };
+
+    if (channelChanged) {
+      isNearBottomRef.current = true;
+      scrollToBottom('auto');
+    } else if (hasNewTrailingMsg && (isNearBottomRef.current || isOwnLastMsg)) {
+      scrollToBottom('smooth');
+    }
+  }, [channelMessages, activeChannelId, userSession?.uid]);
+
+  useEffect(() => {
+    const previewUrl = stagedAttachment?.type === 'photo' ? stagedAttachment.previewUrl : undefined;
+    return () => {
+      if (previewUrl && previewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [stagedAttachment?.type === 'photo' ? stagedAttachment.previewUrl : null]);
+
+  useEffect(() => {
+    const previewUrl = uploadingMedia?.previewUrl;
+    return () => {
+      if (previewUrl && previewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [uploadingMedia?.previewUrl]);
 
   useEffect(() => {
     if (slowModeCountdown > 0) {
@@ -625,7 +675,7 @@ export const StudentCommunityChat: React.FC<StudentCommunityChatProps> = ({
       };
     });
 
-    setTimeout(scrollToBottom, 150);
+    setTimeout(() => scrollToBottom('smooth'), 150);
   };
 
   const executeUploadPhoto = async (source: File | Blob | string, captionText?: string) => {
@@ -648,7 +698,7 @@ export const StudentCommunityChat: React.FC<StudentCommunityChatProps> = ({
       captionText,
       progress: 0
     });
-    setTimeout(scrollToBottom, 60);
+    setTimeout(() => scrollToBottom('smooth'), 60);
 
     try {
       setUploadingMedia((prev) => prev ? { ...prev, status: 'uploading' } : null);
@@ -722,7 +772,7 @@ export const StudentCommunityChat: React.FC<StudentCommunityChatProps> = ({
           [activeChannelId]: [...currentList, sentMsg]
         };
       });
-      setTimeout(scrollToBottom, 150);
+      setTimeout(() => scrollToBottom('smooth'), 150);
     } catch (err) {
       console.warn('Failed to send image message:', err);
     }
@@ -770,7 +820,7 @@ export const StudentCommunityChat: React.FC<StudentCommunityChatProps> = ({
           [activeChannelId]: [...currentList, sentMsg]
         };
       });
-      setTimeout(scrollToBottom, 150);
+      setTimeout(() => scrollToBottom('smooth'), 150);
     } catch (err) {
       console.warn('Failed to share route:', err);
     }
@@ -823,7 +873,7 @@ export const StudentCommunityChat: React.FC<StudentCommunityChatProps> = ({
           [activeChannelId]: [...currentList, sentMsg]
         };
       });
-      setTimeout(scrollToBottom, 150);
+      setTimeout(() => scrollToBottom('smooth'), 150);
     } catch (err) {
       console.warn('Failed to send alert:', err);
     }
@@ -871,7 +921,7 @@ export const StudentCommunityChat: React.FC<StudentCommunityChatProps> = ({
           [activeChannelId]: [...currentList, sentMsg]
         };
       });
-      setTimeout(scrollToBottom, 150);
+      setTimeout(() => scrollToBottom('smooth'), 150);
     } catch (err) {
       console.warn('Failed to send spot:', err);
     }
@@ -1039,6 +1089,11 @@ export const StudentCommunityChat: React.FC<StudentCommunityChatProps> = ({
 
       {/* Messages Scroll Area with Daily Date Separators */}
       <div 
+        ref={messagesContainerRef}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+        }}
         className="flex-1 min-h-0 p-4 overflow-y-auto space-y-3 bg-[var(--canvas-bg)]"
         role="log"
         aria-live="polite"
@@ -1567,7 +1622,7 @@ export const StudentCommunityChat: React.FC<StudentCommunityChatProps> = ({
               value={inputText}
               onFocus={() => {
                 setIsTyping(true);
-                setTimeout(scrollToBottom, 150);
+                setTimeout(() => scrollToBottom('smooth'), 150);
               }}
               onBlur={() => {
                 setIsTyping(false);

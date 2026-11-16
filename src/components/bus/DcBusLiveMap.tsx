@@ -565,6 +565,8 @@ export const DcBusLiveMap: React.FC<DcBusLiveMapProps> = ({
     if (cached && cached.buses.length > 0) return cached.buses;
     return DEFAULT_BUSES;
   });
+  const busesRef = useRef<BusPosition[]>(buses);
+  busesRef.current = buses;
   const [reloadProgress, setReloadProgress] = useState<number>(0);
   const [geoData, setGeoData] = useState<DavaoBusGeoJson | null>(null);
   const [selectedFamily, setSelectedFamily] = useState<string>('all');
@@ -601,15 +603,29 @@ export const DcBusLiveMap: React.FC<DcBusLiveMapProps> = ({
     return cached?.buses.length ? 'Cached Snapshot' : 'DIBS Telemetry';
   });
 
-  // Monitor official schedule status for information only - never erase active buses
+  // Monitor official schedule status for information only - pause while tab/app is hidden
   useEffect(() => {
     const updateSchedule = () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       const s = getDibsServiceStatus();
       setScheduleStatus(s);
     };
     updateSchedule();
     const interval = setInterval(updateSchedule, 30000);
-    return () => clearInterval(interval);
+    const handleVisibility = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        setScheduleStatus(getDibsServiceStatus());
+      }
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibility);
+    }
+    return () => {
+      clearInterval(interval);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibility);
+      }
+    };
   }, []);
 
   // 1. Fetch Official Road GeoJSON (polylines & 125 stops) with local CacheStorage fallback
@@ -863,14 +879,24 @@ export const DcBusLiveMap: React.FC<DcBusLiveMapProps> = ({
     }
   }, []);
 
-  // Telemetry refresh cycle (strictly every 5s when online)
+  // Telemetry refresh cycle (strictly every 5s when online and visible)
   useEffect(() => {
-    fetchBusPositions();
-    const timer = setInterval(() => {
+    const triggerRefresh = () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
       fetchBusPositions();
-    }, 5000);
-    return () => clearInterval(timer);
+    };
+    triggerRefresh();
+    const timer = setInterval(triggerRefresh, 5000);
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', triggerRefresh);
+    }
+    return () => {
+      clearInterval(timer);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', triggerRefresh);
+      }
+    };
   }, [fetchBusPositions]);
 
   // 3. Initialize Leaflet Map with Custom Panes (Stops, Routes, Traffic) and Offline Basemap Fallback
@@ -1138,21 +1164,22 @@ export const DcBusLiveMap: React.FC<DcBusLiveMapProps> = ({
           lineJoin: 'round'
         }).addTo(polylinesLayerRef.current!);
 
-        // Find which buses are currently traveling on this specific route
-        const activeRouteBuses = buses.filter((b) => b.code.toUpperCase() === routeCode.toUpperCase());
-        const busListHtml = activeRouteBuses.length > 0
-          ? `<div style="color: #30D158; font-weight: bold; margin-top: 2px;">Active: ${activeRouteBuses.map((b) => b.fleet).join(', ')}</div>`
-          : '<div style="color: #8E8E93; font-size: 10px; margin-top: 2px;">No buses on this route right now</div>';
+        line.bindTooltip(() => {
+          const activeRouteBuses = busesRef.current.filter((b) => b.code.toUpperCase() === routeCode.toUpperCase());
+          const busListHtml = activeRouteBuses.length > 0
+            ? `<div style="color: #30D158; font-weight: bold; margin-top: 2px;">Active: ${activeRouteBuses.map((b) => b.fleet).join(', ')}</div>`
+            : '<div style="color: #8E8E93; font-size: 10px; margin-top: 2px;">No buses on this route right now</div>';
 
-        line.bindTooltip(`
-          <div style="font-family: inherit; font-size: 11px; padding: 2px 4px;">
-            <div style="font-weight: 900; color: #FFFFFF; display: flex; align-items: center; gap: 6px;">
-              <span style="display: inline-block; width: 8px; height: 8px; border-radius: 9999px; background: ${color};"></span>
-              <span>${routeCode} • ${routeMeta ? routeMeta.name : routeCode}</span>
+          return `
+            <div style="font-family: inherit; font-size: 11px; padding: 2px 4px;">
+              <div style="font-weight: 900; color: #FFFFFF; display: flex; align-items: center; gap: 6px;">
+                <span style="display: inline-block; width: 8px; height: 8px; border-radius: 9999px; background: ${color};"></span>
+                <span>${routeCode} • ${routeMeta ? routeMeta.name : routeCode}</span>
+              </div>
+              ${busListHtml}
             </div>
-            ${busListHtml}
-          </div>
-        `, {
+          `;
+        }, {
           sticky: true,
           direction: 'top',
           className: 'dc-bus-route-tooltip'
@@ -1192,7 +1219,7 @@ export const DcBusLiveMap: React.FC<DcBusLiveMapProps> = ({
         stopMarker.addTo(stopsLayerRef.current!);
       }
     });
-  }, [geoData, selectedFamily, activeShift, buses]);
+  }, [geoData, selectedFamily, activeShift]);
 
 
   // 5. Filter Buses by Family & Search (Zero Parentheses)

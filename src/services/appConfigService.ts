@@ -133,18 +133,47 @@ export async function fetchRemoteAppConfig(): Promise<RemoteAppConfig> {
 export function subscribeToRemoteAppConfig(
   onUpdate: (config: RemoteAppConfig) => void
 ): () => void {
+  let isCancelled = false;
+  let isFetching = false;
+
   // Call immediately with cache
   onUpdate(getCachedAppConfig());
 
-  // Also fetch once via network
-  fetchRemoteAppConfig().then(onUpdate).catch(() => {});
+  const refreshConfig = () => {
+    if (isCancelled || isFetching) return;
+    if (typeof document !== 'undefined' && document.hidden) return;
+    isFetching = true;
+    fetchRemoteAppConfig()
+      .then((cfg) => {
+        if (!isCancelled) onUpdate(cfg);
+      })
+      .catch(() => {})
+      .finally(() => {
+        isFetching = false;
+      });
+  };
 
-  // Periodic poll every 60s
-  const intervalId = setInterval(() => {
-    fetchRemoteAppConfig().then(onUpdate).catch(() => {});
-  }, 60000);
+  // Also fetch once via network if visible
+  refreshConfig();
 
-  return () => clearInterval(intervalId);
+  // Periodic poll every 60s when visible
+  const intervalId = setInterval(refreshConfig, 60000);
+  const handleVisibility = () => {
+    if (typeof document !== 'undefined' && !document.hidden) {
+      refreshConfig();
+    }
+  };
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', handleVisibility);
+  }
+
+  return () => {
+    isCancelled = true;
+    clearInterval(intervalId);
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', handleVisibility);
+    }
+  };
 }
 
 /**

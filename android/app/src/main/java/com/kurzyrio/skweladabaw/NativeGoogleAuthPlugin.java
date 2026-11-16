@@ -43,7 +43,7 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.auth.GoogleAuthProvider;
 
-import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
@@ -67,6 +67,7 @@ public class NativeGoogleAuthPlugin extends Plugin {
 
     private static final String TAG = "SkwelaGoogleAuth";
     private static final String DEFAULT_WEB_CLIENT_ID = "981655805429-f16f8mrme8snjr02mnapmj27ln3ofb2a.apps.googleusercontent.com";
+    private static final ExecutorService CREDENTIAL_EXECUTOR = Executors.newSingleThreadExecutor();
 
     private String getServerClientId(@Nullable PluginCall call) {
         if (call != null) {
@@ -121,13 +122,12 @@ public class NativeGoogleAuthPlugin extends Plugin {
 
                 // 2. Use active Activity context so MIUI/HyperOS does not drop the dialog window token
                 CredentialManager credentialManager = CredentialManager.create(activity);
-                Executor executor = Executors.newSingleThreadExecutor();
 
                 credentialManager.getCredentialAsync(
                     activity,
                     request,
                     null,
-                    executor,
+                    CREDENTIAL_EXECUTOR,
                     new CredentialManagerCallback<GetCredentialResponse, GetCredentialException>() {
                         @Override
                         public void onResult(GetCredentialResponse response) {
@@ -349,7 +349,7 @@ public class NativeGoogleAuthPlugin extends Plugin {
                     credentialManager.clearCredentialStateAsync(
                         request,
                         null,
-                        Executors.newSingleThreadExecutor(),
+                        CREDENTIAL_EXECUTOR,
                         new CredentialManagerCallback<Void, ClearCredentialException>() {
                             @Override public void onResult(Void result) {}
                             @Override public void onError(@NonNull ClearCredentialException e) {}

@@ -181,27 +181,39 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
     }
   };
 
-  // 5-Minute AI Scan Cooldown
+  // 5-Minute AI Scan Cooldown (ticks only while active and modal is open)
   const AI_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
-  const [cooldownSeconds, setCooldownSeconds] = useState<number>(0);
-
-  useEffect(() => {
-    const checkCooldown = () => {
+  const computeRemainingCooldown = () => {
+    try {
       const lastScan = localStorage.getItem('last_ai_scan_timestamp');
       if (lastScan) {
         const elapsed = Date.now() - parseInt(lastScan, 10);
-        if (elapsed < AI_COOLDOWN_MS) {
-          setCooldownSeconds(Math.ceil((AI_COOLDOWN_MS - elapsed) / 1000));
-          return;
+        if (elapsed >= 0 && elapsed < AI_COOLDOWN_MS) {
+          return Math.ceil((AI_COOLDOWN_MS - elapsed) / 1000);
         }
       }
-      setCooldownSeconds(0);
-    };
+    } catch {}
+    return 0;
+  };
+  const [cooldownSeconds, setCooldownSeconds] = useState<number>(computeRemainingCooldown);
 
-    checkCooldown();
-    const interval = setInterval(checkCooldown, 1000);
+  useEffect(() => {
+    if (!isOpen) return;
+    const syncCooldown = () => {
+      setCooldownSeconds(computeRemainingCooldown());
+    };
+    syncCooldown();
+    document.addEventListener('visibilitychange', syncCooldown);
+    return () => document.removeEventListener('visibilitychange', syncCooldown);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || cooldownSeconds <= 0) return;
+    const interval = setInterval(() => {
+      setCooldownSeconds(computeRemainingCooldown());
+    }, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isOpen, cooldownSeconds > 0]);
 
   const isServerOnline = Boolean(aiReachability?.reachable);
   const isAiDisabledForGuest = !isLoggedIn;
@@ -336,6 +348,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
       if (extracted && extracted.schedules.length > 0) {
         // Save timestamp for 5-minute cooldown ONLY on success
         localStorage.setItem('last_ai_scan_timestamp', Date.now().toString());
+        setCooldownSeconds(Math.ceil(AI_COOLDOWN_MS / 1000));
         incrementDailyAiScans();
         setParsedSchedules(extracted.schedules);
 
@@ -729,8 +742,10 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
     setErrorMessage(null);
+    let fileContainer: HTMLElement | null = null;
+    let createdContainer = false;
     try {
-      let fileContainer = document.getElementById('qr-reader-file-container');
+      fileContainer = document.getElementById('qr-reader-file-container');
       if (!fileContainer) {
         fileContainer = document.createElement('div');
         fileContainer.id = 'qr-reader-file-container';
@@ -740,6 +755,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
         fileContainer.style.width = '300px';
         fileContainer.style.height = '300px';
         document.body.appendChild(fileContainer);
+        createdContainer = true;
       }
       const scanner = new Html5Qrcode('qr-reader-file-container');
       const decodedText = await scanner.scanFile(file, true);
@@ -754,6 +770,9 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
       console.warn('QR file scan error:', err);
       setErrorMessage('No valid SkwelaDabaw QR code detected in this image. Please ensure the QR is clear and well-lit.');
     } finally {
+      if (createdContainer && fileContainer?.parentNode) {
+        fileContainer.parentNode.removeChild(fileContainer);
+      }
       e.target.value = '';
     }
   };

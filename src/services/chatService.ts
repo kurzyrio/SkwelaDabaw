@@ -178,6 +178,7 @@ export const subscribeToChannel = (
   currentUserIdOrName?: string
 ) => {
   let isCancelled = false;
+  let isPolling = false;
 
   // 1. Deliver cached messages immediately (0ms)
   const cached = getCachedChannelMessages(channelId);
@@ -185,32 +186,49 @@ export const subscribeToChannel = (
     onMessages(cached);
   }
 
-  // 2. Fetch fresh messages from MySQL
+  // 2. Fetch fresh messages from MySQL with visibility & in-flight mutex
   const poll = async () => {
-    if (isCancelled) return;
-    const fresh = await fetchMessagesFromMySQL(channelId, currentUserIdOrName);
-    if (!isCancelled && fresh) {
-      // Merge any pending offline queue messages for this channel so they don't vanish
-      const pendingQueue = getOfflineQueue().filter(q => q.channelId === channelId);
-      const combined = [...fresh];
-      for (const q of pendingQueue) {
-        if (!combined.some(m => m.id === q.id)) {
-          combined.push(q);
+    if (isCancelled || isPolling) return;
+    if (typeof document !== 'undefined' && document.hidden) return;
+    isPolling = true;
+    try {
+      const fresh = await fetchMessagesFromMySQL(channelId, currentUserIdOrName);
+      if (!isCancelled && fresh) {
+        // Merge any pending offline queue messages for this channel so they don't vanish
+        const pendingQueue = getOfflineQueue().filter(q => q.channelId === channelId);
+        const combined = [...fresh];
+        for (const q of pendingQueue) {
+          if (!combined.some(m => m.id === q.id)) {
+            combined.push(q);
+          }
         }
+        combined.sort((a, b) => (a.createdMillis || 0) - (b.createdMillis || 0));
+        onMessages(combined);
       }
-      combined.sort((a, b) => (a.createdMillis || 0) - (b.createdMillis || 0));
-      onMessages(combined);
+    } finally {
+      isPolling = false;
     }
   };
 
   poll();
 
-  // 3. Keep real-time sync active every 3 seconds
+  // 3. Keep real-time sync active every 3 seconds while visible
   const timerId = setInterval(poll, 3000);
+  const handleVisibility = () => {
+    if (typeof document !== 'undefined' && !document.hidden) {
+      poll();
+    }
+  };
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', handleVisibility);
+  }
 
   return () => {
     isCancelled = true;
     clearInterval(timerId);
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', handleVisibility);
+    }
   };
 };
 

@@ -138,27 +138,37 @@ export const ScheduleImportPage: React.FC<ScheduleImportPageProps> = ({
     } catch (_) {}
   };
 
-  // Cooldown Tracking
+  // Cooldown Tracking (ticks only while cooldown is active)
   const AI_COOLDOWN_MS = 5 * 60 * 1000;
-  const [cooldownSeconds, setCooldownSeconds] = useState<number>(0);
-
-  useEffect(() => {
-    const checkCooldown = () => {
+  const computeRemainingCooldown = () => {
+    try {
       const lastScan = localStorage.getItem('last_ai_scan_timestamp');
       if (lastScan) {
         const elapsed = Date.now() - parseInt(lastScan, 10);
-        if (elapsed < AI_COOLDOWN_MS) {
-          setCooldownSeconds(Math.ceil((AI_COOLDOWN_MS - elapsed) / 1000));
-          return;
+        if (elapsed >= 0 && elapsed < AI_COOLDOWN_MS) {
+          return Math.ceil((AI_COOLDOWN_MS - elapsed) / 1000);
         }
       }
-      setCooldownSeconds(0);
-    };
+    } catch {}
+    return 0;
+  };
+  const [cooldownSeconds, setCooldownSeconds] = useState<number>(computeRemainingCooldown);
 
-    checkCooldown();
-    const interval = setInterval(checkCooldown, 1000);
-    return () => clearInterval(interval);
+  useEffect(() => {
+    const syncCooldown = () => {
+      setCooldownSeconds(computeRemainingCooldown());
+    };
+    document.addEventListener('visibilitychange', syncCooldown);
+    return () => document.removeEventListener('visibilitychange', syncCooldown);
   }, []);
+
+  useEffect(() => {
+    if (cooldownSeconds <= 0) return;
+    const interval = setInterval(() => {
+      setCooldownSeconds(computeRemainingCooldown());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [cooldownSeconds > 0]);
 
   const isAiAvailable = Boolean(aiReachability?.reachable);
   const isUsingDirectKey = aiReachability?.mode === 'direct';
@@ -390,9 +400,11 @@ export const ScheduleImportPage: React.FC<ScheduleImportPageProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
     setErrorMessage(null);
+    let fileContainer: HTMLElement | null = null;
+    let createdContainer = false;
 
     try {
-      let fileContainer = document.getElementById('qr-reader-file-container');
+      fileContainer = document.getElementById('qr-reader-file-container');
       if (!fileContainer) {
         fileContainer = document.createElement('div');
         fileContainer.id = 'qr-reader-file-container';
@@ -402,6 +414,7 @@ export const ScheduleImportPage: React.FC<ScheduleImportPageProps> = ({
         fileContainer.style.width = '300px';
         fileContainer.style.height = '300px';
         document.body.appendChild(fileContainer);
+        createdContainer = true;
       }
 
       const scanner = new Html5Qrcode('qr-reader-file-container');
@@ -415,6 +428,9 @@ export const ScheduleImportPage: React.FC<ScheduleImportPageProps> = ({
       console.warn('QR file scan error:', err);
       setErrorMessage('No valid SkwelaDabaw QR code detected in this photo. Please ensure the QR is well-lit and clear.');
     } finally {
+      if (createdContainer && fileContainer?.parentNode) {
+        fileContainer.parentNode.removeChild(fileContainer);
+      }
       e.target.value = '';
     }
   };
@@ -477,6 +493,7 @@ export const ScheduleImportPage: React.FC<ScheduleImportPageProps> = ({
 
       if (extracted && extracted.schedules.length > 0) {
         localStorage.setItem('last_ai_scan_timestamp', Date.now().toString());
+        setCooldownSeconds(Math.ceil(AI_COOLDOWN_MS / 1000));
         incrementDailyAiScans();
         setParsedSchedules(extracted.schedules);
         playEagleSound('success');

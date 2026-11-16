@@ -92,6 +92,9 @@ export const JeepVectorMap: React.FC<JeepVectorMapProps> = ({
     let fallbackStage = 0; // 0 = remote vector, 1 = remote raster, 2 = inline blank offline
     let timeoutTimer: number | null = null;
     let map: maplibregl.Map | null = null;
+    let resizeObserver: ResizeObserver | null = null;
+    let timers: ReturnType<typeof setTimeout>[] = [];
+    let handleOffline: (() => void) | null = null;
 
     const clearTimeoutTimer = () => {
       if (timeoutTimer !== null) {
@@ -183,7 +186,7 @@ export const JeepVectorMap: React.FC<JeepVectorMapProps> = ({
 
       mapRef.current = createdMap;
 
-      const handleOffline = () => {
+      handleOffline = () => {
         if (!isUnmounted && !createdMap.isStyleLoaded()) {
           advanceFallbackStyle();
         }
@@ -191,7 +194,7 @@ export const JeepVectorMap: React.FC<JeepVectorMapProps> = ({
       window.addEventListener('offline', handleOffline);
 
       // Keep map sized properly as containers expand or animate
-      const resizeObserver = new ResizeObserver(() => {
+      resizeObserver = new ResizeObserver(() => {
         if (mapRef.current) {
           mapRef.current.resize();
         }
@@ -199,25 +202,11 @@ export const JeepVectorMap: React.FC<JeepVectorMapProps> = ({
       resizeObserver.observe(mapContainerRef.current);
 
       // Delayed resizes to catch tab transitions
-      const timers = [
+      timers = [
         setTimeout(() => createdMap.resize(), 100),
         setTimeout(() => createdMap.resize(), 300),
         setTimeout(() => createdMap.resize(), 600)
       ];
-
-      return () => {
-        isUnmounted = true;
-        clearTimeoutTimer();
-        timers.forEach(t => clearTimeout(t));
-        window.removeEventListener('offline', handleOffline);
-        resizeObserver.disconnect();
-        markersRef.current.forEach(m => m.remove());
-        markersRef.current = [];
-        try {
-          createdMap.remove();
-        } catch {}
-        mapRef.current = null;
-      };
     } catch (err) {
       console.error('[JeepVectorMap] Failed to initialize MapLibre GL:', err);
       setHasError(true);
@@ -226,14 +215,22 @@ export const JeepVectorMap: React.FC<JeepVectorMapProps> = ({
     return () => {
       isUnmounted = true;
       clearTimeoutTimer();
-      markersRef.current.forEach(m => m.remove());
-      markersRef.current = [];
-      if (mapRef.current) {
-        try {
-          mapRef.current.remove();
-        } catch {}
-        mapRef.current = null;
+      timers.forEach((t) => clearTimeout(t));
+      if (handleOffline) {
+        window.removeEventListener('offline', handleOffline);
       }
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
+      markersRef.current.forEach((m) => m.remove());
+      markersRef.current = [];
+      const activeMap = map || mapRef.current;
+      if (activeMap) {
+        try {
+          activeMap.remove();
+        } catch {}
+      }
+      mapRef.current = null;
     };
   }, []);
 

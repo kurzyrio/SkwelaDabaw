@@ -20,6 +20,7 @@ import android.widget.RemoteViews;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
+import androidx.core.content.ContextCompat;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.util.Calendar;
@@ -68,7 +69,20 @@ public class SkwelaOngoingService extends Service {
     private static final String PREF_THEME_BORDER = "pref_theme_border";
     private static final String PREF_THEME_TEXT = "pref_theme_text";
 
+    private static volatile SkwelaOngoingService sInstance = null;
+
     private BroadcastReceiver timeTickReceiver = null;
+    private Bitmap cachedEagleIcon = null;
+    private String lastCachedSchedulesJson = null;
+    private List<WidgetScheduleHelper.ScheduleItem> cachedParsedSchedules = new ArrayList<>();
+    private String lastNotificationSignature = null;
+
+    public static void refreshNotificationFromBackground(Context context) {
+        SkwelaOngoingService instance = sInstance;
+        if (instance != null) {
+            instance.updateNotificationFromLocalSchedule();
+        }
+    }
 
     private void registerTimeTickReceiver() {
         if (timeTickReceiver == null) {
@@ -91,7 +105,7 @@ public class SkwelaOngoingService extends Service {
             filter.addAction(Intent.ACTION_TIMEZONE_CHANGED);
             filter.addAction("com.kurzyrio.skweladabaw.ACTION_SCHEDULE_WIDGET_UPDATE");
             try {
-                registerReceiver(timeTickReceiver, filter);
+                ContextCompat.registerReceiver(this, timeTickReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
             } catch (Exception ignored) {}
         }
     }
@@ -108,11 +122,26 @@ public class SkwelaOngoingService extends Service {
     public void updateNotificationFromLocalSchedule() {
         try {
             SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-            if (!prefs.getBoolean(PREF_IS_ACTIVE, true)) {
+            if (!prefs.getBoolean(PREF_IS_ACTIVE, false)) {
                 return;
             }
             refreshScheduleFromStorage(prefs);
-            Notification notification = buildRemoteViewsNotification(null, prefs);
+
+            String sig = String.valueOf(prefs.getString(PREF_CURRENT_CLASS, "")) + "|" +
+                String.valueOf(prefs.getString(PREF_CURRENT_ROOM, "")) + "|" +
+                String.valueOf(prefs.getString(PREF_CURRENT_TIME, "")) + "|" +
+                String.valueOf(prefs.getString(PREF_NEXT_CLASS, "")) + "|" +
+                String.valueOf(prefs.getString(PREF_NEXT_ROOM, "")) + "|" +
+                String.valueOf(prefs.getString(PREF_NEXT_TIME, "")) + "|" +
+                String.valueOf(prefs.getString(PREF_STATUS_STATE, "")) + "|" +
+                String.valueOf(prefs.getString(PREF_THEME_KEY, "midnight"));
+
+            if (sig.equals(lastNotificationSignature)) {
+                return;
+            }
+            lastNotificationSignature = sig;
+
+            Notification notification = buildRemoteViewsNotification(null, prefs, true);
             NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm != null) {
                 nm.notify(ONGOING_NOTIFICATION_ID, notification);
@@ -123,6 +152,7 @@ public class SkwelaOngoingService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        sInstance = this;
         createNotificationChannel();
         purgeLegacyReminderAlerts();
         registerTimeTickReceiver();
@@ -152,6 +182,11 @@ public class SkwelaOngoingService extends Service {
 
     @Override
     public void onDestroy() {
+        sInstance = null;
+        lastNotificationSignature = null;
+        lastCachedSchedulesJson = null;
+        cachedParsedSchedules.clear();
+        cachedEagleIcon = null;
         unregisterTimeTickReceiver();
         super.onDestroy();
     }
@@ -215,7 +250,9 @@ public class SkwelaOngoingService extends Service {
             return START_NOT_STICKY;
         }
 
-        Notification notification = buildRemoteViewsNotification(intent, prefs);
+        // Force notification update when service receives an explicit command
+        lastNotificationSignature = null;
+        Notification notification = buildRemoteViewsNotification(intent, prefs, false);
 
         try {
             if (Build.VERSION.SDK_INT >= 34) {
@@ -237,15 +274,18 @@ public class SkwelaOngoingService extends Service {
 
     @Override
     public void onTaskRemoved(Intent rootIntent) {
-        // Prevent dismissal when application activity is swiped away from Recent Apps
+        // Respect user dismissal and avoid API 31+ background FGS restriction crashes
         try {
-            Intent restartServiceIntent = new Intent(getApplicationContext(), SkwelaOngoingService.class);
-            restartServiceIntent.setAction(ACTION_START);
-            restartServiceIntent.setPackage(getPackageName());
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(restartServiceIntent);
-            } else {
-                startService(restartServiceIntent);
+            SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            if (prefs.getBoolean(PREF_IS_ACTIVE, false) && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                Intent restartServiceIntent = new Intent(getApplicationContext(), SkwelaOngoingService.class);
+                restartServiceIntent.setAction(ACTION_START);
+                restartServiceIntent.setPackage(getPackageName());
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(restartServiceIntent);
+                } else {
+                    startService(restartServiceIntent);
+                }
             }
         } catch (Exception ignored) {}
         super.onTaskRemoved(rootIntent);
@@ -272,7 +312,7 @@ public class SkwelaOngoingService extends Service {
         }
     }
 
-    private Notification buildRemoteViewsNotification(Intent intent, SharedPreferences prefs) {
+    private Notification buildRemoteViewsNotification(Intent intent, SharedPreferences prefs, boolean skipStorageRefresh) {
         String currentClass;
         String currentRoom;
         String currentTime;
@@ -290,8 +330,9 @@ public class SkwelaOngoingService extends Service {
             nextTime = intent.getStringExtra(EXTRA_NEXT_TIME);
             statusState = intent.getStringExtra(EXTRA_STATUS_STATE);
         } else {
-            // Always evaluate dynamically from local storage on background ticks & alarms
-            refreshScheduleFromStorage(prefs);
+            if (!skipStorageRefresh) {
+                refreshScheduleFromStorage(prefs);
+            }
             currentClass = prefs.getString(PREF_CURRENT_CLASS, "");
             currentRoom = prefs.getString(PREF_CURRENT_ROOM, "");
             currentTime = prefs.getString(PREF_CURRENT_TIME, "");
@@ -508,9 +549,9 @@ public class SkwelaOngoingService extends Service {
             ? PendingIntent.getActivity(this, ONGOING_NOTIFICATION_ID, launchIntent, flags)
             : null;
 
-        // Auto-restore delete intent: if user swipes away, immediately re-post
+        // Stop service cleanly if user dismisses the ongoing notification on supported Android versions
         Intent deleteIntent = new Intent(this, SkwelaOngoingService.class);
-        deleteIntent.setAction(ACTION_START);
+        deleteIntent.setAction(ACTION_STOP);
         PendingIntent deletePendingIntent = PendingIntent.getService(
             this,
             999,
@@ -534,14 +575,16 @@ public class SkwelaOngoingService extends Service {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC);
 
         try {
-            Bitmap eagleIcon = BitmapFactory.decodeResource(getResources(), R.drawable.ic_eagle_buddy);
-            if (eagleIcon != null) {
-                builder.setLargeIcon(eagleIcon);
+            if (cachedEagleIcon == null) {
+                cachedEagleIcon = BitmapFactory.decodeResource(getResources(), R.drawable.ic_eagle_buddy);
+            }
+            if (cachedEagleIcon != null) {
+                builder.setLargeIcon(cachedEagleIcon);
             }
         } catch (Exception ignored) {}
 
         Notification notification = builder.build();
-        notification.flags |= Notification.FLAG_ONGOING_EVENT | Notification.FLAG_NO_CLEAR;
+        notification.flags |= Notification.FLAG_ONGOING_EVENT;
         return notification;
     }
 
@@ -589,34 +632,42 @@ public class SkwelaOngoingService extends Service {
             String todayName = WidgetScheduleHelper.getDayName(now.get(Calendar.DAY_OF_WEEK));
             int currentMinutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
 
-            JSONArray arr = new JSONArray(allSchedulesJson);
-            List<WidgetScheduleHelper.ScheduleItem> todayClasses = new ArrayList<>();
-            for (int i = 0; i < arr.length(); i++) {
-                JSONObject obj = arr.getJSONObject(i);
-                WidgetScheduleHelper.ScheduleItem item = new WidgetScheduleHelper.ScheduleItem();
-                item.subjectCode = obj.optString("subjectCode", "");
-                item.subjectName = obj.optString("subjectName", "");
-                item.room = obj.optString("room", "");
-                item.building = obj.optString("building", "");
-                item.startTime = obj.optString("startTime", "");
-                item.endTime = obj.optString("endTime", "");
-                item.startMinutes = WidgetScheduleHelper.parseMinutes(item.startTime);
-                item.endMinutes = WidgetScheduleHelper.parseMinutes(item.endTime);
-                item.reminderMinutes = obj.optInt("reminderMinutes", obj.optInt("reminder_minutes", 10));
+            if (lastCachedSchedulesJson == null || !allSchedulesJson.equals(lastCachedSchedulesJson)) {
+                JSONArray arr = new JSONArray(allSchedulesJson);
+                List<WidgetScheduleHelper.ScheduleItem> parsed = new ArrayList<>(arr.length());
+                for (int i = 0; i < arr.length(); i++) {
+                    JSONObject obj = arr.getJSONObject(i);
+                    WidgetScheduleHelper.ScheduleItem item = new WidgetScheduleHelper.ScheduleItem();
+                    item.subjectCode = obj.optString("subjectCode", "");
+                    item.subjectName = obj.optString("subjectName", "");
+                    item.room = obj.optString("room", "");
+                    item.building = obj.optString("building", "");
+                    item.startTime = obj.optString("startTime", "");
+                    item.endTime = obj.optString("endTime", "");
+                    item.startMinutes = WidgetScheduleHelper.parseMinutes(item.startTime);
+                    item.endMinutes = WidgetScheduleHelper.parseMinutes(item.endTime);
+                    item.reminderMinutes = obj.optInt("reminderMinutes", obj.optInt("reminder_minutes", 10));
 
-                JSONArray daysArr = obj.optJSONArray("days");
-                if (daysArr != null) {
-                    for (int d = 0; d < daysArr.length(); d++) {
-                        item.days.add(daysArr.optString(d));
+                    JSONArray daysArr = obj.optJSONArray("days");
+                    if (daysArr != null) {
+                        for (int d = 0; d < daysArr.length(); d++) {
+                            item.days.add(daysArr.optString(d));
+                        }
+                    } else {
+                        String daysStr = obj.optString("days", "");
+                        if (!daysStr.isEmpty()) {
+                            String[] parts = daysStr.split(",");
+                            for (String p : parts) item.days.add(p.trim());
+                        }
                     }
-                } else {
-                    String daysStr = obj.optString("days", "");
-                    if (!daysStr.isEmpty()) {
-                        String[] parts = daysStr.split(",");
-                        for (String p : parts) item.days.add(p.trim());
-                    }
+                    parsed.add(item);
                 }
+                cachedParsedSchedules = parsed;
+                lastCachedSchedulesJson = allSchedulesJson;
+            }
 
+            List<WidgetScheduleHelper.ScheduleItem> todayClasses = new ArrayList<>();
+            for (WidgetScheduleHelper.ScheduleItem item : cachedParsedSchedules) {
                 if (WidgetScheduleHelper.matchesDay(item.days, todayName)) {
                     todayClasses.add(item);
                 }

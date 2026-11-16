@@ -63,7 +63,7 @@ export function playTapSound(soundType: string, style: TapEffectStyle = 'feather
       if (AudioClass) audioCtx = new AudioClass();
     }
     if (audioCtx && audioCtx.state === 'suspended') {
-      audioCtx.resume();
+      (audioCtx.resume() as Promise<void>)?.catch?.(() => {});
     }
     if (!audioCtx) return;
 
@@ -183,11 +183,29 @@ export const ScreenTapEffect: React.FC = () => {
   const [soundChoice, setSoundChoice] = useState<TapSoundType>(getSavedTapSound);
   const [speed, setSpeed] = useState<'gentle' | 'normal' | 'snappy'>(getSavedTapSpeed);
   const [isEnabled, setIsEnabled] = useState<boolean>(isTapEffectEnabled);
+  const [isPageVisible, setIsPageVisible] = useState<boolean>(() =>
+    typeof document !== 'undefined' ? !document.hidden : true
+  );
+  const maxEndTimeRef = useRef<number>(0);
 
-  const activeSettingsRef = useRef({ effectStyle, soundChoice, speed, isEnabled });
+  const activeSettingsRef = useRef({ effectStyle, soundChoice, speed, isEnabled, isPageVisible });
   useEffect(() => {
-    activeSettingsRef.current = { effectStyle, soundChoice, speed, isEnabled };
-  }, [effectStyle, soundChoice, speed, isEnabled]);
+    activeSettingsRef.current = { effectStyle, soundChoice, speed, isEnabled, isPageVisible };
+  }, [effectStyle, soundChoice, speed, isEnabled, isPageVisible]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const handleVisibility = () => {
+      const visible = !document.hidden;
+      setIsPageVisible(visible);
+      if (!visible) {
+        maxEndTimeRef.current = 0;
+        setParticles([]);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
 
   // Sync settings whenever modified in SettingsPage
   useEffect(() => {
@@ -207,8 +225,8 @@ export const ScreenTapEffect: React.FC = () => {
   }, []);
 
   const spawnParticles = useCallback((clientX: number, clientY: number) => {
-    const { effectStyle: currentStyle, soundChoice: currentSound, speed: currentSpeed, isEnabled: active } = activeSettingsRef.current;
-    if (!active || currentStyle === 'none') return;
+    const { effectStyle: currentStyle, soundChoice: currentSound, speed: currentSpeed, isEnabled: active, isPageVisible: visible } = activeSettingsRef.current;
+    if (!active || currentStyle === 'none' || !visible) return;
 
     const now = performance.now();
     const speedMultiplier = currentSpeed === 'snappy' ? 1.25 : currentSpeed === 'gentle' ? 0.75 : 1.0;
@@ -217,6 +235,7 @@ export const ScreenTapEffect: React.FC = () => {
     const count = currentStyle === 'sparkles' ? 6 : 8;
     const radius = 38;
     const newItems: Particle[] = [];
+    let batchMaxEndTime = maxEndTimeRef.current;
 
     for (let i = 0; i < count; i++) {
       const angle = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
@@ -293,8 +312,11 @@ export const ScreenTapEffect: React.FC = () => {
         createdAt: now,
         lifeTime,
       });
+      const endTime = now + lifeTime;
+      if (endTime > batchMaxEndTime) batchMaxEndTime = endTime;
     }
 
+    maxEndTimeRef.current = batchMaxEndTime;
     setParticles((prev) => [...prev.slice(-35), ...newItems]);
     playTapSound(currentSound, currentStyle);
   }, []);
@@ -333,12 +355,20 @@ export const ScreenTapEffect: React.FC = () => {
     };
   }, [spawnParticles]);
 
-  // Zero-Gravity Radial Deceleration Loop
+  const hasParticles = particles.length > 0;
+
+  // Zero-Gravity Radial Deceleration Loop (runs only when particles are active and page is visible)
   useEffect(() => {
-    let frame: number;
+    if (!isEnabled || effectStyle === 'none' || !isPageVisible || !hasParticles) {
+      return;
+    }
+
+    let frame = 0;
     let last = performance.now();
+    let cancelled = false;
 
     const loop = (now: number) => {
+      if (cancelled) return;
       const dt = Math.min((now - last) / 1000, 0.05);
       last = now;
 
@@ -372,12 +402,19 @@ export const ScreenTapEffect: React.FC = () => {
           .filter(Boolean) as Particle[];
       });
 
-      frame = requestAnimationFrame(loop);
+      if (now <= maxEndTimeRef.current + 32) {
+        frame = requestAnimationFrame(loop);
+      } else {
+        maxEndTimeRef.current = 0;
+      }
     };
 
     frame = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(frame);
-  }, [speed]);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(frame);
+    };
+  }, [speed, isEnabled, effectStyle, isPageVisible, hasParticles]);
 
   if (!isEnabled || effectStyle === 'none' || particles.length === 0) {
     return null;

@@ -19,17 +19,8 @@ public class WidgetUpdateReceiver extends BroadcastReceiver {
         try {
             WidgetScheduleHelper.evaluateAndUpdateAllWidgets(context);
 
-            // Also keep ongoing status bar notification in sync with real-time class transitions
-            SharedPreferences ongoingPrefs = context.getSharedPreferences("skweladabaw_ongoing_service_prefs", Context.MODE_PRIVATE);
-            if (ongoingPrefs.getBoolean("pref_is_active", false)) {
-                Intent serviceIntent = new Intent(context, SkwelaOngoingService.class);
-                serviceIntent.setAction(SkwelaOngoingService.ACTION_UPDATE);
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    context.startForegroundService(serviceIntent);
-                } else {
-                    context.startService(serviceIntent);
-                }
-            }
+            // Also keep ongoing status bar notification in sync without illegal background startForegroundService on Android 12+
+            SkwelaOngoingService.refreshNotificationFromBackground(context);
         } catch (Exception e) {
             Log.w(TAG, "Error executing widget evaluation in receiver", e);
         }

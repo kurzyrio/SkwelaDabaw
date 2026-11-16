@@ -1,6 +1,6 @@
 {
-  "version": "1.11.5.14",
-  "versionCode": 143,
+  "version": "1.11.5.15",
+  "versionCode": 144,
   "releaseDate": "2026-11-16",
   "versionScheme": {
     "digit1": "App Version",
@@ -13,15 +13,15 @@
   "forceUpdate": false,
   "developer": "Kurzyrio",
   "supportEmail": "jerriviencenatad@gmail.com",
-  "title": "Edge-to-Edge Safe Areas, Mobile UI & Fallback Fixes",
+  "title": "Battery Efficiency, Background Sync & Smooth Maps",
   "releaseNotes": [
-    "Added Android 15/16 edge-to-edge safe-area spacing and smooth keyboard resizing across onboarding, chat, maps, and navigation.",
-    "Fixed compact 320px-375px screen layouts across schedules, QR sharing, fare calculator, GPA, budget, weather, and emergency views.",
-    "Added clear retry states, external link safety checks, empty search resets, and Android hardware back navigation across modals and drawers."
+    "Reduced battery and CPU usage by pausing animations, chat/bus/weather polls, and notifications when idle or in the background.",
+    "Restricted continuous high-accuracy GPS tracking to active turn-by-turn navigation and smoothed DC Bus map rendering.",
+    "Fixed simultaneous class reminder alerts, chat scroll-to-bottom jumps while reading history, and EXIF stripping on uploaded photos."
   ],
   "downloadUrl": "https://skweladabaw.kurzyrio.site/download",
-  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.14.apk",
-  "sizeBytes": 26632087,
-  "sizeFormatted": "25.4 MB",
-  "sha256": "b5091424da175f5bbc91e34233db941d0bdd249e1970efee25dec3e2fd2d33e5"
+  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.15.apk",
+  "sizeBytes": 27021222,
+  "sizeFormatted": "25.8 MB",
+  "sha256": "554a354b62deeac4ec550d04b0dcc15ac409a66b133317ba6d4eeec9b40851ce"
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { getBayaniSpeech, BayaniMood } from '../../utils/bayaniDialogues';
 
 export type EagleMood =
@@ -177,35 +177,60 @@ export const EagleBuddy: React.FC<EagleBuddyProps> = ({
 }) => {
   const [internalTime, setInternalTime] = useState(0);
   const [isBlinking, setIsBlinking] = useState(false);
+  const [isPageVisible, setIsPageVisible] = useState<boolean>(() =>
+    typeof document !== 'undefined' ? !document.hidden : true
+  );
+  const elapsedOffsetRef = useRef(0);
 
   const moodConfig = MOOD_CONFIGS[mood] || MOOD_CONFIGS.friendly;
   const currentSpeech = speech !== undefined ? speech : getBayaniSpeech(mood as BayaniMood);
   const isCurrentlyTalking = isTalking !== undefined ? isTalking : Boolean(showSpeech && currentSpeech);
 
-  // Gentle procedural breathing animation loop
   useEffect(() => {
-    if (!isAnimated) return;
-    let animId: number;
-    let start = performance.now();
+    if (typeof document === 'undefined') return;
+    const handleVisibility = () => {
+      setIsPageVisible(!document.hidden);
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
+
+  // Gentle procedural breathing animation loop (paused when hidden or static)
+  useEffect(() => {
+    if (!isAnimated || !isPageVisible) return;
+    let animId = 0;
+    const start = performance.now();
+    const baseOffset = elapsedOffsetRef.current;
 
     const update = (time: number) => {
-      setInternalTime((time - start) / 1000);
+      const elapsed = baseOffset + (time - start) / 1000;
+      elapsedOffsetRef.current = elapsed;
+      setInternalTime(elapsed);
       animId = requestAnimationFrame(update);
     };
 
     animId = requestAnimationFrame(update);
     return () => cancelAnimationFrame(animId);
-  }, [isAnimated]);
+  }, [isAnimated, isPageVisible]);
 
   // Natural blinking
   useEffect(() => {
-    if (!isAnimated) return;
+    if (!isAnimated || !isPageVisible) {
+      setIsBlinking(false);
+      return;
+    }
+    let blinkTimeout: ReturnType<typeof setTimeout> | null = null;
     const interval = setInterval(() => {
       setIsBlinking(true);
-      setTimeout(() => setIsBlinking(false), 160);
+      if (blinkTimeout) clearTimeout(blinkTimeout);
+      blinkTimeout = setTimeout(() => setIsBlinking(false), 160);
     }, 4000 + Math.random() * 2000);
-    return () => clearInterval(interval);
-  }, [isAnimated]);
+    return () => {
+      clearInterval(interval);
+      if (blinkTimeout) clearTimeout(blinkTimeout);
+      setIsBlinking(false);
+    };
+  }, [isAnimated, isPageVisible]);
 
   const t = internalTime;
   const bodyY = isAnimated

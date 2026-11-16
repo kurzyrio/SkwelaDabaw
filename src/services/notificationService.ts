@@ -893,6 +893,13 @@ export async function updatePersistentNextClassNotification(
 /**
  * Compute current and next class from user schedules and refresh the unremovable notification
  */
+let lastOngoingEnabledState: boolean | null = null;
+let ongoingNotificationTimeout: ReturnType<typeof setTimeout> | null = null;
+let ongoingLoopCleanup: (() => void) | null = null;
+
+/**
+ * Compute and push real-time status bar ongoing class notification & widgets
+ */
 export async function refreshUnremovableClassNotification(
   schedules?: ClassSchedule[],
   themeKey?: string
@@ -920,9 +927,13 @@ export async function refreshUnremovableClassNotification(
 
     const isEnabled = localStorage.getItem('skweladabaw_persistent_next_class') === 'true';
     if (!isEnabled) {
-      await cancelPersistentNextClassNotification();
+      if (lastOngoingEnabledState !== false) {
+        lastOngoingEnabledState = false;
+        await cancelPersistentNextClassNotification();
+      }
       return;
     }
+    lastOngoingEnabledState = true;
     const activeTheme = themeKey || localStorage.getItem('skweladabaw_persistent_theme') || 'midnight';
     const now = new Date();
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -972,26 +983,79 @@ export async function refreshUnremovableClassNotification(
   }
 }
 
-let ongoingNotificationInterval: any = null;
+export function initOngoingNotificationLoop(): () => void {
+  if (typeof window === 'undefined') return () => {};
+  if (ongoingLoopCleanup) return ongoingLoopCleanup;
 
-export function initOngoingNotificationLoop(): void {
-  if (typeof window === 'undefined') return;
-  if (ongoingNotificationInterval) return;
+  let isDisposed = false;
 
-  ongoingNotificationInterval = setInterval(() => {
-    refreshUnremovableClassNotification().catch(console.warn);
-  }, 60000);
-}
+  const clearScheduledTick = () => {
+    if (ongoingNotificationTimeout !== null) {
+      clearTimeout(ongoingNotificationTimeout);
+      ongoingNotificationTimeout = null;
+    }
+  };
 
-// Auto-start on module evaluation in browser/native
-if (typeof window !== 'undefined') {
-  initOngoingNotificationLoop();
+  const scheduleNextMinuteTick = () => {
+    clearScheduledTick();
+    if (isDisposed) return;
+    if (localStorage.getItem('skweladabaw_persistent_next_class') !== 'true') return;
+    if (typeof document !== 'undefined' && document.hidden) return;
+
+    const msUntilNextMinute = Math.max(1000, 60000 - (Date.now() % 60000) + 250);
+    ongoingNotificationTimeout = setTimeout(() => {
+      ongoingNotificationTimeout = null;
+      if (isDisposed) return;
+      if (
+        localStorage.getItem('skweladabaw_persistent_next_class') === 'true' &&
+        (typeof document === 'undefined' || !document.hidden)
+      ) {
+        refreshUnremovableClassNotification().catch(console.warn);
+        scheduleNextMinuteTick();
+      }
+    }, msUntilNextMinute);
+  };
+
+  const handleStateOrVisibility = () => {
+    if (isDisposed) return;
+    if (
+      localStorage.getItem('skweladabaw_persistent_next_class') === 'true' &&
+      (typeof document === 'undefined' || !document.hidden)
+    ) {
+      scheduleNextMinuteTick();
+    } else {
+      clearScheduledTick();
+    }
+  };
+
+  scheduleNextMinuteTick();
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', handleStateOrVisibility);
+  }
+  window.addEventListener('skweladabaw_persistent_notif_changed', handleStateOrVisibility);
+
+  ongoingLoopCleanup = () => {
+    isDisposed = true;
+    clearScheduledTick();
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', handleStateOrVisibility);
+    }
+    window.removeEventListener('skweladabaw_persistent_notif_changed', handleStateOrVisibility);
+    ongoingLoopCleanup = null;
+  };
+
+  return ongoingLoopCleanup;
 }
 
 /**
  * Cancel persistent next class status bar notification
  */
 export async function cancelPersistentNextClassNotification(): Promise<void> {
+  lastOngoingEnabledState = false;
+  if (ongoingNotificationTimeout !== null) {
+    clearTimeout(ongoingNotificationTimeout);
+    ongoingNotificationTimeout = null;
+  }
   try {
     if (Capacitor.isNativePlatform()) {
       await cancelNativeUnremovableNotification();

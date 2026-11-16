@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AlarmClock, X as CloseIcon } from 'lucide-react';
 import { Header } from './components/layout/Header';
 import { Navbar, NavigationTab } from './components/layout/Navbar';
@@ -63,7 +63,7 @@ import {
 } from './services/authService';
 import { restoreUserData, syncLocalDataToCloud, queueCloudSync, syncCloudDataBiDirectional, getFirebaseIdToken } from './services/cloudSyncService';
 import { verifyProfileIntegrity, ProfileVerificationState, saveLocalUserRecord } from './services/userService';
-import { requestNotificationPermission, refreshUnremovableClassNotification, scheduleAllClassSchedulesReminders } from './services/notificationService';
+import { requestNotificationPermission, refreshUnremovableClassNotification, scheduleAllClassSchedulesReminders, initOngoingNotificationLoop } from './services/notificationService';
 import { useScheduleAlarm } from './hooks/useScheduleAlarm';
 import { useBackHandler } from './hooks/useBackHandler';
 import { useAntiSnooperEasterEgg } from './hooks/useAntiSnooperEasterEgg';
@@ -72,6 +72,33 @@ import { navigationManager, BackPriority } from './services/navigationManager';
 import { applyTheme, DEFAULT_THEME_ID } from './themes';
 
 export type AppView = 'main' | 'settings' | 'about' | 'changelog' | 'feedback' | 'import-schedule';
+
+const WidgetDexieSync: React.FC = React.memo(() => {
+  const liveSchedules = useLiveQuery(() => db.schedules.toArray(), []);
+  const liveTasks = useLiveQuery(() => db.tasks.toArray(), []);
+
+  useEffect(() => {
+    if (liveSchedules) {
+      if (localStorage.getItem('skweladabaw_persistent_next_class') === 'true') {
+        refreshUnremovableClassNotification(liveSchedules).catch(() => {});
+      } else {
+        syncScheduleToWidgets(liveSchedules);
+      }
+    }
+  }, [liveSchedules]);
+
+  useEffect(() => {
+    if (liveTasks) {
+      syncTasksToWidgets(liveTasks);
+    }
+  }, [liveTasks]);
+
+  useEffect(() => {
+    return initOngoingNotificationLoop();
+  }, []);
+
+  return null;
+});
 
 export function App() {
   useAntiSnooperEasterEgg();
@@ -134,13 +161,18 @@ export function App() {
     return false;
   }, [viewHistory, currentView]);
 
+  const currentViewRef = useRef<AppView>(currentView);
+  currentViewRef.current = currentView;
+  const activeTabRef = useRef<NavigationTab>(activeTab);
+  activeTabRef.current = activeTab;
+
   const navigateToTab = useCallback((nextTab: NavigationTab) => {
     forceUnlockBodyScroll();
-    if (currentView !== 'main') {
+    if (currentViewRef.current !== 'main') {
       setViewHistory(['main']);
       setCurrentView('main');
     }
-    if (nextTab === activeTab) return;
+    if (nextTab === activeTabRef.current) return;
     if (nextTab !== 'jeep') {
       setIsJeepMapFullScreen(false);
     }
@@ -150,7 +182,7 @@ export function App() {
       return [...prev, nextTab];
     });
     setActiveTab(nextTab);
-  }, [currentView, activeTab]);
+  }, []);
 
   const handleBackTab = useCallback(() => {
     forceUnlockBodyScroll();
@@ -557,24 +589,14 @@ export function App() {
     return () => window.removeEventListener('skweladabaw_open_import', handleOpenImport);
   }, [navigateToView]);
 
-  // Real-time synchronization of schedules and tasks to Android widgets
-  const liveSchedules = useLiveQuery(() => db.schedules.toArray(), []);
-  const liveTasks = useLiveQuery(() => db.tasks.toArray(), []);
-
+  // Handle widget route deep links & actions (registered once via stable navigateToTab)
   useEffect(() => {
-    if (liveSchedules) {
-      syncScheduleToWidgets(liveSchedules);
-    }
-  }, [liveSchedules]);
+    let isDisposed = false;
+    let widgetListenerHandle: any = null;
+    let appUrlListenerHandle: any = null;
+    let isResuming = false;
+    let lastResumeAt = 0;
 
-  useEffect(() => {
-    if (liveTasks) {
-      syncTasksToWidgets(liveTasks);
-    }
-  }, [liveTasks]);
-
-  // Handle widget route deep links & actions (initial load & runtime background resumes)
-  useEffect(() => {
     const processLaunch = (tab?: string, action?: string) => {
       if (!tab && !action) return;
       const t = (tab || '').toLowerCase();
@@ -633,40 +655,63 @@ export function App() {
     // Check cold-boot launch target from Android WidgetBridge
     if (Capacitor.isNativePlatform()) {
       WidgetBridge.getLaunchTarget().then((res) => {
-        if (res && (res.tab || res.action)) {
+        if (!isDisposed && res && (res.tab || res.action)) {
           processLaunch(res.tab, res.action);
         }
       }).catch((e) => console.warn('Error reading launch target:', e));
 
       try {
-        (WidgetBridge as any).addListener('launchTarget', (data: { tab?: string; action?: string }) => {
-          if (data && (data.tab || data.action)) {
-            processLaunch(data.tab, data.action);
+        Promise.resolve(
+          (WidgetBridge as any).addListener('launchTarget', (data: { tab?: string; action?: string }) => {
+            if (data && (data.tab || data.action)) {
+              processLaunch(data.tab, data.action);
+            }
+          })
+        ).then((handle) => {
+          if (isDisposed) {
+            handle?.remove?.();
+          } else {
+            widgetListenerHandle = handle;
           }
-        });
+        }).catch((err) => console.warn('addListener launchTarget error:', err));
       } catch (err) {
         console.warn('addListener launchTarget error:', err);
       }
     }
 
-    let sub: any;
     try {
-      sub = CapApp.addListener('appUrlOpen', (data) => {
-        if (data?.url) {
-          handleUrl(data.url);
+      Promise.resolve(
+        CapApp.addListener('appUrlOpen', (data) => {
+          if (data?.url) {
+            handleUrl(data.url);
+          }
+        })
+      ).then((handle) => {
+        if (isDisposed) {
+          handle?.remove?.();
+        } else {
+          appUrlListenerHandle = handle;
         }
-      });
+      }).catch((err) => console.warn('CapApp appUrlOpen listener error:', err));
     } catch (err) {
       console.warn('CapApp appUrlOpen listener error:', err);
     }
 
     const handleResume = async () => {
+      if (isDisposed) return;
+      if (typeof document !== 'undefined' && document.hidden) return;
+      const now = Date.now();
+      if (isResuming || now - lastResumeAt < 1500) return;
+      isResuming = true;
+      lastResumeAt = now;
+
       try {
         const [allSchedules, allTasks, allRoutines] = await Promise.all([
           db.schedules.toArray(),
           db.tasks.toArray(),
           db.dayReminders.toArray()
         ]);
+        if (isDisposed) return;
         await Promise.all([
           syncScheduleToWidgets(allSchedules),
           syncTasksToWidgets(allTasks),
@@ -675,17 +720,19 @@ export function App() {
         ]);
       } catch (err) {
         console.warn('Widget & notification resume sync error:', err);
+      } finally {
+        isResuming = false;
       }
     };
 
     window.addEventListener('focus', handleResume);
-    window.addEventListener('visibilitychange', handleResume);
+    document.addEventListener('visibilitychange', handleResume);
     return () => {
-      if (sub && typeof sub.remove === 'function') {
-        sub.remove();
-      }
+      isDisposed = true;
+      widgetListenerHandle?.remove?.();
+      appUrlListenerHandle?.remove?.();
       window.removeEventListener('focus', handleResume);
-      window.removeEventListener('visibilitychange', handleResume);
+      document.removeEventListener('visibilitychange', handleResume);
     };
   }, [navigateToTab]);
 
@@ -693,6 +740,7 @@ export function App() {
   useEffect(() => {
     const cleanup = initOverlayLifecycle();
     const overlayInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       import('./services/eagleOverlayService').then((m) => m.autoSyncCurrentStateToOverlay()).catch(() => {});
     }, 45000);
     return () => {
@@ -703,11 +751,12 @@ export function App() {
 
   // Initialize offline local database & check for updates
   useEffect(() => {
+    let isUnmounted = false;
     initializeDatabaseWithSeedData().catch((err) => {
       console.error('Local database initialization error:', err);
     });
 
-    let notifSub: any;
+    let notifSub: any = null;
     if (Capacitor.isNativePlatform()) {
       LocalNotifications.addListener('localNotificationActionPerformed', (action) => {
         const extra = action.notification?.extra;
@@ -715,15 +764,20 @@ export function App() {
           openGooglePlayStore();
         }
       }).then((handle) => {
-        notifSub = handle;
+        if (isUnmounted) {
+          handle?.remove?.();
+        } else {
+          notifSub = handle;
+        }
       }).catch((e) => console.warn('LocalNotifications listener error:', e));
     }
 
     const updateTimer = setTimeout(async () => {
+      if (isUnmounted) return;
       try {
         // Fetch on-launch active announcement popup (community relief drives, class advisories)
         const announcement = await fetchActivePopupAnnouncement();
-        if (announcement && !isAnnouncementSnoozed(announcement.id)) {
+        if (!isUnmounted && announcement && !isAnnouncementSnoozed(announcement.id)) {
           setActiveAnnouncement(announcement);
         }
 
@@ -735,6 +789,7 @@ export function App() {
     }, 2000);
 
     return () => {
+      isUnmounted = true;
       clearTimeout(updateTimer);
       if (notifSub && typeof notifSub.remove === 'function') {
         notifSub.remove();
@@ -1085,6 +1140,9 @@ export function App() {
       onGoBack={() => { setCurrentView('main'); setActiveTab('schedule'); }}
       onReset={() => { setCurrentView('main'); setActiveTab('schedule'); }}
     >
+      {/* Isolated Dexie -> Widget/Notification synchronization (prevents root <App /> re-renders) */}
+      <WidgetDexieSync />
+
       {/* Global Interactive Screen Tap Particle Effect (Mounted Globally at Root) */}
       <ScreenTapEffect />
 

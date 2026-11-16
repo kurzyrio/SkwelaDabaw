@@ -59,6 +59,7 @@ public class EagleOverlayService extends Service {
     private long lastCollapseTime = 0;
     private boolean isTasksTabSelected = false;
     private Vibrator vibrator;
+    private ValueAnimator activeSnapAnimator;
 
     private final Handler autoUpdateHandler = new Handler(Looper.getMainLooper());
     private final Runnable autoUpdateRunnable = new Runnable() {
@@ -181,6 +182,20 @@ public class EagleOverlayService extends Service {
         if (bubbleView != null && bubbleView.isAttachedToWindow()) {
             return;
         }
+        if (windowManager != null) {
+            if (cardView != null && cardView.isAttachedToWindow()) {
+                try { windowManager.removeViewImmediate(cardView); } catch (Exception ignored) {}
+            }
+            if (bubbleView != null && bubbleView.isAttachedToWindow()) {
+                try { windowManager.removeViewImmediate(bubbleView); } catch (Exception ignored) {}
+            }
+            if (dismissView != null && dismissView.isAttachedToWindow()) {
+                try { windowManager.removeViewImmediate(dismissView); } catch (Exception ignored) {}
+            }
+        }
+        cardView = null;
+        bubbleView = null;
+        dismissView = null;
 
         int overlayType = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
             ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -385,7 +400,11 @@ public class EagleOverlayService extends Service {
         if (bubbleParams.y < minY) bubbleParams.y = minY;
         if (bubbleParams.y > maxY) bubbleParams.y = maxY;
 
+        if (activeSnapAnimator != null) {
+            activeSnapAnimator.cancel();
+        }
         ValueAnimator animator = ValueAnimator.ofInt(bubbleParams.x, targetX);
+        activeSnapAnimator = animator;
         animator.setDuration(250);
         animator.setInterpolator(new DecelerateInterpolator(1.5f));
         animator.addUpdateListener(animation -> {
@@ -910,19 +929,21 @@ public class EagleOverlayService extends Service {
 
     @Override
     public void onTaskRemoved(Intent rootIntent) {
-        try {
-            SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-            if (prefs.getBoolean(PREF_IS_ACTIVE, false)) {
-                Intent restartServiceIntent = new Intent(getApplicationContext(), EagleOverlayService.class);
-                restartServiceIntent.setAction(ACTION_START);
-                restartServiceIntent.setPackage(getPackageName());
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    startForegroundService(restartServiceIntent);
-                } else {
-                    startService(restartServiceIntent);
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            try {
+                SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+                if (prefs.getBoolean(PREF_IS_ACTIVE, false)) {
+                    Intent restartServiceIntent = new Intent(getApplicationContext(), EagleOverlayService.class);
+                    restartServiceIntent.setAction(ACTION_START);
+                    restartServiceIntent.setPackage(getPackageName());
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        startForegroundService(restartServiceIntent);
+                    } else {
+                        startService(restartServiceIntent);
+                    }
                 }
-            }
-        } catch (Exception ignored) {}
+            } catch (Exception ignored) {}
+        }
         super.onTaskRemoved(rootIntent);
     }
 
@@ -930,22 +951,38 @@ public class EagleOverlayService extends Service {
     public void onDestroy() {
         autoUpdateHandler.removeCallbacksAndMessages(null);
         sIsRunning = false;
+        isCardExpanded = false;
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         prefs.edit().putBoolean(PREF_IS_ACTIVE, false).apply();
 
-        collapseCardView();
+        if (activeSnapAnimator != null) {
+            activeSnapAnimator.cancel();
+            activeSnapAnimator = null;
+        }
+        if (cardView != null) {
+            cardView.animate().cancel();
+        }
+        if (bubbleView != null) {
+            bubbleView.animate().cancel();
+        }
+        if (dismissView != null) {
+            dismissView.animate().cancel();
+        }
 
         if (windowManager != null) {
             if (cardView != null && cardView.isAttachedToWindow()) {
-                try { windowManager.removeView(cardView); } catch (Exception ignored) {}
+                try { windowManager.removeViewImmediate(cardView); } catch (Exception ignored) {}
             }
             if (bubbleView != null && bubbleView.isAttachedToWindow()) {
-                try { windowManager.removeView(bubbleView); } catch (Exception ignored) {}
+                try { windowManager.removeViewImmediate(bubbleView); } catch (Exception ignored) {}
             }
             if (dismissView != null && dismissView.isAttachedToWindow()) {
-                try { windowManager.removeView(dismissView); } catch (Exception ignored) {}
+                try { windowManager.removeViewImmediate(dismissView); } catch (Exception ignored) {}
             }
         }
+        cardView = null;
+        bubbleView = null;
+        dismissView = null;
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE);

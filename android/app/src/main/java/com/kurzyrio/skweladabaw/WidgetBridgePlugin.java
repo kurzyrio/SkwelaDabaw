@@ -124,11 +124,18 @@ public class WidgetBridgePlugin extends Plugin {
 
                 if ("all_schedules_json".equals(key) || "widget_schedule_data".equals(key)) {
                     WidgetScheduleHelper.evaluateAndUpdateAllWidgets(context);
+                    SkwelaOngoingService.refreshNotificationFromBackground(context);
                 } else if ("widget_tasks_data".equals(key)) {
                     WidgetScheduleHelper.updateWidgetProvidersDirectly(context);
                 } else if ("app_theme_id".equals(key)) {
                     WidgetScheduleHelper.evaluateAndUpdateAllWidgets(context);
                     WidgetScheduleHelper.updateWidgetProvidersDirectly(context);
+                } else if ("skweladabaw_weather_alerts_enabled".equals(key)) {
+                    if ("true".equalsIgnoreCase(value) || "1".equals(value)) {
+                        WeatherBackgroundReceiver.scheduleWeatherWork(context);
+                    } else {
+                        WeatherBackgroundReceiver.cancelWeatherWork(context);
+                    }
                 }
             }
             JSObject ret = new JSObject();
@@ -395,9 +402,13 @@ public class WidgetBridgePlugin extends Plugin {
     public void cancelUnremovableNotification(PluginCall call) {
         try {
             Context context = getContext();
+            context.getSharedPreferences("skweladabaw_ongoing_service_prefs", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("pref_is_active", false)
+                .apply();
+
             Intent serviceIntent = new Intent(context, SkwelaOngoingService.class);
-            serviceIntent.setAction(SkwelaOngoingService.ACTION_STOP);
-            context.startService(serviceIntent);
+            context.stopService(serviceIntent);
 
             NotificationManager notificationManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
             if (notificationManager != null) {
@@ -632,6 +643,7 @@ public class WidgetBridgePlugin extends Plugin {
         final Location[] currentBest = { bestLocation };
         android.os.Handler handler = new android.os.Handler(Looper.getMainLooper());
         final boolean[] resolved = {false};
+        final Runnable[] timeoutRunnableHolder = new Runnable[1];
         final LocationListener commonListener = new LocationListener() {
             @Override
             public void onLocationChanged(Location location) {
@@ -645,6 +657,9 @@ public class WidgetBridgePlugin extends Plugin {
                 // If high accuracy (< 25m) or from GPS provider, resolve immediately
                 if (location.getAccuracy() <= 25.0f || LocationManager.GPS_PROVIDER.equals(location.getProvider())) {
                     resolved[0] = true;
+                    if (timeoutRunnableHolder[0] != null) {
+                        handler.removeCallbacks(timeoutRunnableHolder[0]);
+                    }
                     try { lm.removeUpdates(this); } catch (Exception ignored) {}
 
                     JSObject res = new JSObject();
@@ -660,7 +675,7 @@ public class WidgetBridgePlugin extends Plugin {
             @Override public void onProviderDisabled(String provider) {}
         };
 
-        handler.postDelayed(() -> {
+        Runnable timeoutRunnable = () -> {
             if (resolved[0]) return;
             resolved[0] = true;
             try { lm.removeUpdates(commonListener); } catch (Exception ignored) {}
@@ -675,7 +690,9 @@ public class WidgetBridgePlugin extends Plugin {
             } else {
                 call.reject("GPS location request timed out");
             }
-        }, 6500);
+        };
+        timeoutRunnableHolder[0] = timeoutRunnable;
+        handler.postDelayed(timeoutRunnable, 6500);
 
         try {
             if (isNetworkEnabled) {
@@ -687,20 +704,23 @@ public class WidgetBridgePlugin extends Plugin {
         } catch (SecurityException e) {
             if (!resolved[0]) {
                 resolved[0] = true;
+                handler.removeCallbacks(timeoutRunnable);
+                try { lm.removeUpdates(commonListener); } catch (Exception ignored) {}
                 call.reject("Location permission security exception: " + e.getMessage());
             }
         } catch (Exception e) {
             if (!resolved[0]) {
+                resolved[0] = true;
+                handler.removeCallbacks(timeoutRunnable);
+                try { lm.removeUpdates(commonListener); } catch (Exception ignored) {}
                 Location fallbackLoc = currentBest[0];
                 if (fallbackLoc != null) {
-                    resolved[0] = true;
                     JSObject res = new JSObject();
                     res.put("lat", fallbackLoc.getLatitude());
                     res.put("lng", fallbackLoc.getLongitude());
                     res.put("accuracy", (double) fallbackLoc.getAccuracy());
                     call.resolve(res);
                 } else {
-                    resolved[0] = true;
                     call.reject("Failed to request location: " + e.getMessage());
                 }
             }
