@@ -573,7 +573,7 @@ export const DcBusLiveMap: React.FC<DcBusLiveMapProps> = ({
   const [searchFilter, setSearchFilter] = useState<string>('');
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [selectedBus, setSelectedBus] = useState<BusPosition | null>(null);
-  const [activeShift, setActiveShift] = useState<'AM' | 'PM'>(getManilaShift());
+  const [activeShift, setActiveShift] = useState<'AM' | 'PM' | 'ALL'>(getManilaShift());
   const [scheduleStatus, setScheduleStatus] = useState<DibsScheduleStatus>(getDibsServiceStatus());
   const [isLocatingUser, setIsLocatingUser] = useState<boolean>(false);
   const [gpsModalState, setGpsModalState] = useState<{
@@ -1147,7 +1147,7 @@ export const DcBusLiveMap: React.FC<DcBusLiveMapProps> = ({
 
       // Match family filter & active shift
       const matchesFilter = selectedFamily === 'all' || family.toLowerCase() === selectedFamily.toLowerCase();
-      const matchesShift = !shift || shift === activeShift;
+      const matchesShift = activeShift === 'ALL' || !shift || shift === activeShift;
 
       if (matchesFilter && matchesShift) {
         const latLngs = f.geometry.coordinates.map(([lon, lat]) => [lat, lon] as [number, number]);
@@ -1609,12 +1609,12 @@ export const DcBusLiveMap: React.FC<DcBusLiveMapProps> = ({
         {/* Operating Shift Quick Toggle */}
         <button
           type="button"
-          onClick={() => setActiveShift(activeShift === 'AM' ? 'PM' : 'AM')}
+          onClick={() => setActiveShift(activeShift === 'AM' ? 'PM' : activeShift === 'PM' ? 'ALL' : 'AM')}
           className="pointer-events-auto shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black bg-[var(--modal-bg)]/95 backdrop-blur-2xl border border-[var(--card-border)] shadow-xl text-[var(--text-primary)] pressable"
-          title={`Currently showing ${activeShift} Shift routes. Tap to toggle.`}
+          title={`Currently showing ${activeShift === 'ALL' ? 'All Shifts' : `${activeShift} Shift`} routes. Tap to toggle.`}
         >
           <Clock className="w-3.5 h-3.5 text-amber-400" />
-          <span>{activeShift} Shift</span>
+          <span>{activeShift === 'ALL' ? 'All Shifts' : `${activeShift} Shift`}</span>
         </button>
 
         {/* Corridor Filter Chips */}
@@ -1876,7 +1876,7 @@ export const DcBusLiveMap: React.FC<DcBusLiveMapProps> = ({
               <span className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">
                 Operating Shift Hours
               </span>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
                   onClick={() => setActiveShift('AM')}
@@ -1887,7 +1887,7 @@ export const DcBusLiveMap: React.FC<DcBusLiveMapProps> = ({
                   }`}
                 >
                   <div className="text-xs font-bold text-[var(--text-primary)]">AM Shift</div>
-                  <div className="text-[10px] text-[var(--text-secondary)]">6:00 AM – 10:00 AM</div>
+                  <div className="text-[10px] text-[var(--text-secondary)]">6–10 AM</div>
                 </button>
                 <button
                   type="button"
@@ -1899,7 +1899,19 @@ export const DcBusLiveMap: React.FC<DcBusLiveMapProps> = ({
                   }`}
                 >
                   <div className="text-xs font-bold text-[var(--text-primary)]">PM Shift</div>
-                  <div className="text-[10px] text-[var(--text-secondary)]">4:00 PM – 9:00 PM</div>
+                  <div className="text-[10px] text-[var(--text-secondary)]">4–9 PM</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveShift('ALL')}
+                  className={`p-2.5 rounded-2xl border text-left transition-all pressable ${
+                    activeShift === 'ALL'
+                      ? 'bg-[var(--nested-bg)] border-[var(--text-primary)] text-[var(--text-primary)] shadow-sm'
+                      : 'bg-[var(--nested-bg)]/50 border-[var(--nested-border)] text-[var(--text-secondary)]'
+                  }`}
+                >
+                  <div className="text-xs font-bold text-[var(--text-primary)]">All Shifts</div>
+                  <div className="text-[10px] text-[var(--text-secondary)]">Full Network</div>
                 </button>
               </div>
             </div>

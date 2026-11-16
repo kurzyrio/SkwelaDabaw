@@ -279,13 +279,7 @@ export function App() {
         setIsEagleOverlayPromptOpen(true);
       }
     } else if (!hasCompletedOnboarding()) {
-      // Give Firebase Auth a brief window to restore existing OAuth session before opening onboarding
-      const timer = setTimeout(() => {
-        if (!hasCompletedOnboarding()) {
-          setIsOnboardingOpen(true);
-        }
-      }, 700);
-      return () => clearTimeout(timer);
+      setIsOnboardingOpen(true);
     }
     if (Capacitor.isNativePlatform()) {
       requestNotificationPermission().catch((err) => {

@@ -1,7 +1,7 @@
 {
-  "version": "1.11.5.17",
-  "versionCode": 146,
-  "releaseDate": "2026-11-16",
+  "version": "1.11.5.18",
+  "versionCode": 147,
+  "releaseDate": "2026-11-17",
   "versionScheme": {
     "digit1": "App Version",
     "digit2": "Major Features added",
@@ -13,15 +13,15 @@
   "forceUpdate": false,
   "developer": "Kurzyrio",
   "supportEmail": "jerriviencenatad@gmail.com",
-  "title": "Account Switch Sync Isolation & Timetable/Task Merge Fixes",
+  "title": "Reliable Sign-In, Fast Account Switching & Delete Account Fixes",
   "releaseNotes": [
-    "Prevented unsynced schedules, tasks, routines, expenses, and grades from mixing between accounts when switching profiles offline or online.",
-    "Preserved schedule building names, subject codes, days, and start times when syncing existing classes from the cloud.",
-    "Protected newly created tasks from being overwritten or cleared during concurrent cloud refreshes."
+    "Made logging out instant while preserving per-account backups so switching back or working offline stays seamless.",
+    "Fixed Delete Account & Cloud Data to reliably clear cloud and local records without hanging.",
+    "Prevented duplicate accounts and repeated age/gender prompts when signing back in, rolled back failed logins cleanly, and added an All Shifts toggle on DC Bus routes."
   ],
   "downloadUrl": "https://skweladabaw.kurzyrio.site/download",
-  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.17.apk",
-  "sizeBytes": 27023964,
+  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.18.apk",
+  "sizeBytes": 27024876,
   "sizeFormatted": "25.8 MB",
-  "sha256": "a032a9edb156385e708327627cb4696f5994c99ab1a8e82b08c346bd0a4bb920"
+  "sha256": "4feffaf495422cf75760a17decaf61659072496459196cf91017a57be6f9f2ff"
 }

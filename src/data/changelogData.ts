@@ -17,10 +17,43 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.5.18',
+    releaseDate: 'November 17, 2026',
+    title: 'Reliable Sign-In, Fast Account Switching & Account Deletion Fixes',
+    isLatest: true,
+    tagline: 'Instant client logout for smooth account switching, reliable account deletion, and consistent profile sync without duplicate accounts.',
+    highlights: [
+      'Instant non-blocking logout that clears the active workspace while keeping per-account offline backups ready to switch back',
+      'Fixed Delete Account & Cloud Data end-to-end across cloud profiles, local storage, and Firebase sessions',
+      'Prevented duplicate accounts and repeated age/gender prompts on re-login, rolled back failed sign-ins cleanly, and added an All Shifts view for DC Bus'
+    ],
+    items: [
+      {
+        type: 'fix',
+        title: 'Fast Logout & Account Switch Backup',
+        description: 'Logging out resets only the active client workspace immediately without blocking offline, keeping account backups safe for switching back.'
+      },
+      {
+        type: 'fix',
+        title: 'Working Delete Account & Cloud Data',
+        description: 'Resolves local database hangs, surfaces clear errors, and removes all cloud and device data cleanly when deleting an account.'
+      },
+      {
+        type: 'fix',
+        title: 'Clean Re-Login & Profile Continuity',
+        description: 'Uses canonical Firebase IDs to prevent duplicate user records, keeps age and gender populated across restarts, and rolls back failed sign-ins.'
+      },
+      {
+        type: 'improvement',
+        title: 'DC Bus All Shifts Toggle',
+        description: 'Lets students view and toggle AM Shift, PM Shift, or All Shifts across the Davao City bus corridor map anytime.'
+      }
+    ]
+  },
+  {
     version: '1.11.5.17',
     releaseDate: 'November 16, 2026',
     title: 'Account Switch Sync Isolation & Timetable/Task Merge Fixes',
-    isLatest: true,
     tagline: 'Safely isolates offline data across account switches and keeps schedule and task cloud merges accurate.',
     highlights: [
       'Isolated offline schedules, tasks, routines, expenses, and grades per account when switching profiles on the same device',

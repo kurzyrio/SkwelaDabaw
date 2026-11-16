@@ -33,11 +33,12 @@ import { DAVAO_CAMPUSES } from '../../data/davaoCampuses';
 import { 
   StudentAuthSession, 
   signInWithGoogle, 
+  rollbackFailedAuth,
   saveSession, 
   getSavedSession, 
   setOnboardingCompleted
 } from '../../services/authService';
-import { checkExistingUser, checkExistingUserDetailed, saveLocalUserRecord, syncUserSchedules, saveUserProfile, checkUsernameAvailable } from '../../services/userService';
+import { checkExistingUserDetailed, saveLocalUserRecord, saveUserProfile, checkUsernameAvailable } from '../../services/userService';
 import { restoreUserData, syncLocalDataToCloud } from '../../services/cloudSyncService';
 import { 
   requestNotificationPermission, 
@@ -370,11 +371,18 @@ export const DedicatedOnboardingPage: React.FC<DedicatedOnboardingPageProps> = (
 
     setIsLoggingIn(true);
     setGoogleAuthError(null);
+    const prevSessionBeforeLogin = getSavedSession();
     try {
       const session = await signInWithGoogle(campusId);
       if (session) {
         // Deep account check with strict 4-state discrimination
         const checkResult = await checkExistingUserDetailed(session.uid || '', session.email || '');
+
+        if (checkResult.state === 'NETWORK_OR_DB_ERROR') {
+          await rollbackFailedAuth(prevSessionBeforeLogin);
+          setGoogleAuthError('Unable to verify account with server. Please check your connection and tap Sign In again.');
+          return;
+        }
 
         // Strict Returning User Validation:
         // A user only skips onboarding if they have a real custom username (not student_xxx),
@@ -415,16 +423,13 @@ export const DedicatedOnboardingPage: React.FC<DedicatedOnboardingPageProps> = (
           setOnboardingCompleted(true);
           sessionStorage.setItem('skwela_session_checked', 'true');
 
-          restoreUserData(restoredSession.uid).catch(() => {});
-          syncUserSchedules(existing.uid).catch(() => {});
+          // switchAccountSchedules inside signInWithGoogle already calls restoreUserData(session.uid);
+          // only refresh if canonical UID differed from initial session UID.
+          if (existing.uid && existing.uid !== session.uid) {
+            restoreUserData(existing.uid).catch(() => {});
+          }
 
           onComplete(restoredSession);
-          return;
-        }
-
-        if (checkResult.state === 'NETWORK_OR_DB_ERROR') {
-          // Do NOT treat as new account! Show connection error with retry.
-          setGoogleAuthError('Unable to verify account with server. Please check your connection and tap Sign In again.');
           return;
         }
 
@@ -446,15 +451,16 @@ export const DedicatedOnboardingPage: React.FC<DedicatedOnboardingPageProps> = (
       }
     } catch (err: any) {
       console.warn('Google sign-in error:', err);
+      await rollbackFailedAuth(prevSessionBeforeLogin).catch(() => {});
       const msg = String(err?.message || err || '');
       if (msg.includes('Code 10') || msg.includes('Developer Error') || msg.includes('SHA-1')) {
         setGoogleAuthError('Google Sign-In setup error (Code 10). App SHA-1 must be registered in Firebase Console.');
       } else if (msg.includes('Code 12500')) {
         setGoogleAuthError('Google Play Services sign-in error (Code 12500). Check connection and Play Services.');
-      } else if (msg.toLowerCase().includes('network') || msg.includes('unsynced') || msg.includes('back them up')) {
-        setGoogleAuthError(msg.includes('unsynced') ? msg : 'Network connection error. Check internet.');
+      } else if (msg.toLowerCase().includes('network') || msg.toLowerCase().includes('timeout') || msg.includes('unsynced') || msg.includes('back them up')) {
+        setGoogleAuthError(msg.includes('unsynced') ? msg : (msg || 'Network connection error. Please check internet and try again.'));
       } else {
-        setGoogleAuthError('Sign-in was cancelled or dismissed.');
+        setGoogleAuthError(msg || 'Unable to sign in with Google right now. Please try again.');
       }
     } finally {
       setIsLoggingIn(false);

@@ -39,13 +39,15 @@ export interface CloudSyncResult {
 }
 
 /**
- * Helper to fetch raw token from Native or Web Firebase SDK
+ * Helper to fetch raw token from Native or Web Firebase SDK matching active session UID
  */
-async function fetchRawFirebaseToken(): Promise<string | null> {
+async function fetchRawFirebaseToken(forceRefresh = false): Promise<string | null> {
+  const saved = getSavedSession();
+  const expectedUid = saved?.isLoggedIn && saved?.uid ? String(saved.uid) : null;
+
   // 0. Check for SkwelaDabaw Phone Auth session token (only if it belongs to the active logged-in user)
   const localToken = typeof localStorage !== 'undefined' ? localStorage.getItem('skweladabaw_auth_token') : null;
   if (localToken) {
-    const saved = getSavedSession();
     const tokenUid = extractJwtTokenUid(localToken);
     if (saved?.isLoggedIn && saved.uid && (!tokenUid || tokenUid === saved.uid)) {
       return localToken;
@@ -53,28 +55,43 @@ async function fetchRawFirebaseToken(): Promise<string | null> {
     try { localStorage.removeItem('skweladabaw_auth_token'); } catch (_) {}
   }
 
-  // 1. Native Android (Capacitor Firebase Auth)
+  // 1. Web Firebase JS SDK check first if active user matches session UID
+  if (isFirebaseConfigured && auth && auth.currentUser) {
+    if (!expectedUid || auth.currentUser.uid === expectedUid) {
+      try {
+        const webToken = await auth.currentUser.getIdToken(forceRefresh);
+        if (webToken) return webToken;
+      } catch (err) {
+        console.warn('Could not fetch Firebase ID token from web SDK:', err);
+      }
+    }
+  }
+
+  // 2. Native Android (Capacitor Firebase Auth)
   if (Capacitor.isNativePlatform()) {
     try {
-      const res = await FirebaseAuthentication.getIdToken();
+      const res = await FirebaseAuthentication.getIdToken(forceRefresh ? { forceRefresh: true } : undefined);
       if (res && res.token) {
-        return res.token;
+        const tokenUid = extractJwtTokenUid(res.token);
+        if (!expectedUid || !tokenUid || tokenUid === expectedUid) {
+          return res.token;
+        }
       }
     } catch (e) {
       console.warn('Native getIdToken notice:', e);
     }
   }
 
-  // 2. Web Firebase JS SDK fallback
+  // 3. Fallback: Web Firebase SDK regardless of mismatch (e.g., anonymous guest session)
   if (isFirebaseConfigured && auth && auth.currentUser) {
     try {
-      return await auth.currentUser.getIdToken(false);
+      return await auth.currentUser.getIdToken(forceRefresh);
     } catch (err) {
-      console.warn('Could not fetch Firebase ID token from web SDK:', err);
+      console.warn('Could not fetch fallback Firebase ID token:', err);
     }
   }
 
-  // 3. Fallback: Check if native user exists and force token refresh
+  // 4. Fallback: Native Firebase user with force refresh
   if (Capacitor.isNativePlatform()) {
     try {
       const cur = await FirebaseAuthentication.getCurrentUser();
@@ -93,12 +110,12 @@ async function fetchRawFirebaseToken(): Promise<string | null> {
 /**
  * Get current user Firebase Auth ID token across Native Android & Web with retry
  */
-export async function getFirebaseIdToken(): Promise<string | null> {
+export async function getFirebaseIdToken(forceRefresh = false): Promise<string | null> {
   for (let attempt = 1; attempt <= 3; attempt++) {
-    const token = await fetchRawFirebaseToken();
+    const token = await fetchRawFirebaseToken(forceRefresh || attempt > 1);
     if (token) return token;
     if (attempt < 3) {
-      await new Promise((resolve) => setTimeout(resolve, 250));
+      await new Promise((resolve) => setTimeout(resolve, 200));
     }
   }
   return null;
@@ -453,8 +470,10 @@ export async function restoreUserData(
         resolvedUsername &&
         !/^student_[a-f0-9]{6,16}$/i.test(resolvedUsername)
       );
-      if (isCompleteProfile) {
-        setOnboardingCompleted(true);
+      if (isCompleteProfile && (hasCompletedOnboarding() || currentSaved.isLoggedIn)) {
+        if (hasCompletedOnboarding()) {
+          setOnboardingCompleted(true);
+        }
         if (hasRealLocalUsername && !isCloudUsernameValid) {
           needsBackgroundPush = true;
         }

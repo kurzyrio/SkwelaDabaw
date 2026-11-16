@@ -97,3 +97,33 @@ export async function initializeDatabaseWithSeedData() {
     });
   }
 }
+
+/**
+ * Atomically clears all IndexedDB stores without closing/deleting the DB handle
+ * (prevents IndexedDB `onblocked` hangs when active Dexie liveQuery hooks are mounted).
+ */
+export async function clearAllDexieData(reseedProfile = false): Promise<void> {
+  const allTables = [
+    db.schedules,
+    db.tasks,
+    db.grades,
+    db.expenses,
+    db.userProfile,
+    db.offlineChatQueue,
+    db.dayReminders,
+    db.feedback,
+    db.cachedImages
+  ];
+  await db.transaction('rw', allTables, async () => {
+    await Promise.all(allTables.map((t) => t.clear()));
+    if (reseedProfile) {
+      await db.userProfile.add({
+        name: 'Student',
+        campusId: '',
+        course: 'Enrolled Student',
+        yearLevel: '1st Year',
+        dailyAllowance: 150
+      });
+    }
+  });
+}

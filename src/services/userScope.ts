@@ -269,6 +269,7 @@ export function purgeUserScopedStorage(uid: string): void {
     'skweladabaw_cached_routines',
     'skweladabaw_cached_expenses',
     'skweladabaw_cached_grades',
+    'skweladabaw_account_backup',
     'skweladabaw_has_hydrated',
     'skweladabaw_saved_places',
     'skweladabaw_favorite_routes',

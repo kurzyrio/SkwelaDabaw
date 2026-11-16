@@ -61,7 +61,7 @@ import { createPortal } from 'react-dom';
 import { LegalModal } from '../common/LegalModal';
 import { SelectWithOther } from '../common/SelectWithOther';
 import { CustomSelect } from '../common/CustomSelect';
-import { db, initializeDatabaseWithSeedData } from '../../db';
+import { db, clearAllDexieData } from '../../db';
 import { DAVAO_CAMPUSES } from '../../data/davaoCampuses';
 import { 
   isOverlayPermitted, 
@@ -73,7 +73,7 @@ import {
   autoSyncCurrentStateToOverlay 
 } from '../../services/eagleOverlayService';
 import { flushPendingSync } from '../../services/taskSyncService';
-import { StudentAuthSession, signInWithGoogle, signOutUser, setOnboardingCompleted, saveSession, getSavedSession } from '../../services/authService';
+import { StudentAuthSession, signInWithGoogle, signOutUser, rollbackFailedAuth, setOnboardingCompleted, saveSession, getSavedSession } from '../../services/authService';
 import { 
   checkUsernameAvailable, 
   updateUsername, 
@@ -773,6 +773,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     setIsLoggingIn(true);
     showProcessing('Authenticating • Please wait', 'Connecting securely to SkwelaDabaw cloud');
     setLoginErrorToast(null);
+    const prevSessionBeforeLogin = getSavedSession();
     try {
       const isFromGuest = !userSession.isLoggedIn;
       let guestSchedCount = 0;
@@ -789,6 +790,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       // Check if this Google account already exists in MySQL
       const checkResult = await checkExistingUserDetailed(googleSession.uid || '', googleSession.email || '');
       if (checkResult.state === 'NETWORK_OR_DB_ERROR') {
+        await rollbackFailedAuth(prevSessionBeforeLogin);
         setLoginErrorToast(checkResult.error || 'Could not reach server to verify account. Check your connection and try again.');
         setTimeout(() => setLoginErrorToast(null), 4000);
         setIsLoggingIn(false);
@@ -876,7 +878,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       onUpdateSession(merged);
     } catch (err: any) {
       console.error('Google login error:', err);
-      setLoginErrorToast(err?.message || 'Google Sign-in was cancelled or could not connect.');
+      await rollbackFailedAuth(prevSessionBeforeLogin).catch(() => {});
+      setLoginErrorToast(err?.message || 'Google Sign-in failed or could not connect.');
       setTimeout(() => setLoginErrorToast(null), 4000);
     } finally {
       setIsLoggingIn(false);
@@ -948,6 +951,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
       const merged: StudentAuthSession = {
         isLoggedIn: true,
+        uid: pendingCloudUser.uid || pendingGoogleSession.uid,
         // CRITICAL RULE: Display Name and Username remain strictly locked to existing account database values
         name: pendingCloudUser.displayName || pendingGoogleSession.name,
         username: pendingCloudUser.username || pendingGoogleSession.username,
@@ -978,10 +982,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const handleConfirmLogout = async () => {
     setIsLogoutModalOpen(false);
     try {
-      const reset = await signOutUser();
+      const reset = await withProcessing({
+        message: 'Signing out...',
+        submessage: 'Clearing active client session'
+      }, async () => {
+        return await signOutUser();
+      });
       setOnboardingCompleted(false);
       onUpdateSession(reset);
-      onLogout?.();
     } catch (err: any) {
       setDeleteToast(err?.message || 'Unable to sign out right now.');
       setTimeout(() => setDeleteToast(null), 4500);
@@ -1003,16 +1011,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         setOnboardingCompleted(false);
         const resetSession = getSavedSession();
         onUpdateSession(resetSession);
-        setResetSuccessToast(true);
-        setTimeout(() => setResetSuccessToast(false), 4000);
-        onLogout?.();
       } else {
         setDeleteToast(res.message || 'Failed to delete account');
-        setTimeout(() => setDeleteToast(null), 3500);
+        setTimeout(() => setDeleteToast(null), 4500);
       }
     } catch (err: any) {
       setDeleteToast(err?.message || 'Error deleting account');
-      setTimeout(() => setDeleteToast(null), 3500);
+      setTimeout(() => setDeleteToast(null), 4500);
     } finally {
       setIsDeletingAccount(false);
     }
@@ -1081,9 +1086,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
   const handleConfirmReset = async () => {
     setIsResetModalOpen(false);
-    await db.delete();
-    await db.open();
-    await initializeDatabaseWithSeedData();
+    await clearAllDexieData(true);
     setResetSuccessToast(true);
     setTimeout(() => setResetSuccessToast(false), 3000);
   };
@@ -2951,7 +2954,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             </div>
 
             <p className="text-xs text-[var(--text-secondary)]">
-              Your Google session will disconnect. Your local offline schedules will remain stored safely on this device.
+              Your active session will disconnect and clear from the screen. Your account data and local offline backups remain safe so you can switch back anytime.
             </p>
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--card-border)]">
@@ -3052,6 +3055,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               This action will permanently purge all your cloud schedules, tasks, grades, and profile information from SkwelaDabaw servers, clear your local database, and log you out.
             </p>
 
+            {deleteToast && (
+              <div className="p-3 rounded-2xl bg-red-500/10 border border-red-500/30 text-xs text-[#FF453A] font-semibold leading-snug">
+                {deleteToast}
+              </div>
+            )}
+
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--card-border)]">
               <button
                 type="button"
@@ -3078,7 +3087,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
       {/* Delete Account Error Toast */}
       {deleteToast && createPortal(
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-full bg-red-500/90 text-white text-xs font-bold shadow-xl animate-fade-in pointer-events-none select-none">
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[70] px-4 py-2.5 rounded-full bg-red-500/95 text-white text-xs font-bold shadow-xl animate-fade-in pointer-events-none select-none text-center max-w-[90vw]">
           {deleteToast}
         </div>,
         document.body

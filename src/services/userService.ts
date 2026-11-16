@@ -1,6 +1,8 @@
 import { StudentAuthSession, getSavedSession, saveSession, signOutUser } from './authService';
 import { ClassSchedule } from '../types';
-import { db, initializeDatabaseWithSeedData } from '../db';
+import { db, clearAllDexieData } from '../db';
+import { auth, isFirebaseConfigured } from './firebase';
+import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 import {
   PENDING_SYNC_KEY,
   queueCloudSync,
@@ -11,7 +13,7 @@ import {
   getFirebaseIdToken
 } from './cloudSyncService';
 import { cancelAllAccountReminders, scheduleAllClassSchedulesReminders, refreshUnremovableClassNotification } from './notificationService';
-import { syncScheduleToWidgets, syncTasksToWidgets } from './widgetService';
+import { syncScheduleToWidgets, syncTasksToWidgets, syncRoutinesToWidgets } from './widgetService';
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { imageCacheService } from './imageCacheService';
 import { SyncTombstones, generateSyncUUID, hasPendingTombstones, purgeUserScopedStorage, readSyncTombstones, scopedKey } from './userScope';
@@ -148,9 +150,9 @@ async function httpGet(url: string, headers: Record<string, string> = {}): Promi
 }
 
 /**
- * Universal HTTP POST helper across Native Android and Web
+ * Universal HTTP POST helper with full status & server error reporting
  */
-async function httpPost(url: string, body: any, token?: string): Promise<any> {
+async function httpPostWithStatus<T = any>(url: string, body: any, token?: string): Promise<HttpResponseWithStatus<T>> {
   let targetUrl = url;
   if (token && !targetUrl.includes('token=')) {
     targetUrl += (targetUrl.includes('?') ? '&' : '?') + `token=${encodeURIComponent(token)}`;
@@ -171,13 +173,25 @@ async function httpPost(url: string, body: any, token?: string): Promise<any> {
         connectTimeout: 8000,
         readTimeout: 8000
       });
-      if (res.status >= 200 && res.status < 300 && res.data) {
-        return typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
-      }
-      return null;
-    } catch (e) {
+      const parsedData = res.data && typeof res.data === 'string'
+        ? (() => {
+            try { return JSON.parse(res.data); } catch { return res.data; }
+          })()
+        : res.data;
+      return {
+        status: res.status,
+        data: parsedData,
+        isNetworkError: false,
+        error: res.status >= 400 ? (parsedData?.error || parsedData?.message || `HTTP ${res.status}`) : undefined
+      };
+    } catch (e: any) {
       console.warn('Native httpPost note:', e);
-      return null;
+      return {
+        status: 0,
+        data: null,
+        isNetworkError: true,
+        error: e?.message || 'Network request failed'
+      };
     }
   } else {
     try {
@@ -190,15 +204,39 @@ async function httpPost(url: string, body: any, token?: string): Promise<any> {
         signal: controller.signal
       });
       clearTimeout(timeoutId);
-      if (res.ok) {
-        return await res.json();
+      let parsedData = null;
+      try {
+        parsedData = await res.json();
+      } catch {
+        parsedData = null;
       }
-      return null;
-    } catch (e) {
+      return {
+        status: res.status,
+        data: parsedData,
+        isNetworkError: false,
+        error: !res.ok ? (parsedData?.error || parsedData?.message || `HTTP ${res.status}`) : undefined
+      };
+    } catch (e: any) {
       console.warn('Fetch httpPost note:', e);
-      return null;
+      return {
+        status: 0,
+        data: null,
+        isNetworkError: true,
+        error: e?.message || 'Network request failed'
+      };
     }
   }
+}
+
+/**
+ * Universal HTTP POST helper across Native Android and Web
+ */
+async function httpPost(url: string, body: any, token?: string): Promise<any> {
+  const res = await httpPostWithStatus(url, body, token);
+  if (res.status >= 200 && res.status < 300) {
+    return res.data;
+  }
+  return null;
 }
 
 /**
@@ -297,7 +335,8 @@ export async function checkExistingUserDetailed(
   try {
     const idToken = await getFirebaseIdToken();
     const headers: Record<string, string> = idToken ? { Authorization: `Bearer ${idToken}` } : {};
-    const lookupUrl = `${USER_API_URL}?action=lookup&uid=${encodeURIComponent(uid || '')}&email=${encodeURIComponent(email || '')}&t=${Date.now()}`;
+    const tokenParam = idToken ? `&token=${encodeURIComponent(idToken)}` : '';
+    const lookupUrl = `${USER_API_URL}?action=lookup&uid=${encodeURIComponent(uid || '')}&email=${encodeURIComponent(email || '')}${tokenParam}&t=${Date.now()}`;
     const httpRes = await httpGetWithStatus(lookupUrl, headers);
 
     // Case A: 404 Not Found explicitly means user record does not exist in MySQL yet
@@ -747,20 +786,18 @@ export async function switchAccountSchedules(
         currentGrades.some((g) => g.syncStatus === 'pending');
 
       if (!newUid) {
-        // Explicit logout: oldUid's auth token is still active; preserve offline-logout safety guard
-        if (hasUnsyncedChanges) {
-          const syncedOk = await syncLocalDataToCloud(session);
-          if (!syncedOk) {
-            return {
-              success: false,
-              abortedOffline: true,
-              message: 'You have unsynced offline changes. Please connect to the internet to back them up before switching accounts.'
-            };
-          }
-          clearAccountBackup(oldUid);
-        } else if (typeof navigator === 'undefined' || navigator.onLine) {
+        // Explicit logout: preserve user's cloud & per-UID local backup so switching accounts works offline too.
+        // Only clear the active client workspace after snapshotting locally + attempting a quick bounded sync.
+        await snapshotAccountBackup(oldUid, hasUnsyncedChanges).catch(() => false);
+        if (typeof navigator === 'undefined' || navigator.onLine) {
           try {
-            await syncLocalDataToCloud(session);
+            const pushed = await Promise.race([
+              syncLocalDataToCloud(session),
+              new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1500))
+            ]);
+            if (pushed) {
+              clearAccountBackup(oldUid);
+            }
           } catch (_) {}
         }
       } else {
@@ -1145,8 +1182,9 @@ export async function verifyProfileIntegrity(
   try {
     const idToken = await getFirebaseIdToken();
     const headers: Record<string, string> = idToken ? { Authorization: `Bearer ${idToken}` } : {};
+    const tokenParam = idToken ? `&token=${encodeURIComponent(idToken)}` : '';
     const query = uid ? `uid=${encodeURIComponent(uid)}` : `email=${encodeURIComponent(email || '')}`;
-    const url = `${USER_API_URL}?action=verify_session&${query}&t=${Date.now()}`;
+    const url = `${USER_API_URL}?action=verify_session&${query}${tokenParam}&t=${Date.now()}`;
     const res = await httpGet(url, headers);
 
     if (res && res.success) {
@@ -1296,46 +1334,82 @@ export async function updateUserProfileFields(
  * in compliance with Google Play Store Account Deletion requirements.
  */
 export async function deleteUserAccount(): Promise<{ success: boolean; message: string }> {
-  if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    return {
-      success: false,
-      message: 'You are offline. Please connect to the internet to permanently delete your account.'
-    };
-  }
-
   const activeSession = getSavedSession();
   const uid = activeSession.uid;
 
+  if (activeSession.isLoggedIn && typeof navigator !== 'undefined' && !navigator.onLine) {
+    return {
+      success: false,
+      message: 'You are offline. Please connect to the internet to permanently delete your account and cloud data.'
+    };
+  }
+
   try {
-    const token = await getFirebaseIdToken();
+    let token = await getFirebaseIdToken();
+    if (activeSession.isLoggedIn && !token) {
+      token = await getFirebaseIdToken(true);
+    }
+
     if (activeSession.isLoggedIn && !token) {
       return {
         success: false,
-        message: 'Could not verify your authentication token with the server. Please try again.'
+        message: 'Could not verify your authentication session. Please sign in again and retry.'
       };
     }
 
-    if (token) {
-      const payload = { action: 'delete_account', idToken: token };
-      const res = await httpPost(USER_API_URL, payload, token);
-      if (!res || !res.success) {
+    if (activeSession.isLoggedIn && token) {
+      let res = await httpPostWithStatus(USER_API_URL, { action: 'delete_account', idToken: token }, token);
+      if (res.status === 401) {
+        const refreshed = await getFirebaseIdToken(true);
+        if (refreshed && refreshed !== token) {
+          token = refreshed;
+          res = await httpPostWithStatus(USER_API_URL, { action: 'delete_account', idToken: token }, token);
+        }
+      }
+      if (res.isNetworkError || res.status === 0 || res.status >= 400 || !res.data || !res.data.success) {
         return {
           success: false,
-          message: res?.message || res?.error || 'Could not delete account on server. Please check your connection and try again.'
+          message: res.data?.message || res.data?.error || res.error || 'Could not delete account on server. Please check your connection and try again.'
         };
       }
     }
 
+    // Attempt Firebase Auth user deletion cleanly (fallback safely to signOut if recent-login check blocks)
+    if (activeSession.isLoggedIn) {
+      try {
+        if (Capacitor.isNativePlatform()) {
+          await Promise.race([
+            FirebaseAuthentication.deleteUser().catch(() => {}),
+            new Promise((resolve) => setTimeout(resolve, 2500))
+          ]);
+        }
+        if (isFirebaseConfigured && auth?.currentUser) {
+          await Promise.race([
+            auth.currentUser.delete().catch(() => {}),
+            new Promise((resolve) => setTimeout(resolve, 2500))
+          ]);
+        }
+      } catch (_) {}
+    }
+
     try {
-      await db.delete();
-      await db.open();
-      await initializeDatabaseWithSeedData();
+      await cancelAllAccountReminders();
+      syncScheduleToWidgets([]);
+      syncTasksToWidgets([]);
+      syncRoutinesToWidgets([]);
+    } catch (e) {
+      console.warn('Notification/widget cleanup error during wipe:', e);
+    }
+
+    try {
+      await clearAllDexieData(true);
     } catch (e) {
       console.warn('Local database purge error during account deletion:', e);
     }
 
-    // Purge all user-scoped storage, sync, route, chat queue, and cache keys
+    // Purge all user-scoped storage, backups, sync queues, routes, chat cache, and session keys
     if (uid) {
+      clearAccountBackup(uid);
       purgeUserScopedStorage(uid);
     }
     purgeUserScopedStorage('guest');
@@ -1361,21 +1435,36 @@ export async function deleteUserAccount(): Promise<{ success: boolean; message: 
       'skweladabaw_favorite_routes',
       'skweladabaw_recent_trips',
       'skweladabaw_bookmarked_bulletins',
-      'skweladabaw_auth_token'
+      'skweladabaw_auth_token',
+      'skweladabaw_onboarding_completed',
+      'skwela_password_set',
+      'skwela_session_checked'
     ];
     for (const key of keysToRemove) {
       try { localStorage.removeItem(key); } catch (_) {}
     }
 
-    // Remove any cached chat channels or legacy prefixed items safely
+    // Remove all remaining account/chat/backup caches across localStorage
     try {
+      const wipePrefixes = [
+        'skweladabaw_chat_cache_',
+        'skweladabaw_account_backup_',
+        'skweladabaw_cached_',
+        'skweladabaw_sync_tombstones_',
+        'skweladabaw_has_hydrated_',
+        'skweladabaw_saved_places_',
+        'skweladabaw_favorite_routes_',
+        'skweladabaw_recent_trips_',
+        'skweladabaw_bookmarked_bulletins_',
+        'skweladabaw_explicit_empty_'
+      ];
       const allKeys: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
         if (k) allKeys.push(k);
       }
       for (const k of allKeys) {
-        if (k.startsWith('skweladabaw_chat_cache_') || (uid && k.endsWith(`_${uid}`))) {
+        if (wipePrefixes.some((p) => k.startsWith(p)) || (uid && k.endsWith(`_${uid}`))) {
           localStorage.removeItem(k);
         }
       }
