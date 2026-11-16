@@ -1,13 +1,17 @@
 [
   {
     "relation": [
-      "delegate_permission/common.handle_all_urls"
+      "delegate_permission/common.handle_all_urls",
+      "delegate_permission/common.get_login_creds"
     ],
     "target": {
       "namespace": "android_app",
       "package_name": "com.kurzyrio.skweladabaw.app",
       "sha256_cert_fingerprints": [
-        "87:17:94:C8:7D:D7:A1:44:AC:2D:34:89:1A:2D:00:11:0D:6B:D5:EB:C8:AE:82:4D:5E:7B:F5:BC:70:51:5F:94"
+        "87:17:94:C8:7D:D7:A1:44:AC:2D:34:89:1A:2D:00:11:0D:6B:D5:EB:C8:AE:82:4D:5E:7B:F5:BC:70:51:5F:94",
+        "83:4B:5D:A8:CA:E0:94:E8:73:30:7F:F5:4C:04:EF:0E:3C:47:7E:0B:FF:99:A2:2D:2D:07:2C:AE:30:3A:1A:0C",
+        "F0:72:6A:37:1F:04:0D:DB:D6:1D:70:83:05:8D:58:53:B4:90:68:9C:00:64:3C:B3:5D:DC:40:1F:C5:29:F3:C4",
+        "83:B6:65:CE:B5:9F:E6:5A:EF:CE:6E:27:2F:DE:C8:8F:C6:56:45:A1:E6:5D:BC:47:2D:B8:89:40:E5:F0:75:51"
       ]
     }
   },
