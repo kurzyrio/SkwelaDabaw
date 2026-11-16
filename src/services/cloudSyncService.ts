@@ -42,10 +42,15 @@ export interface CloudSyncResult {
  * Helper to fetch raw token from Native or Web Firebase SDK
  */
 async function fetchRawFirebaseToken(): Promise<string | null> {
-  // 0. Check for SkwelaDabaw Phone Auth session token
-  const localToken = localStorage.getItem('skweladabaw_auth_token');
+  // 0. Check for SkwelaDabaw Phone Auth session token (only if it belongs to the active logged-in user)
+  const localToken = typeof localStorage !== 'undefined' ? localStorage.getItem('skweladabaw_auth_token') : null;
   if (localToken) {
-    return localToken;
+    const saved = getSavedSession();
+    const tokenUid = extractJwtTokenUid(localToken);
+    if (saved?.isLoggedIn && saved.uid && (!tokenUid || tokenUid === saved.uid)) {
+      return localToken;
+    }
+    try { localStorage.removeItem('skweladabaw_auth_token'); } catch (_) {}
   }
 
   // 1. Native Android (Capacitor Firebase Auth)
@@ -97,6 +102,22 @@ export async function getFirebaseIdToken(): Promise<string | null> {
     }
   }
   return null;
+}
+
+function extractJwtTokenUid(token: string | null | undefined): string | null {
+  if (!token || typeof token !== 'string') return null;
+  const parts = token.split('.');
+  if (parts.length < 2) return null;
+  try {
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const pad = b64.length % 4 === 0 ? '' : '='.repeat(4 - (b64.length % 4));
+    const json = atob(b64 + pad);
+    const payload = JSON.parse(json);
+    const resolved = payload?.user_id || payload?.uid || payload?.sub;
+    return resolved ? String(resolved) : null;
+  } catch {
+    return null;
+  }
 }
 
 const INT_TO_DAY_OF_WEEK: Record<number, DayOfWeek> = {
@@ -229,29 +250,52 @@ async function reconcileSchedulesWithCloud(
         continue;
       }
 
+      const resolvedOfr = remote.ofrCode !== undefined ? remote.ofrCode : (match.ofrCode || '');
+      const resolvedSubjectCode = remote.subjectCode || match.subjectCode;
+      const resolvedDays = Array.isArray(remote.days) && remote.days.length > 0 ? remote.days : match.days;
+      const resolvedStartTime = remote.startTime || match.startTime;
+      const resolvedBuilding =
+        remote.building !== undefined && remote.building !== ''
+          ? remote.building
+          : (match.building || '');
+      const resolvedUnits = remote.units !== undefined ? remote.units : match.units;
+      const resolvedNotes = remote.notes !== undefined ? remote.notes : match.notes;
+
       const resolvedReminder = (match.reminderMinutes !== undefined && match.reminderMinutes !== null)
         ? match.reminderMinutes
         : ((remote.reminderMinutes !== undefined && remote.reminderMinutes !== null) ? Number(remote.reminderMinutes) : defaultReminder);
 
       const isCoreDiff =
+        (match.ofrCode || '') !== resolvedOfr ||
+        match.subjectCode !== resolvedSubjectCode ||
         match.subjectName !== remote.subjectName ||
         match.room !== remote.room ||
-        match.building !== remote.building ||
+        (match.building || '') !== resolvedBuilding ||
         match.instructor !== remote.instructor ||
+        !areDaysEqual(match.days, resolvedDays) ||
+        match.startTime !== resolvedStartTime ||
         match.endTime !== remote.endTime ||
         match.color !== remote.color ||
+        match.units !== resolvedUnits ||
+        (match.notes || '') !== (resolvedNotes || '') ||
         (remote.uuid && match.uuid !== remote.uuid);
 
       if (isCoreDiff || match.reminderMinutes !== resolvedReminder || match.syncStatus !== 'synced') {
         hasChanged = isCoreDiff || match.reminderMinutes !== resolvedReminder || hasChanged;
         await db.schedules.update(match.id, {
           uuid: remote.uuid || match.uuid || generateSyncUUID('sched'),
+          ofrCode: resolvedOfr,
+          subjectCode: resolvedSubjectCode,
           subjectName: remote.subjectName,
           room: remote.room,
-          building: remote.building,
+          building: resolvedBuilding,
           instructor: remote.instructor,
+          days: resolvedDays,
+          startTime: resolvedStartTime,
           endTime: remote.endTime,
           color: remote.color,
+          units: resolvedUnits,
+          notes: resolvedNotes,
           reminderMinutes: resolvedReminder,
           createdAt: remote.createdAt || match.createdAt,
           updatedAt: remote.updatedAt || match.updatedAt,
@@ -452,33 +496,32 @@ export async function restoreUserData(
       // Pre-map all cloud collections synchronously before entering atomic IDB transaction
       const defaultReminder = Number(localStorage.getItem('skweladabaw_reminder_timing') || 10);
       const hasHydratedBefore = typeof window !== 'undefined' && localStorage.getItem(`skweladabaw_has_hydrated_${targetUid}`) === 'true';
-      const isExplicitEmptySchedules = typeof window !== 'undefined' && (
-        localStorage.getItem(scopedKey('skweladabaw_explicit_empty_schedules', targetUid)) === 'true' ||
-        localStorage.getItem('skweladabaw_explicit_empty_schedules') === 'true'
-      );
-      const isExplicitEmptyTasks = typeof window !== 'undefined' && (
-        localStorage.getItem(scopedKey('skweladabaw_explicit_empty_tasks', targetUid)) === 'true' ||
-        localStorage.getItem('skweladabaw_explicit_empty_tasks') === 'true'
-      );
+      const isExplicitEmptySchedules = typeof window !== 'undefined' &&
+        localStorage.getItem(scopedKey('skweladabaw_explicit_empty_schedules', targetUid)) === 'true';
+      const isExplicitEmptyTasks = typeof window !== 'undefined' &&
+        localStorage.getItem(scopedKey('skweladabaw_explicit_empty_tasks', targetUid)) === 'true';
 
       const hasSchedulesField = Array.isArray(responseData.schedules);
       const mappedSchedules: ClassSchedule[] = hasSchedulesField
         ? responseData.schedules.map((s: any) => ({
             uuid: s.uuid || undefined,
-            ofrCode: s.ofr_code || '',
-            subjectCode: s.subject_code || 'SUBJ',
-            subjectName: s.subject_name || s.subject_code || 'Subject',
+            ofrCode: s.ofr_code || s.ofrCode || '',
+            subjectCode: s.subject_code || s.subjectCode || 'SUBJ',
+            subjectName: s.subject_name || s.subjectName || s.subject_code || s.subjectCode || 'Subject',
             room: s.room || '',
+            building: s.building !== undefined && s.building !== null ? String(s.building) : undefined,
             days: parseDays(s.days),
-            startTime: s.start_time || '07:30',
-            endTime: s.end_time || '09:00',
+            startTime: s.start_time || s.startTime || '07:30',
+            endTime: s.end_time || s.endTime || '09:00',
             color: s.color || '#0284c7',
+            units: (s.units !== undefined && s.units !== null && s.units !== '') ? Number(s.units) : undefined,
+            notes: s.notes !== undefined && s.notes !== null ? String(s.notes) : undefined,
             instructor: s.instructor || '',
             reminderMinutes: (s.reminder_minutes !== undefined && s.reminder_minutes !== null)
               ? Number(s.reminder_minutes)
               : (s.reminderMinutes !== undefined && s.reminderMinutes !== null ? Number(s.reminderMinutes) : undefined),
-            createdAt: s.created_at || undefined,
-            updatedAt: s.updated_at || undefined,
+            createdAt: s.created_at || s.createdAt || undefined,
+            updatedAt: s.updated_at || s.updatedAt || undefined,
             syncStatus: 'synced'
           }))
         : [];
@@ -1060,6 +1103,10 @@ async function hasAnyPendingLocalMutations(uid?: string): Promise<boolean> {
   }
 }
 
+export async function hasPendingLocalSync(uid?: string): Promise<boolean> {
+  return hasAnyPendingLocalMutations(uid);
+}
+
 function notifySyncStatus(status: SyncStatusState, timestamp?: string): void {
   if (typeof window === 'undefined') return;
   try {
@@ -1160,11 +1207,46 @@ export function queueCloudSync(session?: StudentAuthSession): void {
  */
 export async function syncLocalDataToCloud(session?: StudentAuthSession): Promise<boolean> {
   const currentSession = session || getSavedSession();
-  if (!currentSession || !currentSession.isLoggedIn) {
+  if (!currentSession || !currentSession.isLoggedIn || !currentSession.uid) {
     return false;
   }
 
-  const uid = currentSession.uid || getCurrentStorageUid();
+  const uid = currentSession.uid;
+
+  // Enforce strict active auth identity match before pushing any data
+  const localAuthToken = typeof window !== 'undefined' ? localStorage.getItem('skweladabaw_auth_token') : null;
+  if (localAuthToken) {
+    const localTokenUid = extractJwtTokenUid(localAuthToken);
+    if (localTokenUid && localTokenUid !== uid) {
+      console.warn('[cloudSyncService] Refusing push: local auth token UID does not match session UID', { uid, localTokenUid });
+      return false;
+    }
+  } else {
+    if (isFirebaseConfigured && auth && auth.currentUser && auth.currentUser.uid !== uid) {
+      console.warn('[cloudSyncService] Refusing push: active Firebase user does not match target session UID', {
+        uid,
+        activeUid: auth.currentUser.uid
+      });
+      return false;
+    }
+    if (!Capacitor.isNativePlatform() && isFirebaseConfigured && auth && auth.currentUser?.uid !== uid) {
+      console.warn('[cloudSyncService] Refusing push: active Web Firebase user missing or mismatched', { uid });
+      return false;
+    }
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const curNative = await FirebaseAuthentication.getCurrentUser();
+        if (curNative?.user?.uid && curNative.user.uid !== uid) {
+          console.warn('[cloudSyncService] Refusing push: active native Firebase UID mismatch', {
+            uid,
+            activeUid: curNative.user.uid
+          });
+          return false;
+        }
+      } catch (_) {}
+    }
+  }
+
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     if (typeof window !== 'undefined') {
       localStorage.setItem(PENDING_SYNC_KEY, 'true');
@@ -1179,6 +1261,12 @@ export async function syncLocalDataToCloud(session?: StudentAuthSession): Promis
       localStorage.setItem(PENDING_SYNC_KEY, 'true');
       notifySyncStatus('offline_pending');
     }
+    return false;
+  }
+
+  const tokenUid = extractJwtTokenUid(token);
+  if (tokenUid && tokenUid !== uid) {
+    console.warn('[cloudSyncService] Refusing push: resolved JWT subject does not match target session UID', { uid, tokenUid });
     return false;
   }
 
@@ -1202,14 +1290,10 @@ export async function syncLocalDataToCloud(session?: StudentAuthSession): Promis
     const bookmarkedBulletinsList = readScopedJson<string[]>('skweladabaw_bookmarked_bulletins', [], uid);
 
     const hasHydrated = typeof window !== 'undefined' && localStorage.getItem(`skweladabaw_has_hydrated_${uid}`) === 'true';
-    const isExplicitEmptySchedules = typeof window !== 'undefined' && (
-      localStorage.getItem(scopedKey('skweladabaw_explicit_empty_schedules', uid)) === 'true' ||
-      localStorage.getItem('skweladabaw_explicit_empty_schedules') === 'true'
-    );
-    const isExplicitEmptyTasks = typeof window !== 'undefined' && (
-      localStorage.getItem(scopedKey('skweladabaw_explicit_empty_tasks', uid)) === 'true' ||
-      localStorage.getItem('skweladabaw_explicit_empty_tasks') === 'true'
-    );
+    const isExplicitEmptySchedules = typeof window !== 'undefined' &&
+      localStorage.getItem(scopedKey('skweladabaw_explicit_empty_schedules', uid)) === 'true';
+    const isExplicitEmptyTasks = typeof window !== 'undefined' &&
+      localStorage.getItem(scopedKey('skweladabaw_explicit_empty_tasks', uid)) === 'true';
 
     const nowIso = new Date().toISOString();
     const schedPushMeta = localSchedules.map((s) => ({

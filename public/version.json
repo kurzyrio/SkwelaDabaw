@@ -1,6 +1,6 @@
 {
-  "version": "1.11.5.15",
-  "versionCode": 144,
+  "version": "1.11.5.17",
+  "versionCode": 146,
   "releaseDate": "2026-11-16",
   "versionScheme": {
     "digit1": "App Version",
@@ -13,15 +13,15 @@
   "forceUpdate": false,
   "developer": "Kurzyrio",
   "supportEmail": "jerriviencenatad@gmail.com",
-  "title": "Battery Efficiency, Background Sync & Smooth Maps",
+  "title": "Account Switch Sync Isolation & Timetable/Task Merge Fixes",
   "releaseNotes": [
-    "Reduced battery and CPU usage by pausing animations, chat/bus/weather polls, and notifications when idle or in the background.",
-    "Restricted continuous high-accuracy GPS tracking to active turn-by-turn navigation and smoothed DC Bus map rendering.",
-    "Fixed simultaneous class reminder alerts, chat scroll-to-bottom jumps while reading history, and EXIF stripping on uploaded photos."
+    "Prevented unsynced schedules, tasks, routines, expenses, and grades from mixing between accounts when switching profiles offline or online.",
+    "Preserved schedule building names, subject codes, days, and start times when syncing existing classes from the cloud.",
+    "Protected newly created tasks from being overwritten or cleared during concurrent cloud refreshes."
   ],
   "downloadUrl": "https://skweladabaw.kurzyrio.site/download",
-  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.15.apk",
-  "sizeBytes": 27021222,
+  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.17.apk",
+  "sizeBytes": 27023964,
   "sizeFormatted": "25.8 MB",
-  "sha256": "554a354b62deeac4ec550d04b0dcc15ac409a66b133317ba6d4eeec9b40851ce"
+  "sha256": "a032a9edb156385e708327627cb4696f5994c99ab1a8e82b08c346bd0a4bb920"
 }

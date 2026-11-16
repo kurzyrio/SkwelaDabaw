@@ -1,12 +1,20 @@
 import { StudentAuthSession, getSavedSession, saveSession, signOutUser } from './authService';
 import { ClassSchedule } from '../types';
 import { db, initializeDatabaseWithSeedData } from '../db';
-import { PENDING_SYNC_KEY, queueCloudSync, syncLocalDataToCloud, restoreUserData, getFirebaseIdToken } from './cloudSyncService';
+import {
+  PENDING_SYNC_KEY,
+  queueCloudSync,
+  syncLocalDataToCloud,
+  syncCloudDataBiDirectional,
+  restoreUserData,
+  hasPendingLocalSync,
+  getFirebaseIdToken
+} from './cloudSyncService';
 import { cancelAllAccountReminders, scheduleAllClassSchedulesReminders, refreshUnremovableClassNotification } from './notificationService';
 import { syncScheduleToWidgets, syncTasksToWidgets } from './widgetService';
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { imageCacheService } from './imageCacheService';
-import { hasPendingTombstones, purgeUserScopedStorage } from './userScope';
+import { SyncTombstones, generateSyncUUID, hasPendingTombstones, purgeUserScopedStorage, readSyncTombstones, scopedKey } from './userScope';
 
 const USER_API_URL = 'https://skweladabaw.kurzyrio.site/api/user.php';
 const REGISTERED_USERS_KEY = 'skweladabaw_registered_accounts';
@@ -580,12 +588,89 @@ export async function backupSchedulesToCloud(
   }
 }
 
+export const ACCOUNT_BACKUP_KEY_PREFIX = 'skweladabaw_account_backup_';
+
+export interface AccountSwitchBackup {
+  version: number;
+  uid: string;
+  savedAt: string;
+  hasPendingSync: boolean;
+  schedules: any[];
+  tasks: any[];
+  dayReminders: any[];
+  expenses: any[];
+  grades: any[];
+  tombstones?: SyncTombstones;
+  explicitEmptySchedules?: boolean;
+  explicitEmptyTasks?: boolean;
+}
+
+export function readAccountBackup(uid: string): AccountSwitchBackup | null {
+  if (!uid || typeof localStorage === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(`${ACCOUNT_BACKUP_KEY_PREFIX}${uid}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.uid === uid) {
+      return parsed as AccountSwitchBackup;
+    }
+  } catch (_) {}
+  return null;
+}
+
+export function clearAccountBackup(uid: string): void {
+  if (!uid || typeof localStorage === 'undefined') return;
+  try {
+    localStorage.removeItem(`${ACCOUNT_BACKUP_KEY_PREFIX}${uid}`);
+  } catch (_) {}
+}
+
+export async function snapshotAccountBackup(uid: string, forcePendingSync?: boolean): Promise<boolean> {
+  if (!uid || typeof localStorage === 'undefined') return false;
+  try {
+    const [schedules, tasks, dayReminders, expenses, grades] = await Promise.all([
+      db.schedules.toArray(),
+      db.tasks.toArray(),
+      db.dayReminders.toArray(),
+      db.expenses.toArray(),
+      db.grades.toArray()
+    ]);
+
+    const hasPending = forcePendingSync ?? (await hasPendingLocalSync(uid));
+    const backup: AccountSwitchBackup = {
+      version: 1,
+      uid,
+      savedAt: new Date().toISOString(),
+      hasPendingSync: hasPending,
+      schedules,
+      tasks,
+      dayReminders,
+      expenses,
+      grades,
+      tombstones: readSyncTombstones(uid),
+      explicitEmptySchedules: localStorage.getItem(scopedKey('skweladabaw_explicit_empty_schedules', uid)) === 'true',
+      explicitEmptyTasks: localStorage.getItem(scopedKey('skweladabaw_explicit_empty_tasks', uid)) === 'true'
+    };
+
+    localStorage.setItem(`${ACCOUNT_BACKUP_KEY_PREFIX}${uid}`, JSON.stringify(backup));
+    localStorage.setItem(`skweladabaw_cached_schedules_${uid}`, JSON.stringify(schedules));
+    localStorage.setItem(`skweladabaw_cached_tasks_${uid}`, JSON.stringify(tasks.filter((t) => t.sync_status !== 'pending_delete')));
+    localStorage.setItem(`skweladabaw_cached_routines_${uid}`, JSON.stringify(dayReminders));
+    localStorage.setItem(`skweladabaw_cached_expenses_${uid}`, JSON.stringify(expenses));
+    localStorage.setItem(`skweladabaw_cached_grades_${uid}`, JSON.stringify(grades));
+    return true;
+  } catch (err) {
+    console.warn('Error creating UID-scoped account backup:', err);
+    return false;
+  }
+}
+
 /**
  * Switch account schedules safely with multi-account isolation:
- * 1. Saves oldUid's current schedules to local cache and backs up synchronously to MySQL.
- * 2. Clears local db.schedules only AFTER sync finishes.
- * 3. If newUid exists, checks local account cache first, then syncs latest from MySQL.
- * 4. If guest (no newUid), loads guest cache or leaves empty so new account/guest never sees previous account's classes.
+ * 1. Saves oldUid's current schedules/data to local cache + UID-scoped backup (or syncs synchronously if signing out).
+ * 2. Clears local Dexie tables atomically ONLY AFTER backup/sync preservation succeeds.
+ * 3. If newUid exists, restores local account backup/cache first, migrates any guest tables, then syncs with MySQL.
+ * 4. Never pushes oldUid's Dexie data under newUid's Firebase token.
  */
 export async function switchAccountSchedules(
   oldUid?: string,
@@ -593,13 +678,20 @@ export async function switchAccountSchedules(
   session?: StudentAuthSession,
   token?: string
 ): Promise<{ success: boolean; abortedOffline?: boolean; message?: string }> {
+  if (oldUid && newUid && oldUid === newUid) {
+    return { success: true };
+  }
+
   // 1. Back up or preserve previous schedules, tasks, routines, expenses, and grades
   try {
     if (!oldUid) {
-      // Switching from guest mode: preserve local schedules and tasks in pending guest storage
-      const [currentSchedules, currentTasks] = await Promise.all([
+      // Switching from guest mode: preserve all 5 Dexie stores for guest-to-login migration
+      const [currentSchedules, currentTasks, currentRoutines, currentExpenses, currentGrades] = await Promise.all([
         db.schedules.toArray(),
-        db.tasks.toArray()
+        db.tasks.toArray(),
+        db.dayReminders.toArray(),
+        db.expenses.toArray(),
+        db.grades.toArray()
       ]);
       const activeTasks = currentTasks.filter((t) => t.sync_status !== 'pending_delete');
       if (currentSchedules.length > 0) {
@@ -611,6 +703,21 @@ export async function switchAccountSchedules(
         localStorage.setItem('skweladabaw_pending_guest_tasks', JSON.stringify(activeTasks));
       } else {
         localStorage.removeItem('skweladabaw_pending_guest_tasks');
+      }
+      if (currentRoutines.length > 0) {
+        localStorage.setItem('skweladabaw_pending_guest_routines', JSON.stringify(currentRoutines));
+      } else {
+        localStorage.removeItem('skweladabaw_pending_guest_routines');
+      }
+      if (currentExpenses.length > 0) {
+        localStorage.setItem('skweladabaw_pending_guest_expenses', JSON.stringify(currentExpenses));
+      } else {
+        localStorage.removeItem('skweladabaw_pending_guest_expenses');
+      }
+      if (currentGrades.length > 0) {
+        localStorage.setItem('skweladabaw_pending_guest_grades', JSON.stringify(currentGrades));
+      } else {
+        localStorage.removeItem('skweladabaw_pending_guest_grades');
       }
     } else if (oldUid !== newUid && session && session.uid === oldUid && session.isLoggedIn) {
       const [currentSchedules, currentTasks, currentRoutines, currentExpenses, currentGrades] = await Promise.all([
@@ -639,19 +746,46 @@ export async function switchAccountSchedules(
         currentExpenses.some((e) => e.syncStatus === 'pending') ||
         currentGrades.some((g) => g.syncStatus === 'pending');
 
-      if (hasUnsyncedChanges) {
-        const syncedOk = await syncLocalDataToCloud(session);
-        if (!syncedOk) {
-          return {
-            success: false,
-            abortedOffline: true,
-            message: 'You have unsynced offline changes. Please connect to the internet to back them up before switching accounts.'
-          };
+      if (!newUid) {
+        // Explicit logout: oldUid's auth token is still active; preserve offline-logout safety guard
+        if (hasUnsyncedChanges) {
+          const syncedOk = await syncLocalDataToCloud(session);
+          if (!syncedOk) {
+            return {
+              success: false,
+              abortedOffline: true,
+              message: 'You have unsynced offline changes. Please connect to the internet to back them up before switching accounts.'
+            };
+          }
+          clearAccountBackup(oldUid);
+        } else if (typeof navigator === 'undefined' || navigator.onLine) {
+          try {
+            await syncLocalDataToCloud(session);
+          } catch (_) {}
         }
-      } else if (typeof navigator === 'undefined' || navigator.onLine) {
-        try {
-          await syncLocalDataToCloud(session);
-        } catch (_) {}
+      } else {
+        // Switching to another account: syncLocalDataToCloud fails fast if auth already switched to newUid.
+        // Push ONLY if oldUid auth still matches; otherwise persist complete UID-scoped local backup.
+        let flushedOldUid = false;
+        if (hasUnsyncedChanges && (typeof navigator === 'undefined' || navigator.onLine)) {
+          try {
+            flushedOldUid = await syncLocalDataToCloud(session);
+          } catch (_) {
+            flushedOldUid = false;
+          }
+        }
+        if (hasUnsyncedChanges && !flushedOldUid) {
+          const backedUp = await snapshotAccountBackup(oldUid, true);
+          if (!backedUp) {
+            return {
+              success: false,
+              abortedOffline: true,
+              message: 'Could not save offline backup for your previous account. Please try again.'
+            };
+          }
+        } else if (flushedOldUid || !hasUnsyncedChanges) {
+          clearAccountBackup(oldUid);
+        }
       }
     }
   } catch (err) {
@@ -702,9 +836,13 @@ export async function switchAccountSchedules(
     return { success: true };
   }
 
-  // 5. Switch to registered user: restore all 5 Dexie stores atomically with bulkPut
+  // 5. Switch to registered user: restore all 5 Dexie stores atomically (account backup -> cache -> guest extras)
   let restoredSchedules: any[] = [];
-  let restoredTasks: any[] = [];
+  let restoredWidgetTasks: any[] = [];
+  let shouldPushRestoredLocal = false;
+  let consumedAccountBackup = false;
+  let consumedGuestExtras = false;
+
   try {
     const parseArray = (key: string): any[] => {
       const raw = localStorage.getItem(key);
@@ -713,43 +851,127 @@ export async function switchAccountSchedules(
       return Array.isArray(parsed) ? parsed : [];
     };
 
-    const cachedScheds = parseArray(`skweladabaw_cached_schedules_${newUid}`);
-    const rawTasks = parseArray(`skweladabaw_cached_tasks_${newUid}`);
-    const taskByUuid = new Map<string, any>();
-    for (const t of rawTasks) {
-      if (t && t.sync_status !== 'pending_delete' && t.uuid) {
-        taskByUuid.set(t.uuid, t);
+    const accountBackup = readAccountBackup(newUid);
+    if (accountBackup) {
+      consumedAccountBackup = true;
+      shouldPushRestoredLocal = Boolean(accountBackup.hasPendingSync);
+      restoredSchedules = Array.isArray(accountBackup.schedules) ? accountBackup.schedules : [];
+      const backupTasks = Array.isArray(accountBackup.tasks) ? accountBackup.tasks : [];
+      const backupRoutines = Array.isArray(accountBackup.dayReminders) ? accountBackup.dayReminders : [];
+      const backupExpenses = Array.isArray(accountBackup.expenses) ? accountBackup.expenses : [];
+      const backupGrades = Array.isArray(accountBackup.grades) ? accountBackup.grades : [];
+
+      if (accountBackup.explicitEmptySchedules) {
+        localStorage.setItem(scopedKey('skweladabaw_explicit_empty_schedules', newUid), 'true');
       }
+      if (accountBackup.explicitEmptyTasks) {
+        localStorage.setItem(scopedKey('skweladabaw_explicit_empty_tasks', newUid), 'true');
+      }
+      if (accountBackup.tombstones) {
+        const tombKey = scopedKey('skweladabaw_sync_tombstones', newUid);
+        if (!localStorage.getItem(tombKey)) {
+          localStorage.setItem(tombKey, JSON.stringify(accountBackup.tombstones));
+        }
+      }
+
+      await db.transaction(
+        'rw',
+        [db.schedules, db.tasks, db.dayReminders, db.expenses, db.grades],
+        async () => {
+          if (restoredSchedules.length > 0) await db.schedules.bulkPut(restoredSchedules);
+          if (backupTasks.length > 0) await db.tasks.bulkPut(backupTasks);
+          if (backupRoutines.length > 0) await db.dayReminders.bulkPut(backupRoutines);
+          if (backupExpenses.length > 0) await db.expenses.bulkPut(backupExpenses);
+          if (backupGrades.length > 0) await db.grades.bulkPut(backupGrades);
+        }
+      );
+
+      restoredWidgetTasks = backupTasks.filter((t) => t && t.sync_status !== 'pending_delete');
+    } else {
+      const cachedScheds = parseArray(`skweladabaw_cached_schedules_${newUid}`);
+      const rawTasks = parseArray(`skweladabaw_cached_tasks_${newUid}`);
+      const taskByUuid = new Map<string, any>();
+      for (const t of rawTasks) {
+        if (t && t.sync_status !== 'pending_delete' && t.uuid) {
+          taskByUuid.set(t.uuid, t);
+        }
+      }
+      const cachedTasks = Array.from(taskByUuid.values());
+      let cachedRoutines = parseArray(`skweladabaw_cached_routines_${newUid}`);
+      let cachedExpenses = parseArray(`skweladabaw_cached_expenses_${newUid}`);
+      let cachedGrades = parseArray(`skweladabaw_cached_grades_${newUid}`);
+
+      if (!oldUid) {
+        const guestRoutines = parseArray('skweladabaw_pending_guest_routines');
+        const guestExpenses = parseArray('skweladabaw_pending_guest_expenses');
+        const guestGrades = parseArray('skweladabaw_pending_guest_grades');
+        const nowIso = new Date().toISOString();
+
+        if (guestRoutines.length > 0) {
+          consumedGuestExtras = true;
+          const taggedRoutines = guestRoutines.map((r) => ({
+            ...r,
+            id: undefined,
+            uuid: r.uuid || generateSyncUUID('routine'),
+            updatedAt: r.updatedAt || r.createdAt || nowIso,
+            syncStatus: 'pending'
+          }));
+          cachedRoutines = [...cachedRoutines, ...taggedRoutines];
+        }
+        if (guestExpenses.length > 0) {
+          consumedGuestExtras = true;
+          const taggedExpenses = guestExpenses.map((e) => ({
+            ...e,
+            id: undefined,
+            uuid: e.uuid || generateSyncUUID('exp'),
+            updatedAt: e.updatedAt || e.createdAt || nowIso,
+            syncStatus: 'pending'
+          }));
+          cachedExpenses = [...cachedExpenses, ...taggedExpenses];
+        }
+        if (guestGrades.length > 0) {
+          consumedGuestExtras = true;
+          const taggedGrades = guestGrades.map((g) => ({
+            ...g,
+            id: undefined,
+            uuid: g.uuid || generateSyncUUID('grade'),
+            updatedAt: g.updatedAt || g.createdAt || nowIso,
+            syncStatus: 'pending'
+          }));
+          cachedGrades = [...cachedGrades, ...taggedGrades];
+        }
+        if (consumedGuestExtras) {
+          shouldPushRestoredLocal = true;
+        }
+      }
+
+      await db.transaction(
+        'rw',
+        [db.schedules, db.tasks, db.dayReminders, db.expenses, db.grades],
+        async () => {
+          if (cachedScheds.length > 0) await db.schedules.bulkPut(cachedScheds);
+          if (cachedTasks.length > 0) await db.tasks.bulkPut(cachedTasks);
+          if (cachedRoutines.length > 0) await db.dayReminders.bulkPut(cachedRoutines);
+          if (cachedExpenses.length > 0) await db.expenses.bulkPut(cachedExpenses);
+          if (cachedGrades.length > 0) await db.grades.bulkPut(cachedGrades);
+        }
+      );
+
+      restoredSchedules = cachedScheds;
+      restoredWidgetTasks = cachedTasks;
     }
-    const cachedTasks = Array.from(taskByUuid.values());
-    const cachedRoutines = parseArray(`skweladabaw_cached_routines_${newUid}`);
-    const cachedExpenses = parseArray(`skweladabaw_cached_expenses_${newUid}`);
-    const cachedGrades = parseArray(`skweladabaw_cached_grades_${newUid}`);
 
-    await db.transaction(
-      'rw',
-      [db.schedules, db.tasks, db.dayReminders, db.expenses, db.grades],
-      async () => {
-        if (cachedScheds.length > 0) {
-          await db.schedules.bulkPut(cachedScheds);
-        }
-        if (cachedTasks.length > 0) {
-          await db.tasks.bulkPut(cachedTasks);
-        }
-        if (cachedRoutines.length > 0) {
-          await db.dayReminders.bulkPut(cachedRoutines);
-        }
-        if (cachedExpenses.length > 0) {
-          await db.expenses.bulkPut(cachedExpenses);
-        }
-        if (cachedGrades.length > 0) {
-          await db.grades.bulkPut(cachedGrades);
-        }
-      }
-    );
-
-    restoredSchedules = cachedScheds;
-    restoredTasks = cachedTasks;
+    if (consumedAccountBackup) {
+      clearAccountBackup(newUid);
+    }
+    if (consumedGuestExtras) {
+      localStorage.removeItem('skweladabaw_pending_guest_routines');
+      localStorage.removeItem('skweladabaw_pending_guest_expenses');
+      localStorage.removeItem('skweladabaw_pending_guest_grades');
+    }
+    if (shouldPushRestoredLocal) {
+      localStorage.setItem(PENDING_SYNC_KEY, 'true');
+    }
   } catch (restoreErr) {
     console.warn('Account cache restore note:', restoreErr);
   }
@@ -760,14 +982,18 @@ export async function switchAccountSchedules(
       await refreshUnremovableClassNotification(restoredSchedules);
       syncScheduleToWidgets(restoredSchedules);
     }
-    if (restoredTasks.length > 0) {
-      syncTasksToWidgets(restoredTasks);
+    if (restoredWidgetTasks.length > 0) {
+      syncTasksToWidgets(restoredWidgetTasks);
     }
   } catch (_) {}
 
-  // Then fetch latest authoritative data from MySQL cloud
+  // Then flush any restored pending backup under newUid's active token & fetch latest authoritative data from MySQL
   try {
-    await restoreUserData(newUid, token);
+    if (shouldPushRestoredLocal && (typeof navigator === 'undefined' || navigator.onLine)) {
+      await syncCloudDataBiDirectional();
+    } else {
+      await restoreUserData(newUid, token);
+    }
   } catch (err) {
     console.warn('MySQL cloud sync on account switch note:', err);
   }
@@ -1122,6 +1348,9 @@ export async function deleteUserAccount(): Promise<{ success: boolean; message: 
       'skweladabaw_profile_updated_at',
       'skweladabaw_pending_guest_schedules',
       'skweladabaw_pending_guest_tasks',
+      'skweladabaw_pending_guest_routines',
+      'skweladabaw_pending_guest_expenses',
+      'skweladabaw_pending_guest_grades',
       'skweladabaw_last_sync_timestamp',
       'skweladabaw_pending_sync',
       PENDING_SYNC_KEY,

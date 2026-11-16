@@ -17,10 +17,38 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.5.17',
+    releaseDate: 'November 16, 2026',
+    title: 'Account Switch Sync Isolation & Timetable/Task Merge Fixes',
+    isLatest: true,
+    tagline: 'Safely isolates offline data across account switches and keeps schedule and task cloud merges accurate.',
+    highlights: [
+      'Isolated offline schedules, tasks, routines, expenses, and grades per account when switching profiles on the same device',
+      'Preserved class buildings, codes, days, and start times when syncing schedules across devices',
+      'Fixed task sync race conditions so recent updates are never overwritten during cloud refreshes'
+    ],
+    items: [
+      {
+        type: 'security',
+        title: 'Strict Account Switch Isolation',
+        description: 'Flushes or snapshots offline changes under your previous account before switching and restores them safely when you sign back in.'
+      },
+      {
+        type: 'fix',
+        title: 'Complete Timetable Field Reconciliation',
+        description: 'Keeps building names, course codes, days, start times, and empty-schedule preferences aligned per account during cloud sync.'
+      },
+      {
+        type: 'fix',
+        title: 'Timestamp-Safe Task Cloud Merge',
+        description: 'Serializes task pushes and pulls so newly saved or deleted tasks stay accurate without being clobbered by stale refreshes.'
+      }
+    ]
+  },
+  {
     version: '1.11.5.15',
     releaseDate: 'November 16, 2026',
     title: 'Battery Efficiency, Background Sync & Smooth Maps',
-    isLatest: true,
     tagline: 'Longer battery life with WorkManager background weather sync, idle-paused animations, and smoother maps and chat.',
     highlights: [
       'Replaced continuous background weather wake-ups with efficient Android WorkManager scheduling and background-safe ongoing class updates',

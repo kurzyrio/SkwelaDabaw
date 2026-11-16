@@ -408,7 +408,7 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
       await db.schedules.clear();
 
       localStorage.setItem(scopedKey('skweladabaw_explicit_empty_schedules', targetUid), 'true');
-      localStorage.setItem('skweladabaw_explicit_empty_schedules', 'true');
+      localStorage.removeItem('skweladabaw_explicit_empty_schedules');
       const cacheKey = userSession.isLoggedIn && userSession.uid
         ? `skweladabaw_cached_schedules_${userSession.uid}`
         : 'skweladabaw_cached_schedules_guest';
@@ -466,8 +466,7 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
       const userSession = getSavedSession();
       if (!userSession.isLoggedIn || !userSession.uid) return;
       const isExplicitEmpty =
-        localStorage.getItem(scopedKey('skweladabaw_explicit_empty_schedules', userSession.uid)) === 'true' ||
-        localStorage.getItem('skweladabaw_explicit_empty_schedules') === 'true';
+        localStorage.getItem(scopedKey('skweladabaw_explicit_empty_schedules', userSession.uid)) === 'true';
       if (isExplicitEmpty) return;
       try {
         const count = await db.schedules.count();
@@ -590,7 +589,9 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
       syncStatus: 'pending'
     };
 
-    clearSyncDeletion('schedules', recordUuid);
+    const userSession = getSavedSession();
+    const targetUid = userSession.isLoggedIn && userSession.uid ? userSession.uid : undefined;
+    clearSyncDeletion('schedules', recordUuid, targetUid);
 
     if (editingSchedule?.id) {
       await db.schedules.update(editingSchedule.id, data as any);
@@ -608,8 +609,6 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
 
     // Sync to account-scoped local cache & cloud
     try {
-      const userSession = getSavedSession();
-      const targetUid = userSession.isLoggedIn && userSession.uid ? userSession.uid : undefined;
       localStorage.removeItem(scopedKey('skweladabaw_explicit_empty_schedules', targetUid));
       localStorage.removeItem('skweladabaw_explicit_empty_schedules');
       const allNow = await db.schedules.toArray();
@@ -647,7 +646,7 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
       localStorage.setItem(cacheKey, JSON.stringify(allNow));
       if (allNow.length === 0) {
         localStorage.setItem(scopedKey('skweladabaw_explicit_empty_schedules', targetUid), 'true');
-        localStorage.setItem('skweladabaw_explicit_empty_schedules', 'true');
+        localStorage.removeItem('skweladabaw_explicit_empty_schedules');
       } else {
         localStorage.removeItem(scopedKey('skweladabaw_explicit_empty_schedules', targetUid));
         localStorage.removeItem('skweladabaw_explicit_empty_schedules');

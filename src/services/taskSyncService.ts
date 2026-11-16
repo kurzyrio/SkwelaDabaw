@@ -29,6 +29,9 @@ const TASKS_SYNC_API_URL = 'https://skweladabaw.kurzyrio.site/api/tasks_sync.php
 
 let isSyncing = false;
 let pendingResyncAfterCurrent = false;
+let activePushPromise: Promise<void> | null = null;
+let activePullPromise: Promise<void> | null = null;
+let pushEpoch = 0;
 let syncTimeout: ReturnType<typeof setTimeout> | null = null;
 let isBackgroundSyncInitialized = false;
 
@@ -312,7 +315,7 @@ export async function deleteTask(task: TaskItem): Promise<void> {
 export async function flushPendingSync(): Promise<void> {
   if (isSyncing) {
     pendingResyncAfterCurrent = true;
-    return;
+    return activePushPromise || undefined;
   }
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     return;
@@ -324,9 +327,20 @@ export async function flushPendingSync(): Promise<void> {
     return;
   }
 
-  isSyncing = true;
+  if (activePullPromise) {
+    await activePullPromise.catch(() => {});
+  }
 
-  try {
+  if (isSyncing) {
+    pendingResyncAfterCurrent = true;
+    return activePushPromise || undefined;
+  }
+
+  isSyncing = true;
+  pushEpoch += 1;
+
+  const run = (async () => {
+    try {
     const tombstones = readSyncTombstones(session.uid);
     const pendingTasks = await db.tasks
       .where('sync_status')
@@ -454,19 +468,21 @@ export async function flushPendingSync(): Promise<void> {
         });
       }
 
-      // 2. Permanently remove acknowledged deleted tasks from Dexie
-      const confirmedDeletedUuids: string[] = responseData.deleted_uuids || tasksToDelete.map((t) => t.uuid).filter(Boolean);
+      // 2. Permanently remove ONLY confirmed deleted tasks from Dexie
+      const confirmedDeletedUuids = new Set<string>(
+        Array.isArray(responseData.deleted_uuids)
+          ? responseData.deleted_uuids.map((u: any) => String(u)).filter(Boolean)
+          : tasksToDelete.map((t) => String(t.uuid || '')).filter(Boolean)
+      );
       await db.transaction('rw', db.tasks, async () => {
         for (const uuid of confirmedDeletedUuids) {
-          if (uuid) {
-            const cur = await db.tasks.where('uuid').equals(uuid).first();
-            if (cur && cur.sync_status === 'pending_delete') {
-              await db.tasks.where('uuid').equals(uuid).delete();
-            }
+          const cur = await db.tasks.where('uuid').equals(uuid).first();
+          if (cur && cur.sync_status === 'pending_delete') {
+            await db.tasks.where('uuid').equals(uuid).delete();
           }
         }
         for (const td of tasksToDelete) {
-          if (td.id) {
+          if (!td.uuid && td.id) {
             const cur = await db.tasks.get(td.id);
             if (cur && cur.sync_status === 'pending_delete') {
               await db.tasks.delete(td.id);
@@ -478,142 +494,180 @@ export async function flushPendingSync(): Promise<void> {
       const remainingNow = await db.tasks.toArray();
       syncTaskLocalCache(remainingNow);
     }
-  } catch (err) {
-    // Silent failure: zero toasts, zero UI popups, zero rollbacks
-    console.debug('[taskSyncService] Background sync caught error silently:', err);
-  } finally {
-    isSyncing = false;
-    if (pendingResyncAfterCurrent) {
-      pendingResyncAfterCurrent = false;
-      scheduleSilentSync(250);
+    } catch (err) {
+      // Silent failure: zero toasts, zero UI popups, zero rollbacks
+      console.debug('[taskSyncService] Background sync caught error silently:', err);
+    } finally {
+      pushEpoch += 1;
+      isSyncing = false;
+      activePushPromise = null;
+      if (pendingResyncAfterCurrent) {
+        pendingResyncAfterCurrent = false;
+        scheduleSilentSync(250);
+      }
     }
-  }
+  })();
+
+  activePushPromise = run;
+  return run;
 }
 
 /**
  * Hydrate local tasks from cloud upon login or device restore
  */
 export async function pullCloudTasks(): Promise<void> {
+  if (activePullPromise) return activePullPromise;
+
   const session = getSavedSession();
   if (!session || !session.isLoggedIn) return;
   if (typeof navigator !== 'undefined' && !navigator.onLine) return;
 
-  try {
-    const token = await getFirebaseIdToken();
-    if (!token) return;
-
-    let serverTasks: any[] = [];
-    let fetchSucceeded = false;
-
-    if (Capacitor.isNativePlatform()) {
-      const res = await CapacitorHttp.get({
-        url: TASKS_SYNC_API_URL,
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        connectTimeout: 8000,
-        readTimeout: 8000
-      });
-      const parsed = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
-      if (res.status >= 200 && res.status < 300 && parsed && parsed.success && Array.isArray(parsed.tasks)) {
-        serverTasks = parsed.tasks;
-        fetchSucceeded = true;
+  const pullRun = (async () => {
+    try {
+      // Serialize behind any in-flight flushPendingSync so newly pushed tasks appear in serverTasks
+      while (isSyncing && activePushPromise) {
+        await activePushPromise.catch(() => {});
       }
-    } else {
-      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-      const timer = controller ? setTimeout(() => controller.abort(), 10000) : null;
-      try {
-        const res = await fetch(TASKS_SYNC_API_URL, {
+
+      const epochAtStart = pushEpoch;
+      const token = await getFirebaseIdToken();
+      if (!token) return;
+
+      let serverTasks: any[] = [];
+      let fetchSucceeded = false;
+
+      if (Capacitor.isNativePlatform()) {
+        const res = await CapacitorHttp.get({
+          url: TASKS_SYNC_API_URL,
           headers: {
             'Authorization': `Bearer ${token}`
           },
-          signal: controller?.signal
+          connectTimeout: 8000,
+          readTimeout: 8000
         });
-        if (res.ok) {
-          const json = await res.json();
-          if (json.success && Array.isArray(json.tasks)) {
-            serverTasks = json.tasks;
-            fetchSucceeded = true;
+        const parsed = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
+        if (res.status >= 200 && res.status < 300 && parsed && parsed.success && Array.isArray(parsed.tasks)) {
+          serverTasks = parsed.tasks;
+          fetchSucceeded = true;
+        }
+      } else {
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const timer = controller ? setTimeout(() => controller.abort(), 10000) : null;
+        try {
+          const res = await fetch(TASKS_SYNC_API_URL, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            },
+            signal: controller?.signal
+          });
+          if (res.ok) {
+            const json = await res.json();
+            if (json.success && Array.isArray(json.tasks)) {
+              serverTasks = json.tasks;
+              fetchSucceeded = true;
+            }
+          }
+        } finally {
+          if (timer) clearTimeout(timer);
+        }
+      }
+
+      if (!fetchSucceeded) return;
+
+      // If a background push started while our GET was in-flight, wait for it before reconciling
+      while (isSyncing && activePushPromise) {
+        await activePushPromise.catch(() => {});
+      }
+      const allowDeleteUnmatchedSynced = pushEpoch === epochAtStart;
+
+      const tombstones = readSyncTombstones(session.uid);
+      const survivingServerTasks = serverTasks.filter((st) => {
+        if (!st.uuid) return false;
+        const entry = tombstones.tasks.find((e) => e.uuid === st.uuid);
+        if (!entry) return true;
+        const delMs = parseUtcTimestampMs(entry.deletedAt);
+        const updMs = parseUtcTimestampMs(st.updated_at);
+        return updMs > 0 && delMs > 0 && updMs > delMs;
+      });
+
+      await db.transaction('rw', db.tasks, async () => {
+        const localTasks = await db.tasks.toArray();
+        const localByUuid = new Map<string, TaskItem>();
+        for (const lt of localTasks) {
+          if (lt.uuid) localByUuid.set(lt.uuid, lt);
+        }
+        const serverUuidSet = new Set(survivingServerTasks.map((st) => String(st.uuid)));
+
+        for (const st of survivingServerTasks) {
+          const existing = localByUuid.get(String(st.uuid));
+          if (!existing) {
+            await db.tasks.add({
+              uuid: st.uuid,
+              title: st.title,
+              subjectCode: st.subject_code || undefined,
+              dueDate: st.due_date || '',
+              dueTime: st.due_time || st.dueTime || '23:59',
+              reminderTime: st.reminder_time || st.reminderTime || '',
+              priority: st.priority || 'medium',
+              completed: Boolean(st.is_completed ?? st.completed),
+              is_completed: Boolean(st.is_completed ?? st.completed),
+              completed_at: st.completed_at || null,
+              created_at: st.created_at || new Date().toISOString(),
+              updated_at: st.updated_at || new Date().toISOString(),
+              sync_status: 'synced',
+              notes: st.description || undefined
+            });
+          } else if (existing.sync_status === 'synced') {
+            const serverTs = parseUtcTimestampMs(st.updated_at);
+            const localTs = parseUtcTimestampMs(existing.updated_at);
+            if (serverTs === 0 || localTs === 0 || serverTs >= localTs) {
+              await db.tasks.where('uuid').equals(st.uuid).modify({
+                title: st.title,
+                subjectCode: st.subject_code || undefined,
+                dueDate: st.due_date || existing.dueDate,
+                dueTime: st.due_time || st.dueTime || existing.dueTime || '23:59',
+                reminderTime: st.reminder_time !== undefined ? (st.reminder_time || '') : existing.reminderTime,
+                priority: st.priority || existing.priority,
+                completed: Boolean(st.is_completed ?? st.completed),
+                is_completed: Boolean(st.is_completed ?? st.completed),
+                completed_at: st.completed_at || null,
+                updated_at: st.updated_at || existing.updated_at,
+                notes: st.description || existing.notes
+              });
+            }
           }
         }
-      } finally {
-        if (timer) clearTimeout(timer);
-      }
-    }
 
-    if (!fetchSucceeded) return;
-
-    const tombstones = readSyncTombstones(session.uid);
-    const survivingServerTasks = serverTasks.filter((st) => {
-      if (!st.uuid) return false;
-      const entry = tombstones.tasks.find((e) => e.uuid === st.uuid);
-      if (!entry) return true;
-      const delMs = parseUtcTimestampMs(entry.deletedAt);
-      const updMs = parseUtcTimestampMs(st.updated_at);
-      return updMs > 0 && delMs > 0 && updMs > delMs;
-    });
-
-    await db.transaction('rw', db.tasks, async () => {
-      const localTasks = await db.tasks.toArray();
-      const localByUuid = new Map<string, TaskItem>();
-      for (const lt of localTasks) {
-        if (lt.uuid) localByUuid.set(lt.uuid, lt);
-      }
-      const serverUuidSet = new Set(survivingServerTasks.map((st) => String(st.uuid)));
-
-      for (const st of survivingServerTasks) {
-        const existing = localByUuid.get(String(st.uuid));
-        if (!existing) {
-          await db.tasks.add({
-            uuid: st.uuid,
-            title: st.title,
-            subjectCode: st.subject_code || undefined,
-            dueDate: st.due_date || '',
-            dueTime: st.due_time || st.dueTime || '23:59',
-            reminderTime: st.reminder_time || st.reminderTime || '',
-            priority: st.priority || 'medium',
-            completed: Boolean(st.is_completed ?? st.completed),
-            is_completed: Boolean(st.is_completed ?? st.completed),
-            completed_at: st.completed_at || null,
-            created_at: st.created_at || new Date().toISOString(),
-            updated_at: st.updated_at || new Date().toISOString(),
-            sync_status: 'synced',
-            notes: st.description || undefined
-          });
-        } else if (existing.sync_status === 'synced') {
-          await db.tasks.where('uuid').equals(st.uuid).modify({
-            title: st.title,
-            subjectCode: st.subject_code || undefined,
-            dueDate: st.due_date || existing.dueDate,
-            dueTime: st.due_time || st.dueTime || existing.dueTime || '23:59',
-            reminderTime: st.reminder_time !== undefined ? (st.reminder_time || '') : existing.reminderTime,
-            priority: st.priority || existing.priority,
-            completed: Boolean(st.is_completed ?? st.completed),
-            is_completed: Boolean(st.is_completed ?? st.completed),
-            completed_at: st.completed_at || null,
-            updated_at: st.updated_at || existing.updated_at,
-            notes: st.description || existing.notes
-          });
+        // Only delete local 'synced' tasks missing on server if no push ran concurrently with our GET
+        if (allowDeleteUnmatchedSynced) {
+          for (const lt of localTasks) {
+            if (lt.sync_status === 'synced' && lt.uuid && !serverUuidSet.has(lt.uuid) && lt.id) {
+              await db.tasks.delete(lt.id);
+            }
+          }
         }
-      }
+      });
 
-      // Reconcile deletions (including empty server array): delete ONLY local 'synced' tasks missing on server
-      for (const lt of localTasks) {
-        if (lt.sync_status === 'synced' && lt.uuid && !serverUuidSet.has(lt.uuid) && lt.id) {
-          await db.tasks.delete(lt.id);
-        }
+      const currentTasks = await db.tasks.toArray();
+      syncTaskLocalCache(currentTasks);
+      syncTasksToWidgets(currentTasks.filter((t) => t.sync_status !== 'pending_delete'));
+      if (currentTasks.some((t) => t.sync_status !== 'synced')) {
+        scheduleSilentSync(500);
+      } else if (!allowDeleteUnmatchedSynced) {
+        // Re-pull once cleanly if a push interleaved mid-GET so deletions stay in sync
+        setTimeout(() => {
+          pullCloudTasks().catch(() => {});
+        }, 200);
       }
-    });
-
-    const currentTasks = await db.tasks.toArray();
-    syncTaskLocalCache(currentTasks);
-    syncTasksToWidgets(currentTasks.filter((t) => t.sync_status !== 'pending_delete'));
-    if (currentTasks.some((t) => t.sync_status !== 'synced')) {
-      scheduleSilentSync(500);
+    } catch (err) {
+      console.debug('[taskSyncService] Pull cloud tasks note:', err);
+    } finally {
+      activePullPromise = null;
     }
-  } catch (err) {
-    console.debug('[taskSyncService] Pull cloud tasks note:', err);
-  }
+  })();
+
+  activePullPromise = pullRun;
+  return pullRun;
 }
 
 /**

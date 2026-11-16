@@ -17,7 +17,8 @@ import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 import { Capacitor } from '@capacitor/core';
 import { NativeGoogleAuth } from './nativeGoogleAuth';
 import { auth, googleProvider, isFirebaseConfigured } from './firebase';
-import { switchAccountSchedules } from './userService';
+import { switchAccountSchedules, snapshotAccountBackup, clearAccountBackup } from './userService';
+import { hasPendingLocalSync, syncLocalDataToCloud } from './cloudSyncService';
 import { imageCacheService } from './imageCacheService';
 
 let webConfirmationResult: any = null;
@@ -142,7 +143,30 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: st
 
 const GOOGLE_WEB_CLIENT_ID = '981655805429-f16f8mrme8snjr02mnapmj27ln3ofb2a.apps.googleusercontent.com';
 
+async function preparePreviousSessionBeforeSwitch(prevSession: StudentAuthSession): Promise<void> {
+  if (!prevSession?.isLoggedIn || !prevSession.uid) return;
+  try {
+    const hasPending = await hasPendingLocalSync(prevSession.uid);
+    if (!hasPending) return;
+
+    if (typeof navigator === 'undefined' || navigator.onLine) {
+      const pushed = await syncLocalDataToCloud(prevSession);
+      if (pushed) {
+        clearAccountBackup(prevSession.uid);
+        return;
+      }
+    }
+    await snapshotAccountBackup(prevSession.uid, true);
+  } catch (err) {
+    console.warn('Pre-switch backup fallback note:', err);
+    await snapshotAccountBackup(prevSession.uid, true).catch(() => {});
+  }
+}
+
 const performGoogleSignIn = async (currentCampusId: string): Promise<StudentAuthSession | null> => {
+  // Flush or snapshot any existing logged-in account while its Firebase token is still active
+  await preparePreviousSessionBeforeSwitch(getSavedSession());
+
   // 1. Native Android Google Sign-In (Xiaomi HyperOS / MIUI hardened native bridge)
   if (Capacitor.isNativePlatform()) {
     let nativeResult: {
@@ -196,21 +220,23 @@ const performGoogleSignIn = async (currentCampusId: string): Promise<StudentAuth
 
           const prevSession = getSavedSession();
           const prevUid = prevSession.isLoggedIn ? prevSession.uid : undefined;
+          const isSameOrGuest = !prevUid || prevUid === firebaseUser.uid;
 
           const session: StudentAuthSession = {
             isLoggedIn: true,
             uid: firebaseUser.uid,
-            name: firebaseUser.displayName || nativeResult.displayName || prevSession.name || 'Student',
-            email: firebaseUser.email || nativeResult.email || prevSession.email || '',
-            avatar: firebaseUser.photoURL || nativeResult.photoUrl || prevSession.avatar || '',
-            campusId: currentCampusId || prevSession.campusId || '',
-            studentId: prevSession.studentId || '',
-            course: prevSession.course || 'Enrolled Student',
-            yearLevel: prevSession.yearLevel || 'College Student',
-            role: prevSession.role || 'student',
-            age: prevSession.age,
-            gender: prevSession.gender
+            name: firebaseUser.displayName || nativeResult.displayName || (isSameOrGuest ? prevSession.name : '') || 'Student',
+            email: firebaseUser.email || nativeResult.email || (isSameOrGuest ? prevSession.email : '') || '',
+            avatar: firebaseUser.photoURL || nativeResult.photoUrl || (isSameOrGuest ? prevSession.avatar : '') || '',
+            campusId: currentCampusId || (isSameOrGuest ? prevSession.campusId : '') || '',
+            studentId: isSameOrGuest ? (prevSession.studentId || '') : '',
+            course: isSameOrGuest ? (prevSession.course || 'Enrolled Student') : 'Enrolled Student',
+            yearLevel: isSameOrGuest ? (prevSession.yearLevel || 'College Student') : 'College Student',
+            role: isSameOrGuest ? (prevSession.role || 'student') : 'student',
+            age: isSameOrGuest ? prevSession.age : undefined,
+            gender: isSameOrGuest ? prevSession.gender : undefined
           };
+          try { localStorage.removeItem('skweladabaw_auth_token'); } catch (_) {}
           saveSession(session);
           const idToken = nativeResult.idToken || (await firebaseUser.getIdToken(false).catch(() => undefined));
           const switchRes = await switchAccountSchedules(prevUid, firebaseUser.uid, prevSession.isLoggedIn ? prevSession : undefined, idToken);
@@ -220,7 +246,7 @@ const performGoogleSignIn = async (currentCampusId: string): Promise<StudentAuth
           }
           return session;
         } catch (syncErr: any) {
-          if (String(syncErr?.message || '').includes('unsynced')) {
+          if (String(syncErr?.message || '').includes('unsynced') || String(syncErr?.message || '').includes('backup')) {
             throw syncErr;
           }
           console.warn('Firebase JS SDK signInWithCredential warning (falling back to native user session):', syncErr);
@@ -228,21 +254,23 @@ const performGoogleSignIn = async (currentCampusId: string): Promise<StudentAuth
           const uid = nativeResult.uid || ('usr_' + Date.now());
           const prevSession = getSavedSession();
           const prevUid = prevSession.isLoggedIn ? prevSession.uid : undefined;
+          const isSameOrGuest = !prevUid || prevUid === uid;
 
           const session: StudentAuthSession = {
             isLoggedIn: true,
             uid: uid,
-            name: nativeResult.displayName || prevSession.name || 'Student',
-            email: nativeResult.email || prevSession.email || '',
-            avatar: nativeResult.photoUrl || prevSession.avatar || '',
-            campusId: currentCampusId || prevSession.campusId || '',
-            studentId: prevSession.studentId || '',
-            course: prevSession.course || 'Enrolled Student',
-            yearLevel: prevSession.yearLevel || 'College Student',
-            role: prevSession.role || 'student',
-            age: prevSession.age,
-            gender: prevSession.gender
+            name: nativeResult.displayName || (isSameOrGuest ? prevSession.name : '') || 'Student',
+            email: nativeResult.email || (isSameOrGuest ? prevSession.email : '') || '',
+            avatar: nativeResult.photoUrl || (isSameOrGuest ? prevSession.avatar : '') || '',
+            campusId: currentCampusId || (isSameOrGuest ? prevSession.campusId : '') || '',
+            studentId: isSameOrGuest ? (prevSession.studentId || '') : '',
+            course: isSameOrGuest ? (prevSession.course || 'Enrolled Student') : 'Enrolled Student',
+            yearLevel: isSameOrGuest ? (prevSession.yearLevel || 'College Student') : 'College Student',
+            role: isSameOrGuest ? (prevSession.role || 'student') : 'student',
+            age: isSameOrGuest ? prevSession.age : undefined,
+            gender: isSameOrGuest ? prevSession.gender : undefined
           };
+          try { localStorage.removeItem('skweladabaw_auth_token'); } catch (_) {}
           saveSession(session);
           const switchRes = await switchAccountSchedules(prevUid, uid, prevSession.isLoggedIn ? prevSession : undefined, nativeResult.idToken);
           if (!switchRes.success) {
@@ -255,21 +283,24 @@ const performGoogleSignIn = async (currentCampusId: string): Promise<StudentAuth
         // Fallback session if web auth instance is uninitialized
         const prevSession = getSavedSession();
         const prevUid = prevSession.isLoggedIn ? prevSession.uid : undefined;
+        const resolvedUid = nativeResult.uid || 'usr_' + Date.now();
+        const isSameOrGuest = !prevUid || prevUid === resolvedUid;
 
         const session: StudentAuthSession = {
           isLoggedIn: true,
-          uid: nativeResult.uid || 'usr_' + Date.now(),
-          name: nativeResult.displayName || prevSession.name || 'Student',
-          email: nativeResult.email || prevSession.email || '',
-          avatar: nativeResult.photoUrl || prevSession.avatar || '',
-          campusId: currentCampusId || prevSession.campusId || '',
-          studentId: prevSession.studentId || '',
-          course: prevSession.course || 'Enrolled Student',
-          yearLevel: prevSession.yearLevel || 'College Student',
-          role: prevSession.role || 'student',
-          age: prevSession.age,
-          gender: prevSession.gender
+          uid: resolvedUid,
+          name: nativeResult.displayName || (isSameOrGuest ? prevSession.name : '') || 'Student',
+          email: nativeResult.email || (isSameOrGuest ? prevSession.email : '') || '',
+          avatar: nativeResult.photoUrl || (isSameOrGuest ? prevSession.avatar : '') || '',
+          campusId: currentCampusId || (isSameOrGuest ? prevSession.campusId : '') || '',
+          studentId: isSameOrGuest ? (prevSession.studentId || '') : '',
+          course: isSameOrGuest ? (prevSession.course || 'Enrolled Student') : 'Enrolled Student',
+          yearLevel: isSameOrGuest ? (prevSession.yearLevel || 'College Student') : 'College Student',
+          role: isSameOrGuest ? (prevSession.role || 'student') : 'student',
+          age: isSameOrGuest ? prevSession.age : undefined,
+          gender: isSameOrGuest ? prevSession.gender : undefined
         };
+        try { localStorage.removeItem('skweladabaw_auth_token'); } catch (_) {}
         saveSession(session);
         const switchRes = await switchAccountSchedules(prevUid, session.uid, prevSession.isLoggedIn ? prevSession : undefined, nativeResult.idToken);
         if (!switchRes.success) {
@@ -288,21 +319,23 @@ const performGoogleSignIn = async (currentCampusId: string): Promise<StudentAuth
     const user = result.user;
     const prevSession = getSavedSession();
     const prevUid = prevSession.isLoggedIn ? prevSession.uid : undefined;
+    const isSameOrGuest = !prevUid || prevUid === user.uid;
 
     const session: StudentAuthSession = {
       isLoggedIn: true,
       uid: user.uid,
-      name: user.displayName || prevSession.name || 'Student',
-      email: user.email || prevSession.email || '',
-      avatar: user.photoURL || prevSession.avatar || '',
-      campusId: currentCampusId || prevSession.campusId || '',
-      studentId: prevSession.studentId || '',
-      course: prevSession.course || 'Enrolled Student',
-      yearLevel: prevSession.yearLevel || 'College Student',
-      role: prevSession.role || 'student',
-      age: prevSession.age,
-      gender: prevSession.gender
+      name: user.displayName || (isSameOrGuest ? prevSession.name : '') || 'Student',
+      email: user.email || (isSameOrGuest ? prevSession.email : '') || '',
+      avatar: user.photoURL || (isSameOrGuest ? prevSession.avatar : '') || '',
+      campusId: currentCampusId || (isSameOrGuest ? prevSession.campusId : '') || '',
+      studentId: isSameOrGuest ? (prevSession.studentId || '') : '',
+      course: isSameOrGuest ? (prevSession.course || 'Enrolled Student') : 'Enrolled Student',
+      yearLevel: isSameOrGuest ? (prevSession.yearLevel || 'College Student') : 'College Student',
+      role: isSameOrGuest ? (prevSession.role || 'student') : 'student',
+      age: isSameOrGuest ? prevSession.age : undefined,
+      gender: isSameOrGuest ? prevSession.gender : undefined
     };
+    try { localStorage.removeItem('skweladabaw_auth_token'); } catch (_) {}
     saveSession(session);
     const idToken = await user.getIdToken(false).catch(() => undefined);
     const switchRes = await switchAccountSchedules(prevUid, user.uid, prevSession.isLoggedIn ? prevSession : undefined, idToken);
@@ -442,14 +475,18 @@ export const verifyPhoneOtpCode = async (
       role: data.role || 'student'
     };
 
+    const prevSession = getSavedSession();
+    const prevUid = prevSession.isLoggedIn ? prevSession.uid : undefined;
+    if (prevSession.isLoggedIn && prevSession.uid && prevSession.uid !== session.uid) {
+      await preparePreviousSessionBeforeSwitch(prevSession);
+    }
+
     if (data.token) {
       try {
         localStorage.setItem('skweladabaw_auth_token', data.token);
       } catch (_) {}
     }
 
-    const prevSession = getSavedSession();
-    const prevUid = prevSession.isLoggedIn ? prevSession.uid : undefined;
     saveSession(session);
     const switchRes = await switchAccountSchedules(prevUid, session.uid, prevSession.isLoggedIn ? prevSession : undefined);
     if (!switchRes.success) {
@@ -461,6 +498,7 @@ export const verifyPhoneOtpCode = async (
   }
 
   // 2. Fallback to Firebase Confirmation Result (if applicable)
+  await preparePreviousSessionBeforeSwitch(getSavedSession());
   let user: any = null;
   if (Capacitor.isNativePlatform()) {
     const res = await FirebaseAuthentication.confirmVerificationCode({
@@ -497,6 +535,7 @@ export const verifyPhoneOtpCode = async (
 
   const prevSession = getSavedSession();
   const prevUid = prevSession.isLoggedIn ? prevSession.uid : undefined;
+  try { localStorage.removeItem('skweladabaw_auth_token'); } catch (_) {}
   saveSession(session);
   const switchRes = await switchAccountSchedules(prevUid, user.uid, prevSession.isLoggedIn ? prevSession : undefined);
   if (!switchRes.success) {
@@ -663,6 +702,7 @@ export const signOutUser = async (
       console.warn('Firebase signOut error:', err);
     }
   }
+  try { localStorage.removeItem('skweladabaw_auth_token'); } catch (_) {}
   localStorage.removeItem('skwela_password_set');
   sessionStorage.removeItem('skwela_session_checked');
   setOnboardingCompleted(false);
