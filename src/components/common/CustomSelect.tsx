@@ -239,7 +239,12 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
             }}
             className={`max-h-60 overflow-y-auto overscroll-contain rounded-2xl bg-[var(--card-bg)] border border-[var(--card-border)] shadow-2xl p-1 space-y-0.5 animate-modal-pop-in select-none ${menuClassName}`}
           >
-            {options.map((option) => {
+            {options.length === 0 ? (
+              <div className="px-3 py-4 text-center text-xs text-[var(--text-secondary)]">
+                No options available
+              </div>
+            ) : (
+              options.map((option) => {
               const isSelected = option.value === value;
               const Icon = option.icon;
 
@@ -264,7 +269,8 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
                   {isSelected && <Check className="w-3.5 h-3.5 shrink-0" />}
                 </button>
               );
-            })}
+              })
+            )}
           </div>
         </>,
         document.body

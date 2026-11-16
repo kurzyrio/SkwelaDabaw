@@ -17,10 +17,39 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.5.14',
+    releaseDate: 'November 16, 2026',
+    title: 'Edge-to-Edge Safe Areas, Mobile UI & Fallback Fixes',
+    isLatest: true,
+    tagline: 'Full-screen edge-to-edge safe areas, clean small-screen layouts, clear retry states, and reliable back navigation.',
+    highlights: [
+      'Added Android 15/16 edge-to-edge safe-area spacing and smooth keyboard resizing across onboarding, chat, maps, and navigation',
+      'Fixed compact 320px-375px layouts across schedules, QR sharing, fare calculator, GPA, budget, weather, and emergency views',
+      'Added clear retry states, external link safety checks, empty search resets, and Android back navigation across modals'
+    ],
+    items: [
+      {
+        type: 'ui',
+        title: 'Android Edge-to-Edge & Safe Area Spacing',
+        description: 'Adjusted bottom navigation, transit map overlays, image lightboxes, and soft-keyboard resizing so cutouts and system bars never cover controls.'
+      },
+      {
+        type: 'fix',
+        title: 'Small-Screen & Onboarding Scroll Fixes',
+        description: 'Enabled scrolling on compact onboarding screens and refined layouts across schedule sharing, fare calculator, budget, GPA, and emergency cards.'
+      },
+      {
+        type: 'improvement',
+        title: 'Retry Fallbacks, Link Checks & Back Navigation',
+        description: 'Added offline retry prompts in Weather and Feedback, external link confirmation and touch report buttons in Campus Chat, and back-button dismissal on modals.'
+      }
+    ]
+  },
+  {
     version: '1.11.5.13',
     releaseDate: 'November 16, 2026',
     title: 'Offline Maps, DC Bus Shift Routing & Transit Accuracy',
-    isLatest: true,
+    isLatest: false,
     tagline: 'Reliable offline map fallbacks, active DIBS bus shift filtering with free fare calculation, and sharper transit timing.',
     highlights: [
       'Maps now switch cleanly to an offline basemap grid instead of stalling on missing tiles while keeping computed routes visible',

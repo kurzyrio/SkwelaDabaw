@@ -90,7 +90,24 @@ export const CampusPickerModal: React.FC<CampusPickerModalProps> = ({
 
         {/* Campus Cards List */}
         <div className="p-3 sm:p-4 overflow-y-auto space-y-2 max-h-[60vh]">
-          {filteredCampuses.map((campus) => {
+          {filteredCampuses.length === 0 ? (
+            <div className="py-10 text-center space-y-2.5">
+              <p className="text-sm font-bold text-[var(--text-primary)]">No matching campus found</p>
+              <p className="text-xs text-[var(--text-secondary)]">
+                Try another university name, abbreviation, or area.
+              </p>
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="px-4 py-1.5 rounded-full bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] text-xs font-bold pressable"
+                >
+                  Clear Search
+                </button>
+              )}
+            </div>
+          ) : (
+            filteredCampuses.map((campus) => {
             const isSelected = selectedCampusId === campus.id;
             return (
               <button
@@ -128,7 +145,8 @@ export const CampusPickerModal: React.FC<CampusPickerModalProps> = ({
                 </div>
               </button>
             );
-          })}
+            })
+          )}
         </div>
       </div>
     </div>,

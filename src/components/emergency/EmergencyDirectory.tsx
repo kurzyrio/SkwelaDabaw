@@ -36,6 +36,7 @@ export const EmergencyDirectory: React.FC = () => {
   // Distress Beacon & Geolocation state
   const [geoCoords, setGeoCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [geoLoading, setGeoLoading] = useState<boolean>(false);
+  const [isFallbackLocation, setIsFallbackLocation] = useState<boolean>(false);
   const [distressCopied, setDistressCopied] = useState<boolean>(false);
 
   // Safe Walk Timer state
@@ -65,17 +66,20 @@ export const EmergencyDirectory: React.FC = () => {
             lng: position.coords.longitude
           };
           setGeoCoords(coords);
+          setIsFallbackLocation(false);
           setGeoLoading(false);
         },
         (error) => {
           console.warn('Geolocation fallback:', error);
           setGeoCoords({ lat: 7.0707, lng: 125.6087 });
+          setIsFallbackLocation(true);
           setGeoLoading(false);
         },
         { enableHighAccuracy: true, timeout: 8000 }
       );
     } else {
       setGeoCoords({ lat: 7.0707, lng: 125.6087 });
+      setIsFallbackLocation(true);
       setGeoLoading(false);
     }
   };
@@ -83,7 +87,8 @@ export const EmergencyDirectory: React.FC = () => {
   const copyDistressMessage = () => {
     const lat = geoCoords ? geoCoords.lat.toFixed(5) : '7.0707';
     const lng = geoCoords ? geoCoords.lng.toFixed(5) : '125.6087';
-    const text = `[SKWELADABAW EMERGENCY DISTRESS ALERT]\nI am currently commuting in Davao City and need assistance.\nLocation: https://maps.google.com/?q=${lat},${lng}\nTime: ${new Date().toLocaleTimeString()}\nPlease call Davao Central 911 if I am unreachable!`;
+    const locNote = !geoCoords || isFallbackLocation ? ' (Approximate Fallback: Davao City Hall — live GPS unavailable)' : '';
+    const text = `[SKWELADABAW EMERGENCY DISTRESS ALERT]\nI am currently commuting in Davao City and need assistance.\nLocation: https://maps.google.com/?q=${lat},${lng}${locNote}\nTime: ${new Date().toLocaleTimeString()}\nPlease call Davao Central 911 if I am unreachable!`;
     navigator.clipboard.writeText(text);
     setDistressCopied(true);
     setTimeout(() => setDistressCopied(false), 2500);
@@ -234,10 +239,19 @@ export const EmergencyDirectory: React.FC = () => {
 
             {geoCoords ? (
               <div className="space-y-2">
-                <div className="text-xs text-emerald-600 dark:text-emerald-400 font-mono font-semibold flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>GPS Active: {geoCoords.lat.toFixed(4)}, {geoCoords.lng.toFixed(4)} (Davao City)</span>
-                </div>
+                {isFallbackLocation ? (
+                  <div className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold flex items-start gap-1.5 leading-snug">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0 mt-1" />
+                    <span>
+                      GPS unavailable — using fallback: Davao City Hall ({geoCoords.lat.toFixed(4)}, {geoCoords.lng.toFixed(4)})
+                    </span>
+                  </div>
+                ) : (
+                  <div className="text-xs text-emerald-600 dark:text-emerald-400 font-mono font-semibold flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                    <span className="truncate">GPS Active: {geoCoords.lat.toFixed(4)}, {geoCoords.lng.toFixed(4)} (Davao City)</span>
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={copyDistressMessage}
@@ -289,47 +303,47 @@ export const EmergencyDirectory: React.FC = () => {
       </div>
 
       {/* TOP VIEW MODE SWITCHER (Police, Hospitals, Hotlines) */}
-      <div className="grid grid-cols-3 gap-2 p-1.5 rounded-2xl bg-[var(--nested-bg)] border border-[var(--nested-border)]">
+      <div className="grid grid-cols-1 xs:grid-cols-3 gap-1.5 sm:gap-2 p-1.5 rounded-2xl bg-[var(--nested-bg)] border border-[var(--nested-border)]">
         <button
           type="button"
           onClick={() => setActiveTabMode('police')}
-          className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 pressable ${
+          className={`py-2 px-2 sm:px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 sm:gap-1.5 min-w-0 pressable ${
             activeTabMode === 'police'
               ? 'bg-blue-600 text-white shadow-xs'
               : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
           }`}
         >
-          <ShieldAlert className="w-3.5 h-3.5" />
-          <span>Police Stations</span>
-          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20">33</span>
+          <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+          <span className="truncate">Police Stations</span>
+          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 shrink-0">33</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTabMode('hospital')}
-          className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 pressable ${
+          className={`py-2 px-2 sm:px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 sm:gap-1.5 min-w-0 pressable ${
             activeTabMode === 'hospital'
               ? 'bg-rose-600 text-white shadow-xs'
               : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
           }`}
         >
-          <Hospital className="w-3.5 h-3.5" />
-          <span>Hospitals &amp; ER</span>
-          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20">36</span>
+          <Hospital className="w-3.5 h-3.5 shrink-0" />
+          <span className="truncate">Hospitals &amp; ER</span>
+          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 shrink-0">36</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTabMode('hotlines')}
-          className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 pressable ${
+          className={`py-2 px-2 sm:px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 sm:gap-1.5 min-w-0 pressable ${
             activeTabMode === 'hotlines'
               ? 'bg-[var(--text-primary)] text-[var(--card-bg)] shadow-xs'
               : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
           }`}
         >
-          <PhoneCall className="w-3.5 h-3.5" />
-          <span>Hotlines</span>
-          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/10 dark:bg-white/10">911</span>
+          <PhoneCall className="w-3.5 h-3.5 shrink-0" />
+          <span className="truncate">Hotlines</span>
+          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/10 dark:bg-white/10 shrink-0">911</span>
         </button>
       </div>
 
@@ -382,19 +396,35 @@ export const EmergencyDirectory: React.FC = () => {
       {/* ─── SECTION 1: POLICE STATIONS DIRECTORY ─────────────────────────── */}
       {activeTabMode === 'police' && (
         <div className="space-y-3">
-          <div className="flex items-center justify-between text-xs text-[var(--text-secondary)] px-1">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--text-secondary)] px-1">
             <span className="font-semibold">
               Showing {filteredPolice.length} Police Stations &amp; Security Outposts
             </span>
             {geoCoords && (
-              <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
-                <Compass className="w-3 h-3" />
-                <span>Sorted by Nearest Distance</span>
+              <span className={`text-[11px] font-bold flex items-center gap-1 ${isFallbackLocation ? 'text-amber-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                <Compass className="w-3 h-3 shrink-0" />
+                <span>{isFallbackLocation ? 'Sorted by City Hall Fallback' : 'Sorted by Nearest Distance'}</span>
               </span>
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {filteredPolice.length === 0 ? (
+            <div className="p-8 rounded-2xl bg-[var(--card-bg)] border border-[var(--card-border)] text-center space-y-2.5">
+              <p className="text-sm font-bold text-[var(--text-primary)]">No matching police stations found</p>
+              <p className="text-xs text-[var(--text-secondary)]">Try another area name or clear your search filter.</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
+                  setActiveSector('all');
+                }}
+                className="px-4 py-1.5 rounded-full bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] text-xs font-bold pressable"
+              >
+                Reset Filters
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {filteredPolice.map((loc, idx) => {
               const dist = getDistanceKm(loc.lat, loc.lng);
               const isNearest = idx === 0 && Boolean(geoCoords);
@@ -462,7 +492,7 @@ export const EmergencyDirectory: React.FC = () => {
                   </div>
 
                   {/* Actions Bar */}
-                  <div className="pt-2 border-t border-[var(--card-border)] flex items-center justify-between gap-2">
+                  <div className="pt-2 border-t border-[var(--card-border)] flex flex-wrap items-center justify-between gap-2">
                     <button
                       type="button"
                       onClick={() => copyToClipboard(loc.address, loc.id)}
@@ -495,26 +525,43 @@ export const EmergencyDirectory: React.FC = () => {
                 </div>
               );
             })}
-          </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* ─── SECTION 2: HOSPITALS & MEDICAL CENTERS DIRECTORY ─────────────── */}
       {activeTabMode === 'hospital' && (
         <div className="space-y-3">
-          <div className="flex items-center justify-between text-xs text-[var(--text-secondary)] px-1">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--text-secondary)] px-1">
             <span className="font-semibold">
               Showing {filteredHospitals.length} DOH-Licensed Hospitals &amp; Medical Centers
             </span>
             {geoCoords && (
-              <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
-                <Compass className="w-3 h-3" />
-                <span>Sorted by Nearest Distance</span>
+              <span className={`text-[11px] font-bold flex items-center gap-1 ${isFallbackLocation ? 'text-amber-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                <Compass className="w-3 h-3 shrink-0" />
+                <span>{isFallbackLocation ? 'Sorted by City Hall Fallback' : 'Sorted by Nearest Distance'}</span>
               </span>
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {filteredHospitals.length === 0 ? (
+            <div className="p-8 rounded-2xl bg-[var(--card-bg)] border border-[var(--card-border)] text-center space-y-2.5">
+              <p className="text-sm font-bold text-[var(--text-primary)]">No matching hospitals found</p>
+              <p className="text-xs text-[var(--text-secondary)]">Try another hospital name or reset sector filters.</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
+                  setActiveSector('all');
+                }}
+                className="px-4 py-1.5 rounded-full bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] text-xs font-bold pressable"
+              >
+                Reset Filters
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {filteredHospitals.map((loc, idx) => {
               const dist = getDistanceKm(loc.lat, loc.lng);
               const isNearest = idx === 0 && Boolean(geoCoords);
@@ -588,7 +635,7 @@ export const EmergencyDirectory: React.FC = () => {
                   </div>
 
                   {/* Actions Bar */}
-                  <div className="pt-2 border-t border-[var(--card-border)] flex items-center justify-between gap-2">
+                  <div className="pt-2 border-t border-[var(--card-border)] flex flex-wrap items-center justify-between gap-2">
                     <button
                       type="button"
                       onClick={() => copyToClipboard(loc.address, loc.id)}
@@ -621,7 +668,8 @@ export const EmergencyDirectory: React.FC = () => {
                 </div>
               );
             })}
-          </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -632,11 +680,24 @@ export const EmergencyDirectory: React.FC = () => {
             Showing {filteredHotlines.length} Direct Emergency Hotlines &amp; Utilities
           </div>
 
-          {filteredHotlines.map((contact) => (
-            <div
-              key={contact.id}
-              className="p-4 rounded-2xl bg-[var(--card-bg)] border border-[var(--card-border)] hover:border-[var(--card-hover-border)] transition-all flex items-start justify-between gap-3 pressable shadow-xs"
-            >
+          {filteredHotlines.length === 0 ? (
+            <div className="p-8 rounded-2xl bg-[var(--card-bg)] border border-[var(--card-border)] text-center space-y-2.5">
+              <p className="text-sm font-bold text-[var(--text-primary)]">No matching hotlines found</p>
+              <p className="text-xs text-[var(--text-secondary)]">Clear your search query to browse all Davao emergency numbers.</p>
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="px-4 py-1.5 rounded-full bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] text-xs font-bold pressable"
+              >
+                Clear Search
+              </button>
+            </div>
+          ) : (
+            filteredHotlines.map((contact) => (
+              <div
+                key={contact.id}
+                className="p-4 rounded-2xl bg-[var(--card-bg)] border border-[var(--card-border)] hover:border-[var(--card-hover-border)] transition-all flex flex-wrap xs:flex-nowrap items-start justify-between gap-2.5 sm:gap-3 pressable shadow-xs"
+              >
               <div className="space-y-1 flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-md bg-[var(--nested-bg)] text-[var(--text-primary)] border border-[var(--nested-border)]">
@@ -679,7 +740,8 @@ export const EmergencyDirectory: React.FC = () => {
                 </a>
               </div>
             </div>
-          ))}
+            ))
+          )}
         </div>
       )}
     </div>

@@ -53,6 +53,7 @@ import { compressImageForChat } from '../../utils/imageCompressor';
 import { getFirebaseIdToken } from '../../services/cloudSyncService';
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { ChatRouteCard, RouteCardPayload } from './cards/ChatRouteCard';
+import { useBackHandler, BackPriority } from '../../hooks/useBackHandler';
 import { ChatAlertCard } from './cards/ChatAlertCard';
 import { ChatSpotCard } from './cards/ChatSpotCard';
 import { ChatImageViewerModal } from './ChatImageViewerModal';
@@ -348,6 +349,16 @@ export const StudentCommunityChat: React.FC<StudentCommunityChatProps> = ({
       onTypingChange?.(false);
     };
   }, [onTypingChange]);
+
+  useBackHandler(Boolean(pendingExternalUrl), () => setPendingExternalUrl(null), BackPriority.MODAL, 'chat_external_link_modal');
+  useBackHandler(Boolean(reportingMessage), () => setReportingMessage(null), BackPriority.MODAL, 'chat_report_modal');
+  useBackHandler(showRulesModal, () => setShowRulesModal(false), BackPriority.MODAL, 'chat_rules_modal');
+  useBackHandler(Boolean(inspectingProfile), () => setInspectingProfile(null), BackPriority.MODAL, 'chat_profile_modal');
+  useBackHandler(isAttachmentDrawerOpen, () => setIsAttachmentDrawerOpen(false), BackPriority.MODAL, 'chat_attachment_drawer');
+  useBackHandler(isRoutePickerOpen, () => setIsRoutePickerOpen(false), BackPriority.MODAL, 'chat_route_picker');
+  useBackHandler(isAlertPickerOpen, () => setIsAlertPickerOpen(false), BackPriority.MODAL, 'chat_alert_picker');
+  useBackHandler(isSpotPickerOpen, () => setIsSpotPickerOpen(false), BackPriority.MODAL, 'chat_spot_picker');
+  useBackHandler(isChannelsDrawerOpen, () => setIsChannelsDrawerOpen(false), BackPriority.MODAL, 'chat_channels_drawer');
 
   useEffect(() => {
     const unsubscribe = subscribeToRemoteAppConfig((cfg) => {
@@ -1171,8 +1182,9 @@ export const StudentCommunityChat: React.FC<StudentCommunityChatProps> = ({
 
                     {!isOwn && (
                       <button
+                        type="button"
                         onClick={() => setReportingMessage(msg)}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-[var(--text-tertiary)] hover:text-[#FF453A] transition-opacity"
+                        className="opacity-65 md:opacity-0 md:group-hover:opacity-100 focus:opacity-100 active:opacity-100 p-1 text-[var(--text-tertiary)] hover:text-[#FF453A] transition-opacity"
                         title="Report message"
                         aria-label="Report message"
                       >
@@ -1642,6 +1654,70 @@ export const StudentCommunityChat: React.FC<StudentCommunityChatProps> = ({
                 className="px-4 py-2 rounded-full bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] font-bold text-xs pressable"
               >
                 Understood &amp; Agree
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EXTERNAL LINK SAFETY WARNING MODAL */}
+      {pendingExternalUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm sheet-backdrop-enter"
+          onClick={() => setPendingExternalUrl(null)}
+        >
+          <div
+            className="bg-[var(--modal-bg)] w-full max-w-sm rounded-3xl border border-[var(--card-border)] p-5 space-y-4 shadow-2xl sheet-enter-spring"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-[var(--card-border)] pb-2.5">
+              <div className="flex items-center gap-2 text-[#FF9F0A] font-bold text-xs">
+                <ShieldAlert className="w-4 h-4 shrink-0" />
+                <span>External Link Safety Check</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPendingExternalUrl(null)}
+                aria-label="Close external link prompt"
+                className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                You are leaving SkwelaDabaw for an external website shared in chat. Verify the URL before opening it.
+              </p>
+              <div className="p-2.5 rounded-xl bg-[var(--nested-bg)] border border-[var(--nested-border)] text-[11px] font-mono text-[var(--text-primary)] break-all max-h-28 overflow-y-auto selectable-text">
+                {pendingExternalUrl}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--card-border)]">
+              <button
+                type="button"
+                onClick={() => setPendingExternalUrl(null)}
+                className="px-3.5 py-2 rounded-full bg-[var(--nested-bg)] text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] pressable"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const targetUrl = pendingExternalUrl;
+                  setPendingExternalUrl(null);
+                  if (!/^https?:\/\//i.test(targetUrl)) return;
+                  if (Capacitor.isNativePlatform()) {
+                    window.open(targetUrl, '_system');
+                  } else {
+                    window.open(targetUrl, '_blank', 'noopener,noreferrer');
+                  }
+                }}
+                className="px-4 py-2 rounded-full bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] text-xs font-bold flex items-center gap-1.5 pressable"
+              >
+                <span>Open Link</span>
+                <ExternalLink className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>

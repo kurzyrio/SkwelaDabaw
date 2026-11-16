@@ -390,8 +390,8 @@ export const GpaCalculatorPage: React.FC = () => {
                 />
               </div>
 
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <div className="flex items-center gap-1">
+              <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
+                <div className="flex items-center gap-1 shrink-0">
                   <span className="text-xs text-[var(--text-secondary)] font-semibold">Units:</span>
                   <input
                     type="number"
@@ -403,7 +403,7 @@ export const GpaCalculatorPage: React.FC = () => {
                   />
                 </div>
 
-                <div className="flex items-center gap-1 flex-1 sm:flex-initial">
+                <div className="flex items-center gap-1 flex-1 min-w-[120px] sm:flex-initial">
                   <CustomSelect
                     value={course.gradeValue}
                     onChange={(val) => handleUpdateCourse(course.id, 'gradeValue', val)}

@@ -18,7 +18,7 @@ export const UpdateBannerPill: React.FC<UpdateBannerPillProps> = ({
   };
 
   return (
-    <div className="fixed top-3 inset-x-0 z-40 flex justify-center px-4 pointer-events-none animate-slide-down">
+    <div className="fixed top-[max(0.75rem,env(safe-area-inset-top))] inset-x-0 z-40 flex justify-center px-4 pointer-events-none animate-slide-down">
       <div 
         className="pointer-events-auto flex items-center gap-3 pl-3 pr-2 py-2 rounded-full bg-[var(--modal-bg)]/95 backdrop-blur-md border border-[var(--card-border)] shadow-xl transition-all max-w-sm sm:max-w-md w-full justify-between"
       >

@@ -174,7 +174,28 @@ export const StudySpotFinder: React.FC = () => {
       </div>
 
       {/* Spot Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {filteredSpots.length === 0 ? (
+        <div className="p-8 rounded-3xl bg-[var(--card-bg)] border border-[var(--card-border)] text-center space-y-2.5">
+          <p className="text-sm font-bold text-[var(--text-primary)]">No matching study spots found</p>
+          <p className="text-xs text-[var(--text-secondary)]">
+            Try switching Davao districts or resetting your amenity filters.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedArea('All');
+              setOnlyWifi(false);
+              setOnlyOutlets(false);
+              setOnly24h(false);
+              setSearchQuery('');
+            }}
+            className="px-4 py-1.5 rounded-full bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] text-xs font-bold pressable"
+          >
+            Reset Filters
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {filteredSpots.map((spot, idx) => (
           <div
             key={spot.id}
@@ -237,8 +258,9 @@ export const StudySpotFinder: React.FC = () => {
               <span className="truncate">{spot.address}</span>
             </div>
           </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

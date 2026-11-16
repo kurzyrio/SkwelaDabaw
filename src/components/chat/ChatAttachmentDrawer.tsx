@@ -157,7 +157,7 @@ export const ChatAttachmentDrawer: React.FC<ChatAttachmentDrawerProps> = ({
         )}
 
         {/* Action Grid */}
-        <div className="grid grid-cols-4 gap-3 pt-1">
+        <div className="grid grid-cols-2 xs:grid-cols-4 gap-2.5 xs:gap-3 pt-1">
           {/* 1. Photo */}
           <button
             type="button"

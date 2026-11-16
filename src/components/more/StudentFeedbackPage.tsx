@@ -16,8 +16,10 @@ import {
   HelpCircle,
   ThumbsUp,
   MapPin,
-  MessageSquare
+  MessageSquare,
+  AlertCircle
 } from 'lucide-react';
+import { useBackHandler, BackPriority } from '../../hooks/useBackHandler';
 import { getSavedSession, StudentAuthSession } from '../../services/authService';
 import { db as dexieDb } from '../../db';
 import { DAVAO_CAMPUSES } from '../../data/davaoCampuses';
@@ -90,6 +92,26 @@ export const StudentFeedbackPage: React.FC<StudentFeedbackPageProps> = ({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isSubmitted, setIsSubmitted] = useState<boolean>(false);
   const [submittedType, setSubmittedType] = useState<'survey' | 'feedback'>('feedback');
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  useBackHandler(
+    isSubmitted || viewMode !== 'picker',
+    () => {
+      setSubmitError(null);
+      if (isSubmitted) {
+        setIsSubmitted(false);
+        setViewMode('picker');
+        return;
+      }
+      if (viewMode === 'survey' && surveyStep > 1) {
+        setSurveyStep((prev) => prev - 1);
+        return;
+      }
+      setViewMode('picker');
+    },
+    BackPriority.SUBVIEW,
+    'student_feedback_navigation'
+  );
 
   const RATING_LABELS = ['Needs Work', 'Fair', 'Good', 'Very Good', 'Exceptional'];
 
@@ -126,29 +148,16 @@ export const StudentFeedbackPage: React.FC<StudentFeedbackPageProps> = ({
   const handleSubmitSurvey = async () => {
     setIsSubmitting(true);
     setSubmittedType('survey');
+    setSubmitError(null);
 
     const summary = `[SURVEY] Commute: ${surveyCommuteMode} | Top Feature: ${surveyTopFeature} | Offline: ${surveyOfflineUsage} | Rating: ${surveyRating}/5. Notes: ${surveyComments}`.trim();
 
     try {
-      await withProcessing({
+      const apiOk = await withProcessing({
         message: 'Submitting Survey • Please wait',
         submessage: 'Sending your feedback to SkwelaDabaw'
       }, async () => {
-        try {
-          await dexieDb.feedback.add({
-            name: session?.name || 'Dabawenyo Student',
-            email: session?.email || undefined,
-            campus: session?.campusId || '',
-            category: 'Student Survey',
-            rating: surveyRating,
-            subject: `Campus Survey Response`,
-            message: summary,
-            status: 'New',
-            createdAt: new Date().toISOString()
-          });
-        } catch (_) {}
-
-        await postFeedbackApi({
+        const sent = await postFeedbackApi({
           name: session?.name || 'Dabawenyo Student',
           email: session?.email || '',
           campus: session?.campusId || '',
@@ -157,17 +166,34 @@ export const StudentFeedbackPage: React.FC<StudentFeedbackPageProps> = ({
           subject: 'Campus Survey Response',
           message: summary
         });
+        if (sent) {
+          try {
+            await dexieDb.feedback.add({
+              name: session?.name || 'Dabawenyo Student',
+              email: session?.email || undefined,
+              campus: session?.campusId || '',
+              category: 'Student Survey',
+              rating: surveyRating,
+              subject: `Campus Survey Response`,
+              message: summary,
+              status: 'New',
+              createdAt: new Date().toISOString()
+            });
+          } catch (_) {}
+        }
+        return sent;
       });
 
-      setIsSubmitted(true);
-      playEagleSound('success');
-      confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
+      if (apiOk) {
+        setIsSubmitted(true);
+        playEagleSound('success');
+        confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
+      } else {
+        setSubmitError('Unable to send survey right now. Check your internet connection and tap Retry — your answers are preserved.');
+      }
     } catch (err: any) {
-      console.warn('Survey submission note:', err);
-      // Still show submitted if local Dexie succeeded or offline
-      setIsSubmitted(true);
-      playEagleSound('success');
-      confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
+      console.warn('Survey submission failed:', err);
+      setSubmitError('Unable to send survey right now. Check your internet connection and tap Retry — your answers are preserved.');
     } finally {
       setIsSubmitting(false);
     }
@@ -178,30 +204,17 @@ export const StudentFeedbackPage: React.FC<StudentFeedbackPageProps> = ({
 
     setIsSubmitting(true);
     setSubmittedType('feedback');
+    setSubmitError(null);
 
     const catObj = FEEDBACK_CATEGORIES.find(c => c.id === feedbackCategory);
     const categoryTitle = catObj ? catObj.label : 'General Feedback';
 
     try {
-      await withProcessing({
+      const apiOk = await withProcessing({
         message: 'Submitting Feedback • Please wait',
         submessage: 'Delivering details directly to developers'
       }, async () => {
-        try {
-          await dexieDb.feedback.add({
-            name: session?.name || 'Dabawenyo Student',
-            email: session?.email || undefined,
-            campus: feedbackCampus,
-            category: categoryTitle,
-            rating: 5,
-            subject: `Feedback: ${categoryTitle}`,
-            message: feedbackDetails.trim(),
-            status: 'New',
-            createdAt: new Date().toISOString()
-          });
-        } catch (_) {}
-
-        await postFeedbackApi({
+        const sent = await postFeedbackApi({
           name: session?.name || 'Dabawenyo Student',
           email: session?.email || '',
           campus: feedbackCampus,
@@ -210,16 +223,34 @@ export const StudentFeedbackPage: React.FC<StudentFeedbackPageProps> = ({
           subject: `Feedback: ${categoryTitle}`,
           message: feedbackDetails.trim()
         });
+        if (sent) {
+          try {
+            await dexieDb.feedback.add({
+              name: session?.name || 'Dabawenyo Student',
+              email: session?.email || undefined,
+              campus: feedbackCampus,
+              category: categoryTitle,
+              rating: 5,
+              subject: `Feedback: ${categoryTitle}`,
+              message: feedbackDetails.trim(),
+              status: 'New',
+              createdAt: new Date().toISOString()
+            });
+          } catch (_) {}
+        }
+        return sent;
       });
 
-      setIsSubmitted(true);
-      playEagleSound('success');
-      confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
+      if (apiOk) {
+        setIsSubmitted(true);
+        playEagleSound('success');
+        confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
+      } else {
+        setSubmitError('Unable to submit feedback right now. Check your internet connection and tap Retry — your message is preserved.');
+      }
     } catch (err: any) {
-      console.warn('Feedback submission note:', err);
-      setIsSubmitted(true);
-      playEagleSound('success');
-      confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
+      console.warn('Feedback submission failed:', err);
+      setSubmitError('Unable to submit feedback right now. Check your internet connection and tap Retry — your message is preserved.');
     } finally {
       setIsSubmitting(false);
     }
@@ -286,7 +317,10 @@ export const StudentFeedbackPage: React.FC<StudentFeedbackPageProps> = ({
           {/* Choice 1: Survey */}
           <button
             type="button"
-            onClick={() => setViewMode('survey')}
+            onClick={() => {
+              setSubmitError(null);
+              setViewMode('survey');
+            }}
             className="w-full p-5 rounded-3xl bg-[var(--card-bg)] border border-[var(--card-border)] hover:border-sky-500/50 text-left space-y-3 transition-all shadow-sm pressable group"
           >
             <div className="flex items-center justify-between">
@@ -314,7 +348,10 @@ export const StudentFeedbackPage: React.FC<StudentFeedbackPageProps> = ({
           {/* Choice 2: Feedback & Bug Report */}
           <button
             type="button"
-            onClick={() => setViewMode('feedback')}
+            onClick={() => {
+              setSubmitError(null);
+              setViewMode('feedback');
+            }}
             className="w-full p-5 rounded-3xl bg-[var(--card-bg)] border border-[var(--card-border)] hover:border-violet-500/50 text-left space-y-3 transition-all shadow-sm pressable group"
           >
             <div className="flex items-center justify-between">
@@ -521,12 +558,22 @@ export const StudentFeedbackPage: React.FC<StudentFeedbackPageProps> = ({
             </div>
           )}
 
+          {submitError && surveyStep === totalSurveySteps && (
+            <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-500 text-xs font-semibold flex items-start gap-2 animate-fade-in">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span className="flex-1 leading-relaxed">{submitError}</span>
+            </div>
+          )}
+
           {/* Navigation Controls */}
           <div className="flex items-center justify-between pt-3 border-t border-[var(--card-border)]">
             {surveyStep > 1 ? (
               <button
                 type="button"
-                onClick={() => setSurveyStep(prev => prev - 1)}
+                onClick={() => {
+                  setSubmitError(null);
+                  setSurveyStep(prev => prev - 1);
+                }}
                 className="px-4 py-2 rounded-full bg-[var(--nested-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] font-semibold text-xs flex items-center gap-1 pressable"
               >
                 <ChevronLeft className="w-4 h-4" />
@@ -538,6 +585,7 @@ export const StudentFeedbackPage: React.FC<StudentFeedbackPageProps> = ({
               type="button"
               onClick={() => {
                 if (surveyStep < totalSurveySteps) {
+                  setSubmitError(null);
                   setSurveyStep(prev => prev + 1);
                 } else {
                   handleSubmitSurvey();
@@ -550,7 +598,7 @@ export const StudentFeedbackPage: React.FC<StudentFeedbackPageProps> = ({
                 <span>Submitting...</span>
               ) : surveyStep === totalSurveySteps ? (
                 <>
-                  <span>Submit Survey</span>
+                  <span>{submitError ? 'Retry Submit' : 'Submit Survey'}</span>
                   <Send className="w-3.5 h-3.5" />
                 </>
               ) : (
@@ -654,6 +702,13 @@ export const StudentFeedbackPage: React.FC<StudentFeedbackPageProps> = ({
           />
         </div>
 
+        {submitError && (
+          <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-500 text-xs font-semibold flex items-start gap-2 animate-fade-in">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span className="flex-1 leading-relaxed">{submitError}</span>
+          </div>
+        )}
+
         {/* Submit Button */}
         <div className="pt-2">
           <button
@@ -665,7 +720,7 @@ export const StudentFeedbackPage: React.FC<StudentFeedbackPageProps> = ({
               <span>Submitting...</span>
             ) : (
               <>
-                <span>Submit Feedback</span>
+                <span>{submitError ? 'Retry Feedback' : 'Submit Feedback'}</span>
                 <Send className="w-3.5 h-3.5" />
               </>
             )}

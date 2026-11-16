@@ -167,8 +167,8 @@ export const CalendarPage: React.FC = () => {
 
       {/* Month Header & Controls Inset Card */}
       <div className="p-5 sm:p-6 rounded-3xl bg-[var(--card-bg)] border border-[var(--card-border)] space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0">
             <h2 className="text-xl sm:text-2xl font-bold text-[var(--text-primary)] tracking-tight">
               {monthNames[month]} {year}
             </h2>
@@ -275,19 +275,19 @@ export const CalendarPage: React.FC = () => {
                 className="p-3.5 rounded-2xl bg-[var(--nested-bg)] border border-[var(--nested-border)] flex items-start justify-between gap-3"
                 style={{ borderLeftColor: item.color, borderLeftWidth: '3px' }}
               >
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
+                <div className="space-y-1 min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                     <span
-                      className="px-2 py-0.5 rounded-md text-xs font-bold text-white"
+                      className="px-2 py-0.5 rounded-md text-xs font-bold text-white shrink-0"
                       style={{ backgroundColor: item.color }}
                     >
                       {item.subjectCode}
                     </span>
-                    <span className="text-xs font-bold text-[var(--text-primary)]">
+                    <span className="text-xs font-bold text-[var(--text-primary)] break-words min-w-0">
                       {item.subjectName}
                     </span>
                   </div>
-                  <div className="flex items-center gap-3 text-xs text-[var(--text-secondary)]">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--text-secondary)]">
                     <span className="flex items-center gap-1">
                       <Clock className="w-3 h-3" />
                       {formatTime12h(item.startTime)} - {formatTime12h(item.endTime)}

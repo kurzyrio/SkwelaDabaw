@@ -17,6 +17,7 @@ import {
   ChevronRight,
   MessageSquarePlus
 } from 'lucide-react';
+import { useBackHandler, BackPriority } from '../../hooks/useBackHandler';
 export type NavigationTab = 
   | 'schedule'
   | 'tasks'
@@ -63,9 +64,13 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [isInputFocused, setIsInputFocused] = useState(false);
   const maxObservedHeightRef = React.useRef(typeof window !== 'undefined' ? window.innerHeight : 800);
 
+  useBackHandler(isMoreOpen, () => setIsMoreOpen(false), BackPriority.MODAL, 'navbar_more_sheet');
+
   // App-wide virtual keyboard detection: hides floating navbar whenever virtual keyboard opens
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
+
+    const TEXT_INPUT_TYPES = new Set(['', 'text', 'search', 'email', 'password', 'number', 'tel', 'url']);
 
     const checkHeight = () => {
       const currentHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
@@ -78,7 +83,16 @@ export const Navbar: React.FC<NavbarProps> = ({
 
     const handleFocusIn = (e: FocusEvent) => {
       const target = e.target as HTMLElement | null;
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+      if (!target) return;
+      if (target.tagName === 'TEXTAREA') {
+        const ta = target as HTMLTextAreaElement;
+        if (!ta.readOnly && !ta.disabled) setIsInputFocused(true);
+      } else if (target.tagName === 'INPUT') {
+        const input = target as HTMLInputElement;
+        if (TEXT_INPUT_TYPES.has((input.type || '').toLowerCase()) && !input.readOnly && !input.disabled) {
+          setIsInputFocused(true);
+        }
+      } else if (target.isContentEditable) {
         setIsInputFocused(true);
       }
     };
@@ -163,7 +177,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     <>
       {/* Floating Mobile Dock Bar */}
       <nav 
-        className={`md:hidden fixed bottom-3 left-3 right-3 max-w-md mx-auto z-40 transition-all duration-300 ease-in-out ${
+        className={`md:hidden fixed bottom-[max(0.75rem,env(safe-area-inset-bottom))] left-3 right-3 max-w-md mx-auto z-40 transition-all duration-300 ease-in-out ${
           shouldHide 
             ? 'translate-y-36 opacity-0 pointer-events-none' 
             : 'translate-y-0 opacity-100'
@@ -206,7 +220,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 setIsMoreOpen(true);
               }}
               aria-label="Student Hub"
-              className="w-12 h-12 rounded-full bg-gradient-to-tr from-[#7C3AED] via-[#8B5CF6] to-[#A855F7] text-white flex items-center justify-center shadow-lg shadow-purple-500/40 border-4 border-[var(--bg-primary)] transition-all duration-200 active:scale-95 hover:scale-105 cursor-pointer pressable"
+              className="w-12 h-12 rounded-full bg-gradient-to-tr from-[#7C3AED] via-[#8B5CF6] to-[#A855F7] text-white flex items-center justify-center shadow-lg shadow-purple-500/40 border-4 border-[var(--card-bg)] transition-all duration-200 active:scale-95 hover:scale-105 cursor-pointer pressable"
             >
               <LayoutGrid className="w-5 h-5 text-white" />
             </button>

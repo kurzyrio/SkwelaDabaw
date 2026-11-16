@@ -1438,7 +1438,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             <div className="p-6 rounded-3xl bg-[var(--card-bg)] border border-[var(--card-border)] space-y-5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
-                  <div className="w-18 h-18 rounded-full p-1 border-2 border-[var(--card-border)] shadow-xs overflow-hidden shrink-0 relative">
+                  <div className="w-[4.5rem] h-[4.5rem] rounded-full p-1 border-2 border-[var(--card-border)] shadow-sm overflow-hidden shrink-0 relative">
                     <CachedAvatar
                       src={userSession.avatar}
                       name={userSession.name}

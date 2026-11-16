@@ -1,6 +1,6 @@
 {
-  "version": "1.11.5.13",
-  "versionCode": 142,
+  "version": "1.11.5.14",
+  "versionCode": 143,
   "releaseDate": "2026-11-16",
   "versionScheme": {
     "digit1": "App Version",
@@ -13,15 +13,15 @@
   "forceUpdate": false,
   "developer": "Kurzyrio",
   "supportEmail": "jerriviencenatad@gmail.com",
-  "title": "Offline Maps, DC Bus Shift Routing & Transit Accuracy",
+  "title": "Edge-to-Edge Safe Areas, Mobile UI & Fallback Fixes",
   "releaseNotes": [
-    "Unblocked Jeepney and DC Bus maps when offline so computed routes, pins, and stops stay visible without waiting on map tiles.",
-    "Filtered DC Bus route suggestions strictly by active AM/PM operating shifts and ₱0.00 fare rules.",
-    "Improved walking path recovery, transfer polyline accuracy, and boarding/transfer wait time estimates across Davao routes."
+    "Added Android 15/16 edge-to-edge safe-area spacing and smooth keyboard resizing across onboarding, chat, maps, and navigation.",
+    "Fixed compact 320px-375px screen layouts across schedules, QR sharing, fare calculator, GPA, budget, weather, and emergency views.",
+    "Added clear retry states, external link safety checks, empty search resets, and Android hardware back navigation across modals and drawers."
   ],
   "downloadUrl": "https://skweladabaw.kurzyrio.site/download",
-  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.13.apk",
-  "sizeBytes": 26626552,
+  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.14.apk",
+  "sizeBytes": 26632087,
   "sizeFormatted": "25.4 MB",
-  "sha256": "7cad9457698df27f09b745b278d531487ac744084cf641cc3799de801ab7eec7"
+  "sha256": "b5091424da175f5bbc91e34233db941d0bdd249e1970efee25dec3e2fd2d33e5"
 }

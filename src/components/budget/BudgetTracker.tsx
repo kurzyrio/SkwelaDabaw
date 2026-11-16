@@ -298,7 +298,7 @@ export const BudgetTracker: React.FC = () => {
         <form onSubmit={handleAddExpense} className="p-5 rounded-2xl bg-[var(--card-bg)] border border-[var(--card-border)] space-y-3.5 animate-slide-up">
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-[var(--text-secondary)]">Category</label>
-            <div className="grid grid-cols-5 gap-1.5">
+            <div className="grid grid-cols-3 xs:grid-cols-5 gap-1.5">
               {[
                 { id: 'jeep', label: 'Jeep' },
                 { id: 'food', label: 'Food' },

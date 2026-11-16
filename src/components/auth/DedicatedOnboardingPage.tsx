@@ -50,6 +50,7 @@ import { CampusPickerModal } from '../common/CampusPickerModal';
 import { ScheduleImportModal } from '../schedule/ScheduleImportModal';
 import { ProcessingOverlay } from '../common/ProcessingOverlay';
 import { TalkingMascot, MascotMood } from '../common/TalkingMascot';
+import { useBackHandler, BackPriority } from '../../hooks/useBackHandler';
 import { 
   getBayaniLanguage, 
   setBayaniLanguage, 
@@ -164,6 +165,13 @@ export const DedicatedOnboardingPage: React.FC<DedicatedOnboardingPageProps> = (
     setSlideDirection(newStep > step ? 'right' : 'left');
     setStep(newStep);
   };
+
+  useBackHandler(
+    step > 1 && !isCampusPickerOpen && !isImportModalOpen,
+    () => goToStep(step - 1),
+    BackPriority.SUBVIEW,
+    'onboarding_step_back'
+  );
 
   // Debounced real-time Firestore username check
   useEffect(() => {
@@ -574,7 +582,7 @@ export const DedicatedOnboardingPage: React.FC<DedicatedOnboardingPageProps> = (
   if (step === 1) {
     return (
       <div 
-        className="h-[100dvh] max-h-[100dvh] overflow-hidden bg-[var(--canvas-bg)] text-[var(--text-primary)] flex flex-col justify-between px-4 sm:px-6 select-none relative animate-fade-in"
+        className="min-h-[100dvh] w-full overflow-y-auto bg-[var(--canvas-bg)] text-[var(--text-primary)] flex flex-col justify-between px-4 sm:px-6 select-none relative animate-fade-in"
         style={{
           paddingTop: 'max(1rem, env(safe-area-inset-top))',
           paddingBottom: 'max(1rem, env(safe-area-inset-bottom))'
@@ -788,7 +796,7 @@ export const DedicatedOnboardingPage: React.FC<DedicatedOnboardingPageProps> = (
   return (
     <div className="min-h-screen bg-[var(--canvas-bg)] text-[var(--text-primary)] flex flex-col justify-start select-none relative overflow-x-hidden animate-fade-in pb-12">
       {/* Top Fixed Header Bar */}
-      <header className="sticky top-0 z-30 w-full bg-[var(--header-bg)] backdrop-blur-md border-b border-[var(--card-border)]">
+      <header className="sticky top-0 z-30 w-full pt-[env(safe-area-inset-top)] bg-[var(--header-bg)] backdrop-blur-md border-b border-[var(--card-border)]">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <span className="px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-[var(--nested-bg)] text-[var(--text-primary)] border border-[var(--nested-border)]">

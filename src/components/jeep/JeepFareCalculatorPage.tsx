@@ -101,52 +101,52 @@ export const JeepFareCalculatorPage: React.FC<JeepFareCalculatorPageProps> = ({ 
         </div>
 
         {/* Fare Comparison Grid */}
-        <div className="grid grid-cols-3 gap-2.5 pt-2">
+        <div className="grid grid-cols-3 gap-1.5 sm:gap-2.5 pt-2">
           {/* Student (Primary) */}
-          <div className="p-3 rounded-2xl bg-[var(--card-bg)] border-2 border-[var(--accent-color)] text-center space-y-0.5 shadow-xs">
-            <span className="block text-[10px] font-black uppercase text-[var(--accent-color)] tracking-wider">
-              Student / Youth
+          <div className="p-2 sm:p-3 min-w-0 rounded-2xl bg-[var(--card-bg)] border-2 border-[var(--accent-color)] text-center space-y-0.5 shadow-xs">
+            <span className="block text-[9px] xs:text-[10px] font-black uppercase text-[var(--accent-color)] tracking-wider truncate">
+              Student
             </span>
-            <span className="text-2xl font-black text-[var(--accent-color)] font-mono">
+            <span className="block text-lg xs:text-xl sm:text-2xl font-black text-[var(--accent-color)] font-mono truncate">
               ₱{studentEstimate.studentFare.toFixed(2)}
             </span>
-            <span className="block text-[10px] font-bold text-[var(--accent-color)]">
-              20% Discount
+            <span className="block text-[9px] xs:text-[10px] font-bold text-[var(--accent-color)] truncate">
+              20% Off
             </span>
           </div>
 
           {/* Regular */}
-          <div className="p-3 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] text-center space-y-0.5">
-            <span className="block text-[10px] font-bold uppercase text-[var(--text-muted)] tracking-wider">
+          <div className="p-2 sm:p-3 min-w-0 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] text-center space-y-0.5">
+            <span className="block text-[9px] xs:text-[10px] font-bold uppercase text-[var(--text-muted)] tracking-wider truncate">
               Regular
             </span>
-            <span className="text-xl font-bold text-[var(--text-primary)] font-mono">
+            <span className="block text-base xs:text-lg sm:text-xl font-bold text-[var(--text-primary)] font-mono truncate">
               ₱{regularFare.toFixed(2)}
             </span>
-            <span className="block text-[10px] font-medium text-[var(--text-muted)]">
-              Standard Rate
+            <span className="block text-[9px] xs:text-[10px] font-medium text-[var(--text-muted)] truncate">
+              Standard
             </span>
           </div>
 
           {/* Senior / PWD */}
-          <div className="p-3 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] text-center space-y-0.5">
-            <span className="block text-[10px] font-bold uppercase text-[var(--text-muted)] tracking-wider">
-              Senior / PWD
+          <div className="p-2 sm:p-3 min-w-0 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] text-center space-y-0.5">
+            <span className="block text-[9px] xs:text-[10px] font-bold uppercase text-[var(--text-muted)] tracking-wider truncate">
+              Senior/PWD
             </span>
-            <span className="text-xl font-bold text-[var(--text-primary)] font-mono">
+            <span className="block text-base xs:text-lg sm:text-xl font-bold text-[var(--text-primary)] font-mono truncate">
               ₱{seniorFare.toFixed(2)}
             </span>
-            <span className="block text-[10px] font-medium text-[var(--text-muted)]">
-              20% Mandate
+            <span className="block text-[9px] xs:text-[10px] font-medium text-[var(--text-muted)] truncate">
+              20% Off
             </span>
           </div>
         </div>
 
         {/* Calculation Details Banner */}
         <div className="p-3 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] text-xs space-y-1.5">
-          <div className="flex items-center justify-between text-[11px] font-semibold text-[var(--text-secondary)]">
+          <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] font-semibold text-[var(--text-secondary)]">
             <span>Rate Formula Breakdown:</span>
-            <span className="font-mono text-emerald-500 font-bold">{studentEstimate.breakdown}</span>
+            <span className="font-mono text-emerald-500 font-bold break-all">{studentEstimate.breakdown}</span>
           </div>
           {savings > 0 && (
             <div className="flex items-center gap-1.5 text-xs font-bold text-[var(--accent-color)]">

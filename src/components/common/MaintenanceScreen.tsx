@@ -144,7 +144,7 @@ export const MaintenanceScreen: React.FC<MaintenanceScreenProps> = ({
                 value={adminPass}
                 onChange={(e) => setAdminPass(e.target.value)}
                 placeholder="Admin Passcode"
-                className={`flex-1 px-3 py-2 rounded-xl bg-[var(--nested-bg)] border ${passError ? 'border-red-500' : 'border-[var(--card-border)]'} text-xs text-[var(--text-primary)] outline-none focus:border-[var(--primary-gold)] font-mono`}
+                className={`flex-1 px-3 py-2 rounded-xl bg-[var(--nested-bg)] border ${passError ? 'border-red-500' : 'border-[var(--card-border)]'} text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-color)] font-mono`}
               />
               <button
                 type="submit"

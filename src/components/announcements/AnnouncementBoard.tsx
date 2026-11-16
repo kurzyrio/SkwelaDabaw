@@ -25,6 +25,7 @@ import { shareContent } from '../../services/shareService';
 import { fetchAllAnnouncements } from '../../services/announcementService';
 import { queueCloudSync } from '../../services/cloudSyncService';
 import { readScopedJson, writeScopedJson, recordBookmarkDeletion } from '../../services/userScope';
+import { useBackHandler, BackPriority } from '../../hooks/useBackHandler';
 
 interface AnnouncementBoardProps {
   userSession?: StudentAuthSession;
@@ -47,6 +48,13 @@ export const AnnouncementBoard: React.FC<AnnouncementBoardProps> = ({
   });
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [viewingImage, setViewingImage] = useState<string | null>(null);
+
+  useBackHandler(
+    Boolean(viewingImage),
+    () => setViewingImage(null),
+    BackPriority.MODAL,
+    'announcement_image_lightbox'
+  );
 
   const userCampus = DAVAO_CAMPUSES.find((c) => c.id === userSession?.campusId);
 
@@ -382,18 +390,19 @@ export const AnnouncementBoard: React.FC<AnnouncementBoardProps> = ({
       {/* Lightbox for viewing bulletin posters */}
       {viewingImage && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 pt-[max(3.5rem,calc(env(safe-area-inset-top)+2.75rem))] pb-[max(1rem,env(safe-area-inset-bottom))] bg-black/85 backdrop-blur-md animate-fade-in"
           onClick={() => setViewingImage(null)}
         >
-          <div className="relative max-w-2xl max-h-[90vh] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              onClick={() => setViewingImage(null)}
-              className="absolute -top-10 right-0 p-2 text-white/80 hover:text-white cursor-pointer"
-            >
-              <X className="w-6 h-6" />
-            </button>
-            <img src={viewingImage} alt="Full notice poster" className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl" />
+          <button
+            type="button"
+            onClick={() => setViewingImage(null)}
+            aria-label="Close poster preview"
+            className="fixed top-[max(1rem,env(safe-area-inset-top))] right-[max(1rem,env(safe-area-inset-right))] z-10 p-2 rounded-full bg-white/15 hover:bg-white/25 text-white cursor-pointer transition-colors"
+          >
+            <X className="w-6 h-6" />
+          </button>
+          <div className="relative max-w-2xl max-h-full flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+            <img src={viewingImage} alt="Full notice poster" className="max-w-full max-h-[80vh] object-contain rounded-2xl shadow-2xl" />
           </div>
         </div>
       )}

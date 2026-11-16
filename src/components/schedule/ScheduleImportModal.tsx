@@ -55,6 +55,7 @@ import { Html5Qrcode } from 'html5-qrcode';
 import { decodeScheduleFromQrPayload, fetchScheduleByCloudCode } from '../../services/shareService';
 import { Camera as CapacitorCamera } from '@capacitor/camera';
 import { Capacitor } from '@capacitor/core';
+import { useBackHandler, BackPriority } from '../../hooks/useBackHandler';
 
 interface ScheduleImportModalProps {
   isOpen: boolean;
@@ -67,6 +68,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
   onClose,
   onImportComplete
 }) => {
+  useBackHandler(isOpen, onClose, BackPriority.MODAL, 'schedule_import_modal');
   const [importMode, setImportMode] = useState<'qr-scan' | 'camera' | 'json' | 'text' | 'prompt-guide'>('qr-scan');
   const [qrCameraError, setQrCameraError] = useState<string | null>(null);
   const [qrMetadata, setQrMetadata] = useState<{ student?: string; campus?: string } | null>(null);
@@ -1610,16 +1612,16 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                 <span className="leading-relaxed flex-1">{errorMessage}</span>
               </div>
-              <div className="flex items-center justify-between pt-1 border-t border-rose-500/20">
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-rose-500/20">
                 <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
                   Encountered an issue?
                 </span>
                 <a
                   href="mailto:support@kurzyrio.site?subject=SkwelaDabaw%20Schedule%20Import%20Issue"
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-black shadow-xs transition-transform active:scale-95"
+                  className="inline-flex items-center gap-1.5 max-w-full px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-black shadow-xs transition-transform active:scale-95"
                 >
-                  <span>Contact Admin</span>
-                  <span className="font-mono text-[10px] opacity-90">(support@kurzyrio.site)</span>
+                  <span className="shrink-0">Contact Admin</span>
+                  <span className="font-mono text-[10px] opacity-90 truncate">(support@kurzyrio.site)</span>
                 </a>
               </div>
             </div>

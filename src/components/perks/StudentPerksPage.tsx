@@ -242,7 +242,25 @@ export const StudentPerksPage: React.FC = () => {
       </div>
 
       {/* PERKS LISTING */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {filteredPerks.length === 0 ? (
+        <div className="p-8 rounded-3xl bg-[var(--card-bg)] border border-[var(--card-border)] text-center space-y-2.5">
+          <p className="text-sm font-bold text-[var(--text-primary)]">No matching student perks found</p>
+          <p className="text-xs text-[var(--text-secondary)]">
+            Try searching another perk keyword or selecting All categories.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedCategory('all');
+              setSearchQuery('');
+            }}
+            className="px-4 py-1.5 rounded-full bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] text-xs font-bold pressable"
+          >
+            Reset Filters
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {filteredPerks.map((perk) => (
           <div
             key={perk.id}
@@ -282,8 +300,9 @@ export const StudentPerksPage: React.FC = () => {
               </div>
             </div>
           </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

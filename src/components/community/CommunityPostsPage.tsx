@@ -631,7 +631,7 @@ export const CommunityPostsPage: React.FC<CommunityPostsPageProps> = ({
       {/* Comments Drawer */}
       {activeCommentsPost && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm sheet-backdrop-enter">
-          <div className="w-full max-w-lg max-h-[85vh] bg-[var(--modal-bg)] border-t border-[var(--card-border)] rounded-t-3xl p-5 sheet-enter-spring flex flex-col space-y-3">
+          <div className="w-full max-w-lg max-h-[85vh] bg-[var(--modal-bg)] border-t border-[var(--card-border)] rounded-t-3xl p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sheet-enter-spring flex flex-col space-y-3">
             <div className="flex items-center justify-between border-b border-[var(--card-border)] pb-2.5">
               <div>
                 <h4 className="font-bold text-sm text-[var(--text-primary)]">Comments &amp; Discussion</h4>
@@ -925,23 +925,23 @@ export const CommunityPostsPage: React.FC<CommunityPostsPageProps> = ({
       {/* Lightbox for viewing photos (Mounted directly to body with scroll & touch locks) */}
       {viewingImage && typeof document !== 'undefined' && createPortal(
         <div
-          className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in select-none touch-none overscroll-contain"
+          className="fixed inset-0 z-[120] flex items-center justify-center p-4 pt-[max(3.5rem,calc(env(safe-area-inset-top)+2.75rem))] pb-[max(1rem,env(safe-area-inset-bottom))] bg-black/90 backdrop-blur-md animate-fade-in select-none touch-none overscroll-contain"
           onClick={() => setViewingImage(null)}
           onTouchMove={(e) => e.preventDefault()}
         >
-          <div className="relative max-w-3xl max-h-[90vh] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              onClick={() => setViewingImage(null)}
-              className="absolute -top-12 right-0 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white cursor-pointer transition-colors"
-              aria-label="Close image preview"
-            >
-              <X className="w-5 h-5" />
-            </button>
+          <button
+            type="button"
+            onClick={() => setViewingImage(null)}
+            className="fixed top-[max(1rem,env(safe-area-inset-top))] right-[max(1rem,env(safe-area-inset-right))] z-10 p-2 rounded-full bg-white/15 hover:bg-white/25 text-white cursor-pointer transition-colors"
+            aria-label="Close image preview"
+          >
+            <X className="w-5 h-5" />
+          </button>
+          <div className="relative max-w-3xl max-h-full flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
             <img
               src={viewingImage}
               alt="Community poster"
-              className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl"
+              className="max-w-full max-h-[80vh] object-contain rounded-2xl shadow-2xl"
             />
           </div>
         </div>,

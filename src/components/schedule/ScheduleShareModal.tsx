@@ -24,6 +24,7 @@ import {
 } from '../../services/shareService';
 import { saveWallpaperToDevice } from '../../services/widgetService';
 import { useProcessingOverlay } from '../../contexts/ProcessingOverlayContext';
+import { useBackHandler, BackPriority } from '../../hooks/useBackHandler';
 
 interface ScheduleShareModalProps {
   isOpen: boolean;
@@ -41,6 +42,7 @@ export const ScheduleShareModal: React.FC<ScheduleShareModalProps> = ({
   campusName = 'Davao Campus'
 }) => {
   const { withProcessing } = useProcessingOverlay();
+  useBackHandler(isOpen, onClose, BackPriority.MODAL, 'schedule_share_modal');
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
   const [activeTab, setActiveTab] = useState<'graphic' | 'qr'>('graphic');
@@ -461,8 +463,8 @@ export const ScheduleShareModal: React.FC<ScheduleShareModalProps> = ({
               </div>
 
               {/* QR Canvas */}
-              <div className="p-3.5 rounded-3xl bg-white border border-[var(--card-border)] shadow-xl">
-                <canvas ref={qrCanvasRef} className="block rounded-xl" />
+              <div className="p-3.5 rounded-3xl bg-white border border-[var(--card-border)] shadow-xl max-w-full flex items-center justify-center">
+                <canvas ref={qrCanvasRef} className="block rounded-xl max-w-full w-[min(280px,68vw)] h-auto aspect-square" />
               </div>
 
               {/* Mode Badge / Cloud Code Display */}

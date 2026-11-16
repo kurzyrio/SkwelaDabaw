@@ -49,6 +49,7 @@ import {
   savePlace 
 } from '../../services/savedRoutesService';
 import { JeepSchoolSearchModal } from './JeepSchoolSearchModal';
+import { useBackHandler, BackPriority } from '../../hooks/useBackHandler';
 
 // Vite worker setup strictly as documented in https://openfreemap.org/quick_start/
 if (typeof (maplibregl as any).setWorkerUrl === 'function') {
@@ -305,6 +306,28 @@ export const JeepTransitMap: React.FC<JeepTransitMapProps> = ({
     title: string;
     message: string;
   } | null>(null);
+
+  useBackHandler(
+    Boolean(gpsModalState?.isOpen),
+    () => setGpsModalState(null),
+    BackPriority.MODAL,
+    'jeep_gps_modal'
+  );
+  useBackHandler(
+    isStyleMenuOpen,
+    () => setIsStyleMenuOpen(false),
+    BackPriority.POPUP,
+    'jeep_style_menu'
+  );
+  useBackHandler(
+    Boolean(pinPlacementMode),
+    () => {
+      setPinPlacementMode(null);
+      setPendingSaveCoord(null);
+    },
+    BackPriority.MODAL,
+    'jeep_pin_placement_mode'
+  );
 
   // Subscribe to device orientation compass heading
   useEffect(() => {
@@ -1553,208 +1576,221 @@ export const JeepTransitMap: React.FC<JeepTransitMapProps> = ({
         </div>
       )}
 
-      {/* 2. TOAST NOTIFICATION */}
-      {toastMessage && (
-        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[80] px-4 py-2 rounded-2xl bg-black/85 text-white text-xs font-semibold backdrop-blur-md shadow-xl border border-white/10 animate-fade-in pointer-events-none text-center max-w-[85vw] truncate">
-          {toastMessage}
-        </div>
-      )}
-
-      {/* 3. PIN PLACEMENT MODE BANNER */}
-      {pinPlacementMode && (
-        <div className="absolute top-4 left-4 right-4 z-[75] flex items-center justify-between p-3.5 rounded-2xl bg-[var(--card-bg)] text-[var(--text-primary)] backdrop-blur-md border border-[var(--card-border)] shadow-2xl animate-modal-pop-in">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <MapPin className="w-4 h-4 text-emerald-500 animate-pulse shrink-0" />
-            <div className="min-w-0">
-              <p className="text-xs font-bold truncate">
-                {pinPlacementMode === 'save_place' 
-                  ? `Tap on map to set ${savePlaceLabel}` 
-                  : `Tap anywhere to set ${pinPlacementMode === 'origin' ? 'My location' : 'Destination'}`}
-              </p>
-              <p className="text-[10px] text-[var(--text-secondary)]">Move map and tap to drop exact coordinate</p>
+      {/* 2-4. TOP SAFE OVERLAY STACK (Search Header, Pin Mode, Offline Pill, Active Route, Toast — non-overlapping) */}
+      <div className="absolute top-[max(1rem,env(safe-area-inset-top))] left-[max(1rem,env(safe-area-inset-left))] right-[max(1rem,env(safe-area-inset-right))] z-[75] flex flex-col items-center gap-2 max-w-lg mx-auto pointer-events-none">
+        {/* PIN PLACEMENT MODE BANNER */}
+        {pinPlacementMode && (
+          <div className="w-full pointer-events-auto flex items-center justify-between gap-2 p-3 sm:p-3.5 rounded-2xl bg-[var(--card-bg)] text-[var(--text-primary)] backdrop-blur-md border border-[var(--card-border)] shadow-2xl animate-modal-pop-in">
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+              <MapPin className="w-4 h-4 text-emerald-500 animate-pulse shrink-0" />
+              <div className="min-w-0">
+                <p className="text-xs font-bold truncate">
+                  {pinPlacementMode === 'save_place' 
+                    ? `Tap on map to set ${savePlaceLabel}` 
+                    : `Tap anywhere to set ${pinPlacementMode === 'origin' ? 'My location' : 'Destination'}`}
+                </p>
+                <p className="text-[10px] text-[var(--text-secondary)] truncate">Move map and tap to drop exact coordinate</p>
+              </div>
             </div>
-          </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            {pendingSaveCoord && pinPlacementMode === 'save_place' && (
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              {pendingSaveCoord && pinPlacementMode === 'save_place' && (
+                <button
+                  type="button"
+                  onClick={handleConfirmSavePlace}
+                  className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs shadow-md transition-all pressable whitespace-nowrap"
+                >
+                  Confirm & Save
+                </button>
+              )}
               <button
                 type="button"
-                onClick={handleConfirmSavePlace}
-                className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs shadow-md transition-all pressable"
+                onClick={() => {
+                  setPinPlacementMode(null);
+                  setPendingSaveCoord(null);
+                }}
+                aria-label="Cancel pin placement"
+                className="p-1.5 rounded-xl bg-[var(--nested-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] pressable"
               >
-                Confirm & Save
+                <X className="w-4 h-4" />
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* TOP CONTROLS & COMPACT SEARCH BAR */}
+        {!pinPlacementMode && (
+          <div className="w-full pointer-events-auto flex flex-col gap-2">
+            {/* Main Directions Header */}
+            <div className="p-3 rounded-2xl bg-[var(--card-bg)] border border-[var(--card-border)] shadow-xl backdrop-blur-md flex flex-col gap-2.5">
+              <div className="flex items-center justify-between gap-2">
+                {onBack && (
+                  <button
+                    type="button"
+                    onClick={onBack}
+                    aria-label="Back to Transit Hub"
+                    className="p-2 rounded-xl text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--nested-bg)] transition-colors pressable shrink-0"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                  </button>
+                )}
+
+                {/* Origin / Destination Quick Row */}
+                <div className="flex-1 flex flex-col gap-1.5 min-w-0">
+                  {/* Origin (My Current Location) */}
+                  <div 
+                    onClick={() => {
+                      setSearchTargetMode('origin');
+                      setIsSearchModalOpen(true);
+                    }}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[var(--nested-bg)] border border-[var(--card-border)] cursor-pointer hover:border-[var(--card-hover-border)] transition-all min-w-0"
+                  >
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+                    <span className="text-xs font-semibold text-[var(--text-primary)] truncate flex-1">
+                      {origin?.name || 'My current location'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleLocateUser();
+                      }}
+                      className="text-[10px] font-bold text-emerald-500 hover:underline shrink-0"
+                    >
+                      GPS
+                    </button>
+                  </div>
+
+                  {/* Destination */}
+                  <div 
+                    onClick={() => {
+                      setSearchTargetMode('destination');
+                      setIsSearchModalOpen(true);
+                    }}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[var(--nested-bg)] border border-[var(--card-border)] cursor-pointer hover:border-[var(--card-hover-border)] transition-all min-w-0"
+                  >
+                    <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0" />
+                    <span className={`text-xs font-semibold truncate flex-1 ${destination ? 'text-[var(--text-primary)] font-bold' : 'text-[var(--text-muted)]'}`}>
+                      {destination?.name || 'Where to? (e.g. SM Ecoland, Ateneo, Toril)'}
+                    </span>
+                    <Search className="w-3.5 h-3.5 text-[var(--text-secondary)] shrink-0" />
+                  </div>
+                </div>
+
+                {/* Pin Mode Dropdown / Toggle */}
+                <div className="flex flex-col gap-1 shrink-0">
+                  <button
+                    type="button"
+                    title="Swap Points"
+                    aria-label="Swap Origin and Destination"
+                    onClick={() => {
+                      if (destination) {
+                        const temp = origin;
+                        setOrigin(destination);
+                        setDestination(temp);
+                      }
+                    }}
+                    className="p-1.5 rounded-lg bg-[var(--nested-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--card-border)] transition-all pressable"
+                  >
+                    <ArrowUpDown className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    title="Drop Pin on Map"
+                    aria-label="Drop Pin on Map"
+                    onClick={() => setPinPlacementMode('destination')}
+                    className="p-1.5 rounded-lg bg-[var(--nested-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--card-border)] transition-all pressable"
+                  >
+                    <MapPin className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Active single route banner */}
+              {activeSingleRoute && (
+                <div className="pt-2 border-t border-[var(--card-border)] flex items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <span 
+                      className="w-3 h-3 rounded-full shrink-0" 
+                      style={{ backgroundColor: activeSingleRoute.properties.color || '#10B981' }} 
+                    />
+                    <span className="font-bold text-[var(--text-primary)] truncate">
+                      {activeSingleRoute.properties.name}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveSingleRoute(null);
+                      onClearSingleRoute?.();
+                    }}
+                    className="text-[11px] font-semibold text-rose-400 hover:underline shrink-0"
+                  >
+                    Clear Route
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {isOfflineBasemap && isStyleLoaded && !isMapTilesLoading && (
+              <div className="self-center px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-800 dark:text-amber-200 text-[11px] font-semibold backdrop-blur-md pointer-events-none text-center max-w-full">
+                Offline basemap — routes & pins stay active
+              </div>
             )}
+          </div>
+        )}
+
+        {/* Active Tracked Route Floating Banner */}
+        {activeSingleRoute && (
+          <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 bg-[var(--card-bg)]/95 backdrop-blur-md px-3 py-1.5 rounded-full border border-sky-500/40 shadow-lg animate-fade-in max-w-full">
+            <span 
+              className="w-2.5 h-2.5 rounded-full shrink-0" 
+              style={{ backgroundColor: activeSingleRoute.properties.color || '#10B981' }} 
+            />
+            <span className="text-xs font-bold text-[var(--text-primary)] max-w-[140px] sm:max-w-xs truncate">
+              {activeSingleRoute.properties.name}
+            </span>
+            <button
+              type="button"
+              onClick={handleToggleNavigating}
+              className={`flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full pressable shrink-0 ${
+                isNavigating 
+                  ? 'bg-emerald-600 text-white animate-pulse'
+                  : 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)]'
+              }`}
+            >
+              <Navigation className="w-3 h-3" />
+              <span>{isNavigating ? 'Stop' : 'Start Nav'}</span>
+            </button>
             <button
               type="button"
               onClick={() => {
-                setPinPlacementMode(null);
-                setPendingSaveCoord(null);
+                setActiveSingleRoute(null);
+                onClearSingleRoute?.();
               }}
-              className="p-1.5 rounded-xl bg-[var(--nested-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] pressable"
+              className="text-[11px] font-bold text-rose-400 hover:text-rose-300 bg-rose-500/10 px-2.5 py-0.5 rounded-full border border-rose-500/20 pressable shrink-0"
             >
-              <X className="w-4 h-4" />
+              Exit Tracking
             </button>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* 4. TOP CONTROLS & COMPACT SEARCH BAR */}
-      {!pinPlacementMode && (
-        <div className="absolute top-4 left-4 right-4 z-[70] flex flex-col gap-2 max-w-lg mx-auto">
-          {/* Main Directions Header */}
-          <div className="p-3 rounded-2xl bg-[var(--card-bg)] border border-[var(--card-border)] shadow-xl backdrop-blur-md flex flex-col gap-2.5">
-            <div className="flex items-center justify-between gap-2">
-              {onBack && (
-                <button
-                  type="button"
-                  onClick={onBack}
-                  className="p-2 rounded-xl text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--nested-bg)] transition-colors pressable shrink-0"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                </button>
-              )}
-
-              {/* Origin / Destination Quick Row */}
-              <div className="flex-1 flex flex-col gap-1.5 min-w-0">
-                {/* Origin (My Current Location) */}
-                <div 
-                  onClick={() => {
-                    setSearchTargetMode('origin');
-                    setIsSearchModalOpen(true);
-                  }}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[var(--nested-bg)] border border-[var(--card-border)] cursor-pointer hover:border-[var(--card-hover-border)] transition-all min-w-0"
-                >
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
-                  <span className="text-xs font-semibold text-[var(--text-primary)] truncate flex-1">
-                    {origin?.name || 'My current location'}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleLocateUser();
-                    }}
-                    className="text-[10px] font-bold text-emerald-500 hover:underline shrink-0"
-                  >
-                    GPS
-                  </button>
-                </div>
-
-                {/* Destination */}
-                <div 
-                  onClick={() => {
-                    setSearchTargetMode('destination');
-                    setIsSearchModalOpen(true);
-                  }}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[var(--nested-bg)] border border-[var(--card-border)] cursor-pointer hover:border-[var(--card-hover-border)] transition-all min-w-0"
-                >
-                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0" />
-                  <span className={`text-xs font-semibold truncate flex-1 ${destination ? 'text-[var(--text-primary)] font-bold' : 'text-[var(--text-muted)]'}`}>
-                    {destination?.name || 'Where to? (e.g. SM Ecoland, Ateneo, Toril)'}
-                  </span>
-                  <Search className="w-3.5 h-3.5 text-[var(--text-secondary)] shrink-0" />
-                </div>
-              </div>
-
-              {/* Pin Mode Dropdown / Toggle */}
-              <div className="flex flex-col gap-1 shrink-0">
-                <button
-                  type="button"
-                  title="Swap Points"
-                  onClick={() => {
-                    if (destination) {
-                      const temp = origin;
-                      setOrigin(destination);
-                      setDestination(temp);
-                    }
-                  }}
-                  className="p-1.5 rounded-lg bg-[var(--nested-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--card-border)] transition-all pressable"
-                >
-                  <ArrowUpDown className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  title="Drop Pin on Map"
-                  onClick={() => setPinPlacementMode('destination')}
-                  className="p-1.5 rounded-lg bg-[var(--nested-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--card-border)] transition-all pressable"
-                >
-                  <MapPin className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-
-            {/* Active single route banner */}
-            {activeSingleRoute && (
-              <div className="pt-2 border-t border-[var(--card-border)] flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2 truncate">
-                  <span 
-                    className="w-3 h-3 rounded-full shrink-0" 
-                    style={{ backgroundColor: activeSingleRoute.properties.color || '#10B981' }} 
-                  />
-                  <span className="font-bold text-[var(--text-primary)] truncate">
-                    {activeSingleRoute.properties.name}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveSingleRoute(null);
-                    onClearSingleRoute?.();
-                  }}
-                  className="text-[11px] font-semibold text-rose-400 hover:underline shrink-0"
-                >
-                  Clear Route
-                </button>
-              </div>
-            )}
+        {/* TOAST NOTIFICATION (stacked cleanly below active header pills) */}
+        {toastMessage && (
+          <div className="px-4 py-2 rounded-2xl bg-black/85 text-white text-xs font-semibold backdrop-blur-md shadow-xl border border-white/10 animate-fade-in pointer-events-none text-center max-w-[90vw] truncate">
+            {toastMessage}
           </div>
-
-          {isOfflineBasemap && isStyleLoaded && !isMapTilesLoading && (
-            <div className="self-center px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-800 dark:text-amber-200 text-[11px] font-semibold backdrop-blur-md pointer-events-none">
-              Offline basemap — routes & pins stay active
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Active Tracked Route Floating Banner (Accessible in both full-screen & normal modes) */}
-      {activeSingleRoute && (
-        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[80] flex items-center gap-2 bg-[var(--card-bg)]/95 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-sky-500/40 shadow-lg animate-fade-in max-w-[90vw]">
-          <span 
-            className="w-2.5 h-2.5 rounded-full shrink-0" 
-            style={{ backgroundColor: activeSingleRoute.properties.color || '#10B981' }} 
-          />
-          <span className="text-xs font-bold text-[var(--text-primary)] max-w-[160px] sm:max-w-xs truncate">
-            {activeSingleRoute.properties.name}
-          </span>
-          <button
-            type="button"
-            onClick={handleToggleNavigating}
-            className={`flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full pressable shrink-0 ${
-              isNavigating 
-                ? 'bg-emerald-600 text-white animate-pulse'
-                : 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)]'
-            }`}
-          >
-            <Navigation className="w-3 h-3" />
-            <span>{isNavigating ? 'Stop' : 'Start Nav'}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setActiveSingleRoute(null);
-              onClearSingleRoute?.();
-            }}
-            className="ml-1 text-[11px] font-bold text-rose-400 hover:text-rose-300 bg-rose-500/10 px-2.5 py-0.5 rounded-full border border-rose-500/20 pressable shrink-0"
-          >
-            Exit Tracking
-          </button>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* 5. RIGHT FLOATING CONTROLS */}
-      <div className="absolute right-4 top-48 z-[75] flex flex-col gap-2">
+      <div
+        className={`absolute right-[max(1rem,env(safe-area-inset-right))] z-[75] flex flex-col gap-2 transition-all ${
+          activeSingleRoute
+            ? 'top-[calc(max(1rem,env(safe-area-inset-top))+11.5rem)]'
+            : 'top-[calc(max(1rem,env(safe-area-inset-top))+9rem)]'
+        }`}
+      >
         {/* Recenter GPS Crosshair */}
         <button
           type="button"
@@ -1828,7 +1864,7 @@ export const JeepTransitMap: React.FC<JeepTransitMapProps> = ({
 
       {/* 6. BOTTOM JOURNEY DRAWER & STEP CARD (Matching Screenshot 2) */}
       {isCalculating && (
-        <div className="absolute bottom-6 left-4 right-4 z-[70] max-w-lg mx-auto p-4 rounded-3xl bg-[var(--card-bg)] border border-[var(--card-border)] shadow-2xl flex items-center gap-3 backdrop-blur-md">
+        <div className="absolute bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-[max(1rem,env(safe-area-inset-left))] right-[max(1rem,env(safe-area-inset-right))] z-[70] max-w-lg mx-auto p-4 rounded-3xl bg-[var(--card-bg)] border border-[var(--card-border)] shadow-2xl flex items-center gap-3 backdrop-blur-md">
           <RotateCw className="w-5 h-5 text-emerald-500 animate-spin shrink-0" />
           <div className="min-w-0 flex-1">
             <p className="text-xs font-bold text-[var(--text-primary)] truncate">{scanningPhase}</p>
@@ -1839,7 +1875,7 @@ export const JeepTransitMap: React.FC<JeepTransitMapProps> = ({
 
       {/* OUT OF DAVAO CITY COVERAGE WARNING */}
       {isOutOfCoverage && !isCalculating && (
-        <div className="absolute bottom-6 left-4 right-4 z-[75] max-w-lg mx-auto p-4 rounded-3xl bg-[var(--card-bg)] border border-amber-500/40 shadow-2xl backdrop-blur-md animate-fade-in">
+        <div className="absolute bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-[max(1rem,env(safe-area-inset-left))] right-[max(1rem,env(safe-area-inset-right))] z-[75] max-w-lg mx-auto p-4 rounded-3xl bg-[var(--card-bg)] border border-amber-500/40 shadow-2xl backdrop-blur-md animate-fade-in">
           <div className="flex items-start gap-3">
             <div className="w-9 h-9 rounded-2xl bg-amber-500/15 text-amber-500 flex items-center justify-center shrink-0 mt-0.5">
               <AlertTriangle className="w-5 h-5" />
@@ -1866,7 +1902,7 @@ export const JeepTransitMap: React.FC<JeepTransitMapProps> = ({
       )}
 
       {!isCalculating && !isOutOfCoverage && activeJourney && (
-        <div className="absolute bottom-4 left-4 right-4 z-[70] max-w-lg mx-auto">
+        <div className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-[max(1rem,env(safe-area-inset-left))] right-[max(1rem,env(safe-area-inset-right))] z-[70] max-w-lg mx-auto">
           <div className="rounded-3xl bg-[var(--card-bg)] border border-[var(--card-border)] shadow-2xl overflow-hidden backdrop-blur-md transition-all">
             {/* JOURNEY OPTION SWITCHER (If Multiple Transits Available) */}
             {journeys.length > 1 && (

@@ -734,16 +734,16 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
       />
 
       {/* Header & Inset Subtabs - Row 1 Only */}
-      <div className="flex items-center justify-between gap-1.5 pb-2.5 border-b border-[var(--card-border)] relative">
+      <div className="flex flex-wrap xs:flex-nowrap items-center justify-between gap-1.5 pb-2.5 border-b border-[var(--card-border)] relative">
         {/* iOS Segmented Subtabs */}
-        <div className="flex items-center gap-1 p-1 bg-[var(--nested-bg)] border border-[var(--card-border)] rounded-xl shrink-0 overflow-x-auto no-scrollbar max-w-[calc(100%-115px)] sm:max-w-none">
+        <div className="flex items-center gap-1 p-1 bg-[var(--nested-bg)] border border-[var(--card-border)] rounded-xl min-w-0 overflow-x-auto no-scrollbar max-w-full xs:max-w-[calc(100%-130px)] sm:max-w-none">
           <button
             type="button"
             onClick={() => {
               setActiveSubTab('today');
               localStorage.setItem('skweladabaw_default_view', 'today');
             }}
-            className={`flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-lg text-xs font-semibold transition-all pressable ${
+            className={`flex items-center justify-center gap-1 py-1.5 px-2 sm:px-2.5 rounded-lg text-xs font-semibold transition-all pressable whitespace-nowrap ${
               activeSubTab === 'today'
                 ? 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] font-bold shadow-xs'
                 : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -760,7 +760,7 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
               setActiveSubTab('weekly');
               localStorage.setItem('skweladabaw_default_view', 'weekly');
             }}
-            className={`flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-lg text-xs font-semibold transition-all pressable ${
+            className={`flex items-center justify-center gap-1 py-1.5 px-2 sm:px-2.5 rounded-lg text-xs font-semibold transition-all pressable whitespace-nowrap ${
               activeSubTab === 'weekly'
                 ? 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] font-bold shadow-xs'
                 : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -774,7 +774,7 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
           <button
             type="button"
             onClick={() => setActiveSubTab('reminders')}
-            className={`flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-lg text-xs font-semibold transition-all pressable ${
+            className={`flex items-center justify-center gap-1 py-1.5 px-2 sm:px-2.5 rounded-lg text-xs font-semibold transition-all pressable whitespace-nowrap ${
               activeSubTab === 'reminders'
                 ? 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] font-bold shadow-xs'
                 : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'

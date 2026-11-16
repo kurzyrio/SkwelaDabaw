@@ -4,12 +4,18 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.view.View;
 import android.webkit.GeolocationPermissions;
 import android.webkit.PermissionRequest;
 import android.webkit.WebSettings;
 import androidx.annotation.NonNull;
 import androidx.core.content.ContextCompat;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.BridgeWebChromeClient;
 
@@ -29,6 +35,38 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(EagleOverlayPlugin.class);
         handleLaunchIntent(getIntent());
         super.onCreate(savedInstanceState);
+
+        // Enforce edge-to-edge safely on Android 15+ (API 35+) while forwarding systemBar & cutout
+        // insets unconsumed to the WebView so CSS env(safe-area-inset-*) works without double-padding older Android versions.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+            WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+            View contentRoot = findViewById(android.R.id.content);
+            if (contentRoot != null) {
+                ViewCompat.setOnApplyWindowInsetsListener(contentRoot, (v, windowInsets) -> {
+                    Insets imeInsets = windowInsets.getInsets(WindowInsetsCompat.Type.ime());
+                    Insets navInsets = windowInsets.getInsets(WindowInsetsCompat.Type.navigationBars());
+
+                    // Resize container cleanly above soft keyboard on API 35+ edge-to-edge mode
+                    v.setPadding(0, 0, 0, Math.max(0, imeInsets.bottom));
+
+                    if (imeInsets.bottom > 0) {
+                        // Consume IME and bottom nav inset while IME covers the gesture bar,
+                        // leaving top status bar & camera cutout insets intact for WebView env().
+                        return new WindowInsetsCompat.Builder(windowInsets)
+                                .setInsets(WindowInsetsCompat.Type.ime(), Insets.NONE)
+                                .setInsets(
+                                        WindowInsetsCompat.Type.navigationBars(),
+                                        Insets.of(navInsets.left, navInsets.top, navInsets.right, 0)
+                                )
+                                .build();
+                    }
+                    return windowInsets;
+                });
+                ViewCompat.requestApplyInsets(contentRoot);
+            }
+        } else {
+            WindowCompat.setDecorFitsSystemWindows(getWindow(), true);
+        }
 
         // Initialize 5-minute background weather monitoring service
         WeatherBackgroundReceiver.scheduleNextWeatherAlarm(this, System.currentTimeMillis() + 10000L);

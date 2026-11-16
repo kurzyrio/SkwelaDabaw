@@ -15,7 +15,8 @@ import {
   Info,
   MapPin,
   CalendarDays,
-  Clock
+  Clock,
+  CloudOff
 } from 'lucide-react';
 import { 
   fetchDavaoWeather, 
@@ -33,16 +34,23 @@ export const WeatherPage: React.FC<WeatherPageProps> = ({ onBack }) => {
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadWeather = async (force = false) => {
     if (force) setIsRefreshing(true);
     else setIsLoading(true);
+    setLoadError(null);
 
     try {
       const data = await fetchDavaoWeather(force);
-      setWeather(data);
+      if (data) {
+        setWeather(data);
+      } else {
+        setLoadError('Unable to reach weather service right now.');
+      }
     } catch (err) {
       console.warn('Error loading weather data:', err);
+      setLoadError('Unable to load Davao City weather forecast.');
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -165,79 +173,132 @@ export const WeatherPage: React.FC<WeatherPageProps> = ({ onBack }) => {
         </div>
       )}
 
-      {/* Hero Temperature & Heat Index Inset Card */}
-      <div className="p-5 rounded-3xl bg-[var(--card-bg)] border border-[var(--card-border)] space-y-4">
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div>
-            <span className="text-[10px] font-bold tracking-wider uppercase text-[var(--text-secondary)]">
-              Current Temperature
+      {/* Refresh Error Banner when cached weather is displayed */}
+      {weather && loadError && (
+        <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertTriangle className="w-4 h-4 text-[#FF9F0A] shrink-0" />
+            <span className="text-[var(--text-secondary)] truncate">
+              Could not refresh live forecast — showing last saved data.
             </span>
-            <div className="flex items-baseline gap-2 mt-0.5">
-              <span className="text-5xl font-black tracking-tight text-[var(--text-primary)]">
-                {current ? `${Math.round(current.temp)}°` : '--°'}
+          </div>
+          <button
+            type="button"
+            onClick={() => loadWeather(true)}
+            disabled={isRefreshing}
+            className="px-3 py-1 rounded-xl bg-[var(--nested-bg)] border border-[var(--card-border)] text-[var(--text-primary)] font-bold shrink-0 pressable"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* Initial Loading State */}
+      {isLoading && !weather ? (
+        <div className="p-6 rounded-3xl bg-[var(--card-bg)] border border-[var(--card-border)] flex flex-col items-center justify-center text-center gap-3 py-10">
+          <RefreshCw className="w-6 h-6 text-sky-400 animate-spin" />
+          <div className="space-y-1">
+            <p className="text-sm font-bold text-[var(--text-primary)]">Loading Davao City Forecast</p>
+            <p className="text-xs text-[var(--text-secondary)]">Checking current temperature, rain outlook, and heat index...</p>
+          </div>
+        </div>
+      ) : !isLoading && !weather ? (
+        /* Dedicated Error & Retry Fallback when offline/failed with no cached forecast */
+        <div className="p-6 rounded-3xl bg-[var(--card-bg)] border border-[var(--card-border)] flex flex-col items-center justify-center text-center gap-3.5 py-10">
+          <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-500 flex items-center justify-center">
+            <CloudOff className="w-6 h-6" />
+          </div>
+          <div className="space-y-1 max-w-sm">
+            <h3 className="text-sm font-extrabold text-[var(--text-primary)]">Unable to Load Forecast</h3>
+            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+              {loadError || 'No cached Davao City weather forecast is available offline. Connect to mobile data or Wi-Fi and tap Retry.'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => loadWeather(true)}
+            disabled={isRefreshing}
+            className="px-4 py-2 rounded-full bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] font-bold text-xs flex items-center gap-1.5 pressable"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span>Retry Weather</span>
+          </button>
+        </div>
+      ) : (
+        /* Hero Temperature & Heat Index Inset Card */
+        <div className="p-5 rounded-3xl bg-[var(--card-bg)] border border-[var(--card-border)] space-y-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <span className="text-[10px] font-bold tracking-wider uppercase text-[var(--text-secondary)]">
+                Current Temperature
               </span>
-              <span className="text-sm font-bold text-[var(--text-secondary)]">
-                {current?.condition || 'Loading...'}
+              <div className="flex items-baseline gap-2 mt-0.5">
+                <span className="text-5xl font-black tracking-tight text-[var(--text-primary)]">
+                  {current ? `${Math.round(current.temp)}°` : '--°'}
+                </span>
+                <span className="text-sm font-bold text-[var(--text-secondary)]">
+                  {current?.condition || 'Unavailable'}
+                </span>
+              </div>
+            </div>
+
+            <div className="text-right">
+              <span className="text-[10px] font-bold tracking-wider uppercase text-[var(--text-secondary)]">
+                Heat Index (Init sa Davao)
               </span>
+              <div className="mt-1">
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black border ${getHeatBadgeClasses(current?.heatStatus?.level)}`}>
+                  <Thermometer className="w-3.5 h-3.5" />
+                  <span>{current ? `${current.heatIndex}°C` : '--'} • {current?.heatStatus?.label || 'Unavailable'}</span>
+                </span>
+              </div>
             </div>
           </div>
 
-          <div className="text-right">
-            <span className="text-[10px] font-bold tracking-wider uppercase text-[var(--text-secondary)]">
-              Heat Index (Init sa Davao)
-            </span>
-            <div className="mt-1">
-              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black border ${getHeatBadgeClasses(current?.heatStatus?.level)}`}>
-                <Thermometer className="w-3.5 h-3.5" />
-                <span>{current ? `${current.heatIndex}°C` : '--'} • {current?.heatStatus?.label || 'Calculating'}</span>
-              </span>
+          {/* 4 Inset Metric Tiles */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-[var(--card-border)]">
+            <div className="p-3 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] space-y-0.5">
+              <div className="text-[10px] font-bold text-[var(--text-secondary)] flex items-center gap-1">
+                <Droplets className="w-3 h-3 text-sky-400" />
+                <span>Humidity</span>
+              </div>
+              <div className="text-sm font-extrabold text-[var(--text-primary)]">
+                {current?.humidity ?? '--'}%
+              </div>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] space-y-0.5">
+              <div className="text-[10px] font-bold text-[var(--text-secondary)] flex items-center gap-1">
+                <Wind className="w-3 h-3 text-emerald-400" />
+                <span>Wind Speed</span>
+              </div>
+              <div className="text-sm font-extrabold text-[var(--text-primary)]">
+                {current?.windSpeed ?? '--'} km/h
+              </div>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] space-y-0.5">
+              <div className="text-[10px] font-bold text-[var(--text-secondary)] flex items-center gap-1">
+                <Umbrella className="w-3 h-3 text-indigo-400" />
+                <span>Rain Chance</span>
+              </div>
+              <div className="text-sm font-extrabold text-[var(--text-primary)]">
+                {hourly[0]?.rainProbability ?? (current?.precipitation ? '100%' : '0%')}
+              </div>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] space-y-0.5">
+              <div className="text-[10px] font-bold text-[var(--text-secondary)] flex items-center gap-1">
+                <Sun className="w-3 h-3 text-amber-400" />
+                <span>Today Max Heat</span>
+              </div>
+              <div className="text-sm font-extrabold text-[var(--text-primary)]">
+                {advisory?.todayHeatMax ?? current?.heatIndex ?? '--'}°C
+              </div>
             </div>
           </div>
         </div>
-
-        {/* 4 Inset Metric Tiles */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-[var(--card-border)]">
-          <div className="p-3 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] space-y-0.5">
-            <div className="text-[10px] font-bold text-[var(--text-secondary)] flex items-center gap-1">
-              <Droplets className="w-3 h-3 text-sky-400" />
-              <span>Humidity</span>
-            </div>
-            <div className="text-sm font-extrabold text-[var(--text-primary)]">
-              {current?.humidity ?? '--'}%
-            </div>
-          </div>
-
-          <div className="p-3 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] space-y-0.5">
-            <div className="text-[10px] font-bold text-[var(--text-secondary)] flex items-center gap-1">
-              <Wind className="w-3 h-3 text-emerald-400" />
-              <span>Wind Speed</span>
-            </div>
-            <div className="text-sm font-extrabold text-[var(--text-primary)]">
-              {current?.windSpeed ?? '--'} km/h
-            </div>
-          </div>
-
-          <div className="p-3 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] space-y-0.5">
-            <div className="text-[10px] font-bold text-[var(--text-secondary)] flex items-center gap-1">
-              <Umbrella className="w-3 h-3 text-indigo-400" />
-              <span>Rain Chance</span>
-            </div>
-            <div className="text-sm font-extrabold text-[var(--text-primary)]">
-              {hourly[0]?.rainProbability ?? (current?.precipitation ? '100%' : '0%')}
-            </div>
-          </div>
-
-          <div className="p-3 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] space-y-0.5">
-            <div className="text-[10px] font-bold text-[var(--text-secondary)] flex items-center gap-1">
-              <Sun className="w-3 h-3 text-amber-400" />
-              <span>Today Max Heat</span>
-            </div>
-            <div className="text-sm font-extrabold text-[var(--text-primary)]">
-              {advisory?.todayHeatMax ?? current?.heatIndex ?? '--'}°C
-            </div>
-          </div>
-        </div>
-      </div>
+      )}
 
       {/* Hourly Commute Forecast (Next 12 Hours) */}
       {hourly.length > 0 && (
@@ -290,19 +351,19 @@ export const WeatherPage: React.FC<WeatherPageProps> = ({ onBack }) => {
             {daily.map((day, idx) => (
               <div 
                 key={idx}
-                className="flex items-center justify-between p-3 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] gap-2 text-xs"
+                className="flex flex-wrap xs:flex-nowrap items-center justify-between p-3 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] gap-2 text-xs"
               >
-                <div className="w-16">
+                <div className="w-14 shrink-0">
                   <span className="font-bold text-[var(--text-primary)]">
                     {idx === 0 ? 'Today' : day.shortDay}
                   </span>
                 </div>
 
-                <div className="flex-1 truncate text-[11px] font-medium text-[var(--text-secondary)]">
+                <div className="flex-1 min-w-0 truncate text-[11px] font-medium text-[var(--text-secondary)]">
                   {day.condition}
                 </div>
 
-                <div className="flex items-center gap-3 shrink-0">
+                <div className="flex items-center gap-2 sm:gap-3 shrink-0 ml-auto">
                   <span className="text-[10px] font-bold text-sky-400 flex items-center gap-0.5">
                     <Droplets className="w-2.5 h-2.5" />
                     <span>{day.rainProbabilityMax}%</span>

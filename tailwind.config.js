@@ -1,3 +1,5 @@
+import defaultTheme from 'tailwindcss/defaultTheme';
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
@@ -7,6 +9,10 @@ export default {
   ],
   darkMode: 'class',
   theme: {
+    screens: {
+      xs: '375px',
+      ...defaultTheme.screens,
+    },
     extend: {
       colors: {
         // Dynamic CSS Variable Tokens for System-Wide Theming
@@ -73,6 +79,8 @@ export default {
         sans: ['Inter', 'Plus Jakarta Sans', 'system-ui', '-apple-system', 'sans-serif'],
       },
       boxShadow: {
+        '2xs': '0 1px 0 0 rgb(0 0 0 / 0.05)',
+        'xs': '0 1px 2px 0 rgb(0 0 0 / 0.05)',
         'input': '0px 2px 3px -1px rgba(0, 0, 0, 0.1), 0px 1px 0px 0px rgba(25, 28, 33, 0.02), 0px 0px 0px 1px rgba(25, 28, 33, 0.08)',
         'glass': '0 8px 32px 0 rgba(0, 0, 0, 0.06)',
         'glass-dark': '0 8px 32px 0 rgba(0, 0, 0, 0.3)',
@@ -81,6 +89,9 @@ export default {
         'glow-amber': '0 0 24px -4px rgba(251, 191, 36, 0.25)',
         'elevated': '0 4px 24px -4px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04)',
         'elevated-dark': '0 4px 24px -4px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.2)',
+      },
+      borderRadius: {
+        'xs': '0.125rem',
       },
       backdropBlur: {
         'xs': '2px',
@@ -91,6 +102,8 @@ export default {
         'fade-in': 'fadeIn 0.25s ease-out',
         'slide-up': 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
         'scale-in': 'scaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+        'scale-up': 'scaleUp 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+        'modal-pop-in': 'modalPopIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards',
         'shimmer': 'shimmer 2s linear infinite',
         'glow-pulse': 'glowPulse 3s ease-in-out infinite',
         'mesh-shift': 'meshShift 20s ease-in-out infinite alternate',
@@ -107,6 +120,14 @@ export default {
         scaleIn: {
           '0%': { opacity: '0', transform: 'scale3d(0.95, 0.95, 1)' },
           '100%': { opacity: '1', transform: 'scale3d(1, 1, 1)' },
+        },
+        scaleUp: {
+          '0%': { opacity: '0', transform: 'scale3d(0.94, 0.94, 1)' },
+          '100%': { opacity: '1', transform: 'scale3d(1, 1, 1)' },
+        },
+        modalPopIn: {
+          '0%': { opacity: '0', transform: 'translate3d(0, 8px, 0) scale3d(0.96, 0.96, 1)' },
+          '100%': { opacity: '1', transform: 'translate3d(0, 0, 0) scale3d(1, 1, 1)' },
         },
         shimmer: {
           '0%': { backgroundPosition: '-200% center' },

@@ -156,7 +156,7 @@ export const GradeCalculator: React.FC = () => {
                 <button
                   key={s.id}
                   onClick={() => setGradingScale(s.id as any)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                  className={`px-2 sm:px-3 py-1.5 rounded-xl text-[11px] xs:text-xs font-semibold transition-all truncate ${
                     gradingScale === s.id
                       ? 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] font-bold shadow-xs'
                       : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'

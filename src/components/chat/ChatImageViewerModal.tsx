@@ -1,5 +1,6 @@
 import React from 'react';
 import { X, Download } from 'lucide-react';
+import { useBackHandler, BackPriority } from '../../hooks/useBackHandler';
 
 interface ChatImageViewerModalProps {
   isOpen: boolean;
@@ -12,15 +13,17 @@ export const ChatImageViewerModal: React.FC<ChatImageViewerModalProps> = ({
   imageUrl,
   onClose
 }) => {
+  useBackHandler(isOpen && Boolean(imageUrl), onClose, BackPriority.MODAL, 'chat_image_viewer');
+
   if (!isOpen || !imageUrl) return null;
 
   return (
     <div 
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md sheet-backdrop-enter select-none"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] bg-black/90 backdrop-blur-md sheet-backdrop-enter select-none"
       onClick={onClose}
     >
       {/* Top action bar */}
-      <div className="absolute top-4 right-4 z-10 flex items-center gap-3">
+      <div className="absolute top-[max(1rem,env(safe-area-inset-top))] right-[max(1rem,env(safe-area-inset-right))] z-10 flex items-center gap-3">
         <a
           href={imageUrl}
           download="skweladabaw_photo.webp"
