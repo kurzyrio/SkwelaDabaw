@@ -840,6 +840,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           };
           saveSession(restoredSession);
           saveLocalUserRecord(existingCloud);
+          setOnboardingCompleted(true);
           sessionStorage.setItem('skwela_session_checked', 'true');
           onUpdateSession(restoredSession);
           setIsLoggingIn(false);
@@ -873,6 +874,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         studentId: userSession.studentId || ''
       };
       saveSession(merged);
+      setOnboardingCompleted(true);
       await saveUserProfile(merged);
       await syncLocalDataToCloud(merged);
       onUpdateSession(merged);
@@ -908,6 +910,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       };
       saveSession(restored);
       saveLocalUserRecord(pendingCloudUser);
+      setOnboardingCompleted(true);
       sessionStorage.setItem('skwela_session_checked', 'true');
       localStorage.removeItem('skweladabaw_pending_guest_schedules');
       localStorage.removeItem('skweladabaw_pending_guest_tasks');
@@ -967,6 +970,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       };
       saveSession(merged);
       saveLocalUserRecord(merged as any);
+      setOnboardingCompleted(true);
       sessionStorage.setItem('skwela_session_checked', 'true');
       await saveUserProfile(merged);
       await syncLocalDataToCloud(merged);
@@ -1033,7 +1037,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         submessage: 'Verifying availability and registering changes'
       }, async () => {
         return await updateUsername(
-          userSession.email || userSession.name,
+          userSession.uid || userSession.email || userSession.name,
           newUsernameInput,
           userSession.lastUsernameChange
         );

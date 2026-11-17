@@ -17,10 +17,38 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.5.19',
+    releaseDate: 'November 17, 2026',
+    title: 'Existing Account Sign-In Recovery & Onboarding Bypass Fix',
+    isLatest: true,
+    tagline: 'Ensures returning accounts sign straight back into their restored classes, tasks, and profile without repeating onboarding.',
+    highlights: [
+      'Fixed returning accounts falling back into new-user onboarding steps when signing in with their registered email',
+      'Recovered accounts with prior placeholder names or setup flags directly into the main app',
+      'Persisted custom usernames reliably during onboarding finish and profile completion modals'
+    ],
+    items: [
+      {
+        type: 'fix',
+        title: 'Reliable Returning Account Recognition',
+        description: 'Cross-checks both account lookup and synced cloud timetable data so existing users enter the app directly instead of restarting onboarding.'
+      },
+      {
+        type: 'fix',
+        title: 'Automatic Profile Recovery',
+        description: 'Heals placeholder names and setup flags on existing accounts and preserves real email addresses across syncs.'
+      },
+      {
+        type: 'fix',
+        title: 'Username Persistence in Profile Updates',
+        description: 'Saves custom usernames during profile updates and onboarding finish without silently dismissing failed saves.'
+      }
+    ]
+  },
+  {
     version: '1.11.5.18',
     releaseDate: 'November 17, 2026',
     title: 'Reliable Sign-In, Fast Account Switching & Account Deletion Fixes',
-    isLatest: true,
     tagline: 'Instant client logout for smooth account switching, reliable account deletion, and consistent profile sync without duplicate accounts.',
     highlights: [
       'Instant non-blocking logout that clears the active workspace while keeping per-account offline backups ready to switch back',

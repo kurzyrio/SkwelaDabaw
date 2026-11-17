@@ -1,4 +1,4 @@
-import { StudentAuthSession, getSavedSession, saveSession, signOutUser } from './authService';
+import { StudentAuthSession, getSavedSession, saveSession, signOutUser, hasCompletedOnboarding } from './authService';
 import { ClassSchedule } from '../types';
 import { db, clearAllDexieData } from '../db';
 import { auth, isFirebaseConfigured } from './firebase';
@@ -62,6 +62,7 @@ export interface ProfileVerificationResult {
 export interface CheckUserResult {
   state: 'PROFILE_COMPLETE' | 'PROFILE_INCOMPLETE' | 'NETWORK_OR_DB_ERROR' | 'USER_NOT_FOUND';
   user?: UserAccountRecord;
+  isReturningAccount?: boolean;
   missingFields: string[];
   error?: string;
 }
@@ -333,7 +334,10 @@ export async function checkExistingUserDetailed(
 
   // 1. Check MySQL cloud database
   try {
-    const idToken = await getFirebaseIdToken();
+    let idToken = await getFirebaseIdToken();
+    if (!idToken) {
+      idToken = await getFirebaseIdToken(true);
+    }
     const headers: Record<string, string> = idToken ? { Authorization: `Bearer ${idToken}` } : {};
     const tokenParam = idToken ? `&token=${encodeURIComponent(idToken)}` : '';
     const lookupUrl = `${USER_API_URL}?action=lookup&uid=${encodeURIComponent(uid || '')}&email=${encodeURIComponent(email || '')}${tokenParam}&t=${Date.now()}`;
@@ -343,6 +347,7 @@ export async function checkExistingUserDetailed(
     if (httpRes.status === 404) {
       return {
         state: 'USER_NOT_FOUND',
+        isReturningAccount: false,
         missingFields: ['username', 'displayName']
       };
     }
@@ -350,11 +355,12 @@ export async function checkExistingUserDetailed(
     // Case B: Successful HTTP response (200-299)
     if (httpRes.status >= 200 && httpRes.status < 300) {
       const data = httpRes.data;
-      if (data) {
+      if (data && typeof data === 'object') {
         // Explicit non-existent user state returned by backend
         if (data.exists === false || data.status === 'USER_NOT_FOUND') {
           return {
             state: 'USER_NOT_FOUND',
+            isReturningAccount: false,
             missingFields: ['username', 'displayName']
           };
         }
@@ -368,9 +374,18 @@ export async function checkExistingUserDetailed(
             String(data.user.displayName).trim().length > 0
           );
           const isComplete = data.isSetupComplete !== false && hasCoreFields;
+          const isReturning = Boolean(
+            data.isReturningAccount === true ||
+            isComplete ||
+            data.user.isSetupComplete === true ||
+            (data.user.campusId && String(data.user.campusId).trim().length > 0) ||
+            (data.user.age && Number(data.user.age) > 0) ||
+            Boolean(data.user.gender)
+          );
           return {
             state: isComplete ? 'PROFILE_COMPLETE' : 'PROFILE_INCOMPLETE',
             user: data.user as UserAccountRecord,
+            isReturningAccount: isReturning,
             missingFields: Array.isArray(data.missingFields) ? data.missingFields : (isComplete ? [] : ['username'])
           };
         }
@@ -389,10 +404,14 @@ export async function checkExistingUserDetailed(
         }
       }
 
-      // If data is null or empty object under 200 OK, treat as new user
+      // Non-object / unparseable HTTP 200 body must never trigger false onboarding as a new user
+      const registry = getLocalUserRegistry();
+      const localUser = (uid && registry[uid]) || (email && registry[email.toLowerCase()]) || undefined;
       return {
-        state: 'USER_NOT_FOUND',
-        missingFields: ['username', 'displayName']
+        state: 'NETWORK_OR_DB_ERROR',
+        user: localUser,
+        missingFields: [],
+        error: 'Unexpected response format from account verification server.'
       };
     }
 
@@ -468,7 +487,8 @@ export async function saveUserProfile(
 
   // 2. Direct instant push to MySQL user profile endpoint
   try {
-    updateUserProfileFields(uid, {
+    await updateUserProfileFields(uid, {
+      ...(record.username ? { username: record.username } : {}),
       displayName: record.displayName,
       campusId: record.campusId,
       course: record.course,
@@ -1026,7 +1046,7 @@ export async function switchAccountSchedules(
 
   // Then flush any restored pending backup under newUid's active token & fetch latest authoritative data from MySQL
   try {
-    if (shouldPushRestoredLocal && (typeof navigator === 'undefined' || navigator.onLine)) {
+    if (shouldPushRestoredLocal && hasCompletedOnboarding() && (typeof navigator === 'undefined' || navigator.onLine)) {
       await syncCloudDataBiDirectional();
     } else {
       await restoreUserData(newUid, token);

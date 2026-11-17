@@ -1,6 +1,6 @@
 {
-  "version": "1.11.5.18",
-  "versionCode": 147,
+  "version": "1.11.5.19",
+  "versionCode": 148,
   "releaseDate": "2026-11-17",
   "versionScheme": {
     "digit1": "App Version",
@@ -13,15 +13,15 @@
   "forceUpdate": false,
   "developer": "Kurzyrio",
   "supportEmail": "jerriviencenatad@gmail.com",
-  "title": "Reliable Sign-In, Fast Account Switching & Delete Account Fixes",
+  "title": "Existing Account Sign-In Recovery & Onboarding Bypass Fix",
   "releaseNotes": [
-    "Made logging out instant while preserving per-account backups so switching back or working offline stays seamless.",
-    "Fixed Delete Account & Cloud Data to reliably clear cloud and local records without hanging.",
-    "Prevented duplicate accounts and repeated age/gender prompts when signing back in, rolled back failed logins cleanly, and added an All Shifts toggle on DC Bus routes."
+    "Fixed returning student accounts being mistakenly sent to onboarding when signing back in with their registered email.",
+    "Recovered accounts whose profile display name or setup flag had been reset during earlier merges directly into their restored timetable and tasks.",
+    "Saved custom usernames cleanly across onboarding completion and in-app profile prompts without dropping changes."
   ],
   "downloadUrl": "https://skweladabaw.kurzyrio.site/download",
-  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.18.apk",
-  "sizeBytes": 27024876,
+  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.19.apk",
+  "sizeBytes": 27026062,
   "sizeFormatted": "25.8 MB",
-  "sha256": "4feffaf495422cf75760a17decaf61659072496459196cf91017a57be6f9f2ff"
+  "sha256": "039b4a2eaf310fc55d4f43e0ab9aa36f2479251c37bc1fcdff6d6962ddf8d021"
 }

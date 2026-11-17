@@ -84,12 +84,20 @@ export const MissingProfileInfoModal: React.FC<MissingProfileInfoModalProps> = (
       if (needsAge && parsedAge !== undefined) payload.age = parsedAge;
 
       if (Object.keys(payload).length > 0) {
-        await withProcessing({
+        const savedOk = await withProcessing({
           message: 'Saving Profile • Please wait',
           submessage: 'Completing your Davao student account'
         }, async () => {
-          await updateUserProfileFields(uid, payload);
+          return await updateUserProfileFields(uid, payload);
         });
+        if (!savedOk && (typeof navigator === 'undefined' || navigator.onLine)) {
+          setErrorMsg(
+            needsUsername
+              ? 'Could not save your profile right now (that username may already be taken). Please check and try again.'
+              : 'Could not save your profile to the server right now. Please try again.'
+          );
+          return;
+        }
       }
 
       onSaved(payload);

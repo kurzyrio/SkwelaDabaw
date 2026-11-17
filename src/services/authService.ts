@@ -264,11 +264,18 @@ const performGoogleSignIn = async (currentCampusId: string): Promise<StudentAuth
           const firebaseUser = userCred.user;
           const isSameOrGuest = !prevUid || prevUid === firebaseUser.uid;
 
+          const resolvedNativeEmail =
+            firebaseUser.email ||
+            firebaseUser.providerData?.find((p) => Boolean(p?.email))?.email ||
+            nativeResult!.email ||
+            (isSameOrGuest ? prevSession.email : '') ||
+            '';
+
           const session: StudentAuthSession = {
             isLoggedIn: true,
             uid: firebaseUser.uid,
             name: firebaseUser.displayName || nativeResult!.displayName || (isSameOrGuest ? prevSession.name : '') || 'Student',
-            email: firebaseUser.email || nativeResult!.email || (isSameOrGuest ? prevSession.email : '') || '',
+            email: resolvedNativeEmail,
             avatar: firebaseUser.photoURL || nativeResult!.photoUrl || (isSameOrGuest ? prevSession.avatar : '') || '',
             campusId: currentCampusId || (isSameOrGuest ? prevSession.campusId : '') || '',
             studentId: isSameOrGuest ? (prevSession.studentId || '') : '',
@@ -316,11 +323,17 @@ const performGoogleSignIn = async (currentCampusId: string): Promise<StudentAuth
     try {
       return await withTimeout(
         (async () => {
+          const resolvedWebEmail =
+            user.email ||
+            user.providerData?.find((p) => Boolean(p?.email))?.email ||
+            (isSameOrGuest ? prevSession.email : '') ||
+            '';
+
           const session: StudentAuthSession = {
             isLoggedIn: true,
             uid: user.uid,
             name: user.displayName || (isSameOrGuest ? prevSession.name : '') || 'Student',
-            email: user.email || (isSameOrGuest ? prevSession.email : '') || '',
+            email: resolvedWebEmail,
             avatar: user.photoURL || (isSameOrGuest ? prevSession.avatar : '') || '',
             campusId: currentCampusId || (isSameOrGuest ? prevSession.campusId : '') || '',
             studentId: isSameOrGuest ? (prevSession.studentId || '') : '',
