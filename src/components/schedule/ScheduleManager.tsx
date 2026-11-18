@@ -206,11 +206,21 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
   }, []);
 
   // Conflict Resolution Handlers
+  const recordExcludedScheduleDeletions = (uid: string, kept: ClassSchedule[], candidates: ClassSchedule[]) => {
+    const keptUuids = new Set(kept.map((k) => k.uuid).filter(Boolean));
+    for (const item of candidates) {
+      if (item.uuid && !keptUuids.has(item.uuid)) {
+        recordSyncDeletion('schedules', item.uuid, uid, item.updatedAt || item.createdAt);
+      }
+    }
+  };
+
   const handleResolveReplaceLocal = async () => {
     if (!conflictData) return;
     try {
+      recordExcludedScheduleDeletions(conflictData.uid, conflictData.cloudSchedules, conflictData.localSchedules);
       await db.schedules.clear();
-      await db.schedules.bulkAdd(conflictData.cloudSchedules);
+      await db.schedules.bulkAdd(conflictData.cloudSchedules.map(({ id, ...rest }) => rest as ClassSchedule));
       setConflictData(null);
       setOverlapWarningItems(null);
     } catch (err) {
@@ -221,7 +231,8 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
   const handleResolveKeepLocal = async () => {
     if (!conflictData) return;
     try {
-      await backupSchedulesToCloud(conflictData.uid, conflictData.localSchedules);
+      recordExcludedScheduleDeletions(conflictData.uid, conflictData.localSchedules, conflictData.cloudSchedules);
+      await backupSchedulesToCloud(conflictData.uid, conflictData.localSchedules, true);
       setConflictData(null);
       setOverlapWarningItems(null);
     } catch (err) {
@@ -262,8 +273,8 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
 
     try {
       await db.schedules.clear();
-      await db.schedules.bulkAdd(mergedList);
-      await backupSchedulesToCloud(uid, mergedList);
+      await db.schedules.bulkAdd(mergedList.map(({ id, ...rest }) => rest as ClassSchedule));
+      await backupSchedulesToCloud(uid, mergedList, true);
       setConflictData(null);
       setOverlapWarningItems(null);
     } catch (err) {
@@ -279,9 +290,10 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
     });
     const merged = [...localSchedules, ...nonCollidingCloud.map(({ id, ...rest }) => rest as ClassSchedule)];
     try {
+      recordExcludedScheduleDeletions(uid, merged, [...localSchedules, ...cloudSchedules]);
       await db.schedules.clear();
-      await db.schedules.bulkAdd(merged);
-      await backupSchedulesToCloud(uid, merged);
+      await db.schedules.bulkAdd(merged.map(({ id, ...rest }) => rest as ClassSchedule));
+      await backupSchedulesToCloud(uid, merged, true);
       setConflictData(null);
       setOverlapWarningItems(null);
     } catch (err) {
@@ -297,9 +309,10 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
     });
     const merged = [...filteredLocal, ...cloudSchedules.map(({ id, ...rest }) => rest as ClassSchedule)];
     try {
+      recordExcludedScheduleDeletions(uid, merged, [...localSchedules, ...cloudSchedules]);
       await db.schedules.clear();
-      await db.schedules.bulkAdd(merged);
-      await backupSchedulesToCloud(uid, merged);
+      await db.schedules.bulkAdd(merged.map(({ id, ...rest }) => rest as ClassSchedule));
+      await backupSchedulesToCloud(uid, merged, true);
       setConflictData(null);
       setOverlapWarningItems(null);
     } catch (err) {
@@ -313,8 +326,8 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
     const merged = [...localSchedules, ...cloudSchedules.map(({ id, ...rest }) => rest as ClassSchedule)];
     try {
       await db.schedules.clear();
-      await db.schedules.bulkAdd(merged);
-      await backupSchedulesToCloud(uid, merged);
+      await db.schedules.bulkAdd(merged.map(({ id, ...rest }) => rest as ClassSchedule));
+      await backupSchedulesToCloud(uid, merged, true);
       setConflictData(null);
       setOverlapWarningItems(null);
     } catch (err) {
@@ -357,9 +370,10 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
     });
 
     try {
+      recordExcludedScheduleDeletions(uid, resolvedItems, [...localSchedules, ...cloudSchedules]);
       await db.schedules.clear();
-      await db.schedules.bulkAdd(resolvedItems);
-      await backupSchedulesToCloud(uid, resolvedItems);
+      await db.schedules.bulkAdd(resolvedItems.map(({ id, ...rest }) => rest as ClassSchedule));
+      await backupSchedulesToCloud(uid, resolvedItems, true);
       setConflictData(null);
       setOverlapWarningItems(null);
       setIndividualOverlapChoices({});
@@ -401,10 +415,15 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
     try {
       const userSession = getSavedSession();
       const targetUid = userSession.isLoggedIn && userSession.uid ? userSession.uid : undefined;
-      for (const s of schedules) {
-        if (s.id) cancelScheduleReminder(s.id);
+      const latestSchedules = await db.schedules.toArray();
+      const itemsToClear = latestSchedules.length > 0 ? latestSchedules : schedules;
+      for (const s of itemsToClear) {
+        if (s.id) cancelScheduleReminder(s.id).catch(() => {});
       }
-      recordClearAllSchedules(schedules.map((s) => s.uuid), targetUid);
+      recordClearAllSchedules(
+        itemsToClear.map((s) => ({ uuid: s.uuid, updatedAt: s.updatedAt || s.createdAt })),
+        targetUid
+      );
       await db.schedules.clear();
 
       localStorage.setItem(scopedKey('skweladabaw_explicit_empty_schedules', targetUid), 'true');
@@ -418,7 +437,7 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
       syncScheduleToWidgets([]);
 
       if (userSession.isLoggedIn && userSession.uid) {
-        await backupSchedulesToCloud(userSession.uid, []);
+        await backupSchedulesToCloud(userSession.uid, [], true, userSession);
       }
       playEagleSound('alert');
     } catch (err) {
@@ -627,18 +646,30 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
   };
 
   const handleConfirmDelete = async () => {
-    if (!scheduleToDelete?.id) return;
-    const userSession = getSavedSession();
-    const targetUid = userSession.isLoggedIn && userSession.uid ? userSession.uid : undefined;
-    if (scheduleToDelete.uuid) {
-      recordSyncDeletion('schedules', scheduleToDelete.uuid, targetUid);
-    }
-    await db.schedules.delete(scheduleToDelete.id);
-    await cancelScheduleReminder(scheduleToDelete.id);
+    if (!scheduleToDelete) return;
+    const targetToDelete = scheduleToDelete;
     setScheduleToDelete(null);
 
-    // Sync to account-scoped local cache & cloud
     try {
+      const userSession = getSavedSession();
+      const targetUid = userSession.isLoggedIn && userSession.uid ? userSession.uid : undefined;
+      const freshRecord =
+        (targetToDelete.id ? await db.schedules.get(targetToDelete.id).catch(() => undefined) : undefined) ||
+        targetToDelete;
+      const targetId = freshRecord.id ?? targetToDelete.id;
+      const targetUuid = freshRecord.uuid || targetToDelete.uuid;
+      const knownUpdatedAt = freshRecord.updatedAt || freshRecord.createdAt;
+
+      if (targetUuid) {
+        recordSyncDeletion('schedules', targetUuid, targetUid, knownUpdatedAt);
+      }
+      if (targetId) {
+        await db.schedules.delete(targetId);
+        cancelScheduleReminder(targetId).catch(() => {});
+      } else if (targetUuid) {
+        await db.schedules.filter((s) => s.uuid === targetUuid).delete();
+      }
+
       const allNow = await db.schedules.toArray();
       const cacheKey = userSession.isLoggedIn && userSession.uid
         ? `skweladabaw_cached_schedules_${userSession.uid}`
@@ -654,9 +685,11 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
       refreshUnremovableClassNotification(allNow);
       syncScheduleToWidgets(allNow);
       if (userSession.isLoggedIn && userSession.uid) {
-        backupSchedulesToCloud(userSession.uid, allNow, false, userSession);
+        backupSchedulesToCloud(userSession.uid, allNow, true, userSession);
       }
-    } catch (_) {}
+    } catch (err) {
+      console.warn('Error deleting schedule:', err);
+    }
   };
 
   const toggleDaySelection = (day: DayOfWeek) => {

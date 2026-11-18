@@ -46,6 +46,7 @@ import {
 } from '../../services/aiScheduleScanner';
 import { backupSchedulesToCloud } from '../../services/userService';
 import { getSavedSession } from '../../services/authService';
+import { clearSyncDeletion, generateSyncUUID, scopedKey } from '../../services/userScope';
 import { scheduleAllClassSchedulesReminders, refreshUnremovableClassNotification } from '../../services/notificationService';
 import { syncScheduleToWidgets } from '../../services/widgetService';
 import { Copy, CheckCheck, ExternalLink, ShieldAlert, AlertTriangle, Edit3, QrCode } from 'lucide-react';
@@ -798,30 +799,41 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
     setErrorMessage(null);
 
     try {
+      const currentSession = getSavedSession();
+      const targetUid = currentSession.uid && currentSession.isLoggedIn ? currentSession.uid : undefined;
+      const nowIso = new Date().toISOString();
       const defaultReminder = Number(localStorage.getItem('skweladabaw_reminder_timing')) || 10;
       const cleanItems = selectedItems.map((item) => {
         const { id, ...cleanItem } = item;
+        const itemUuid = cleanItem.uuid || generateSyncUUID('sched');
+        clearSyncDeletion('schedules', itemUuid, targetUid);
         return {
           ...cleanItem,
+          uuid: itemUuid,
           color: cleanItem.color || '#2563EB',
           reminderMinutes: (cleanItem.reminderMinutes !== undefined && cleanItem.reminderMinutes !== null) 
             ? cleanItem.reminderMinutes 
-            : defaultReminder
+            : defaultReminder,
+          createdAt: cleanItem.createdAt || nowIso,
+          updatedAt: nowIso,
+          syncStatus: 'pending' as const
         };
       });
+
+      localStorage.removeItem(scopedKey('skweladabaw_explicit_empty_schedules', targetUid));
+      localStorage.removeItem('skweladabaw_explicit_empty_schedules');
 
       // Atomic bulk addition
       await db.schedules.bulkAdd(cleanItems as any);
 
       // Background cloud backup and local cache update for this user account
-      const currentSession = getSavedSession();
       db.schedules.toArray().then((allClasses) => {
         scheduleAllClassSchedulesReminders(allClasses).catch(console.warn);
         syncScheduleToWidgets(allClasses).catch(console.warn);
         refreshUnremovableClassNotification(allClasses).catch(console.warn);
         if (currentSession.uid && currentSession.isLoggedIn) {
           localStorage.setItem(`skweladabaw_cached_schedules_${currentSession.uid}`, JSON.stringify(allClasses));
-          backupSchedulesToCloud(currentSession.uid, allClasses, false, currentSession);
+          backupSchedulesToCloud(currentSession.uid, allClasses, true, currentSession);
         } else {
           localStorage.setItem('skweladabaw_cached_schedules_guest', JSON.stringify(allClasses));
         }

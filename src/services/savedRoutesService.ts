@@ -14,6 +14,7 @@ import {
 
 export interface SavedPlace {
   id: string;
+  uuid?: string;
   type: 'home' | 'campus' | 'work' | 'custom';
   name: string;
   address?: string;
@@ -24,12 +25,14 @@ export interface SavedPlace {
 
 export interface FavoriteRoute {
   id: string; // Route ID or code
+  uuid?: string;
   name: string;
   mode: string;
   color?: string;
   origin?: string;
   destination?: string;
   starredAt: string;
+  updatedAt?: string;
 }
 
 const SAVED_PLACES_KEY = 'skweladabaw_saved_places';
@@ -103,10 +106,16 @@ export function savePlace(place: SavedPlace, explicitUid?: string): SavedPlace[]
 export function deletePlace(id: string, explicitUid?: string): SavedPlace[] {
   try {
     const uid = getCurrentStorageUid(explicitUid);
-    const places = getSavedPlaces(uid).filter(p => p.id !== id);
-    recordSyncDeletion('places', id, uid);
+    const current = getSavedPlaces(uid);
+    const existing = current.find(p => p.id === id || p.uuid === id);
+    const places = current.filter(p => p.id !== id && (!existing?.uuid || p.uuid !== existing.uuid));
+    const knownUpdatedAt = existing?.updatedAt;
+    recordSyncDeletion('places', id, uid, knownUpdatedAt);
+    if (existing?.uuid && existing.uuid !== id) {
+      recordSyncDeletion('places', existing.uuid, uid, knownUpdatedAt);
+    }
     writeScopedJson(SAVED_PLACES_KEY, places, uid);
-    queueCloudSync();
+    queueCloudSync(undefined, true);
     return places;
   } catch {
     return getSavedPlaces(explicitUid);
@@ -123,20 +132,29 @@ export function getFavoriteRoutes(explicitUid?: string): FavoriteRoute[] {
 }
 
 export function toggleFavoriteRoute(
-  route: { id: string; name: string; mode: string; color?: string; origin?: string; destination?: string },
+  route: { id: string; uuid?: string; name: string; mode: string; color?: string; origin?: string; destination?: string },
   explicitUid?: string
 ): { isFavorite: boolean; favorites: FavoriteRoute[] } {
   try {
     const uid = getCurrentStorageUid(explicitUid);
     const favorites = getFavoriteRoutes(uid);
-    const idx = favorites.findIndex(f => f.id === route.id);
+    const idx = favorites.findIndex(f => f.id === route.id || (route.uuid && f.uuid === route.uuid));
     let isFavorite = false;
     if (idx >= 0) {
+      const removed = favorites[idx];
       favorites.splice(idx, 1);
       isFavorite = false;
-      recordSyncDeletion('transit', route.id, uid);
+      const knownUpdatedAt = removed?.updatedAt || removed?.starredAt;
+      recordSyncDeletion('transit', route.id, uid, knownUpdatedAt);
+      if (removed?.uuid && removed.uuid !== route.id) {
+        recordSyncDeletion('transit', removed.uuid, uid, knownUpdatedAt);
+      }
+      if (route.uuid && route.uuid !== route.id && route.uuid !== removed?.uuid) {
+        recordSyncDeletion('transit', route.uuid, uid, knownUpdatedAt);
+      }
     } else {
       clearSyncDeletion('transit', route.id, uid);
+      if (route.uuid) clearSyncDeletion('transit', route.uuid, uid);
       favorites.push({
         ...route,
         starredAt: new Date().toISOString()
@@ -144,7 +162,7 @@ export function toggleFavoriteRoute(
       isFavorite = true;
     }
     writeScopedJson(FAVORITE_ROUTES_KEY, favorites, uid);
-    queueCloudSync();
+    queueCloudSync(undefined, true);
     return { isFavorite, favorites };
   } catch (e) {
     console.error('Error toggling favorite route:', e);

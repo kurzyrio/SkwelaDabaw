@@ -98,7 +98,7 @@ export const TaskManager: React.FC = () => {
   const deleteTask = async (taskOrId: TaskItem | number) => {
     try {
       if (typeof taskOrId === 'number') {
-        const found = tasks.find((t) => t.id === taskOrId);
+        const found = tasks.find((t) => t.id === taskOrId) || await db.tasks.get(taskOrId);
         if (found) {
           await deleteTaskFromSync(found);
         } else {
@@ -688,7 +688,7 @@ export const TaskManager: React.FC = () => {
                 onClick={async () => {
                   const toDelete = taskPendingDelete;
                   setTaskPendingDelete(null);
-                  if (toDelete.id) {
+                  if (toDelete.id || toDelete.uuid) {
                     await deleteTask(toDelete);
                   }
                 }}

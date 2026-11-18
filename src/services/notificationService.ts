@@ -905,22 +905,29 @@ export async function refreshUnremovableClassNotification(
   themeKey?: string
 ): Promise<void> {
   try {
+    const wasExplicitlyPassed = schedules !== undefined;
     let resolvedSchedules = schedules;
-    if (!resolvedSchedules || resolvedSchedules.length === 0) {
+    if (!wasExplicitlyPassed) {
       try {
         resolvedSchedules = await db.schedules.toArray();
       } catch (_) {}
-    }
-    if (!resolvedSchedules || resolvedSchedules.length === 0) {
-      try {
-        const rawJson = localStorage.getItem('skweladabaw_all_schedules_json');
-        if (rawJson) {
-          const parsed = JSON.parse(rawJson);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            resolvedSchedules = parsed;
+      if (!resolvedSchedules || resolvedSchedules.length === 0) {
+        try {
+          const rawSession = localStorage.getItem('skweladabaw_user_session');
+          const parsedSession = rawSession ? JSON.parse(rawSession) : null;
+          const activeUid = parsedSession?.isLoggedIn && parsedSession?.uid ? String(parsedSession.uid) : 'guest';
+          const isExplicitEmpty = localStorage.getItem(`skweladabaw_explicit_empty_schedules_${activeUid}`) === 'true';
+          if (!isExplicitEmpty) {
+            const rawJson = localStorage.getItem('skweladabaw_all_schedules_json');
+            if (rawJson) {
+              const parsed = JSON.parse(rawJson);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                resolvedSchedules = parsed;
+              }
+            }
           }
-        }
-      } catch (_) {}
+        } catch (_) {}
+      }
     }
 
     await syncScheduleToWidgets(resolvedSchedules || []);

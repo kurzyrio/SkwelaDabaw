@@ -170,7 +170,7 @@ export const TaskTrackerPage: React.FC = () => {
     if (!taskOrId) return;
     try {
       if (typeof taskOrId === 'number') {
-        const found = tasks.find((t) => t.id === taskOrId);
+        const found = tasks.find((t) => t.id === taskOrId) || await db.tasks.get(taskOrId);
         if (found) {
           await deleteTask(found);
         } else {

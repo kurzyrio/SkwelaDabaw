@@ -89,6 +89,7 @@ import {
 } from '../../services/userService';
 import type { ClassSchedule } from '../../types';
 import { syncLocalDataToCloud, queueCloudSync, syncCloudDataBiDirectional, LAST_SYNC_KEY } from '../../services/cloudSyncService';
+import { generateSyncUUID, recordSyncDeletion, recordClearAllSchedules } from '../../services/userScope';
 import { AccountLinkSyncModal } from '../auth/AccountLinkSyncModal';
 import { useProcessingOverlay } from '../../contexts/ProcessingOverlayContext';
 import { EagleBuddy } from '../common/EagleBuddy';
@@ -849,9 +850,20 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       }
 
       // If new account or no cloud data conflict, adopt guest profile into the account
+      const adoptNowIso = new Date().toISOString();
       if (hasGuestSchedules && pendingGuestScheds.length > 0) {
+        const preparedScheds = pendingGuestScheds.map((s: any) => {
+          const { id, ...rest } = s;
+          return {
+            ...rest,
+            uuid: rest.uuid || generateSyncUUID('sched'),
+            createdAt: rest.createdAt || adoptNowIso,
+            updatedAt: rest.updatedAt || adoptNowIso,
+            syncStatus: 'pending' as const
+          };
+        });
         await db.schedules.clear();
-        await db.schedules.bulkAdd(pendingGuestScheds);
+        await db.schedules.bulkAdd(preparedScheds);
         localStorage.removeItem('skweladabaw_pending_guest_schedules');
       }
       const pendingGuestTasksRaw = localStorage.getItem('skweladabaw_pending_guest_tasks');
@@ -859,8 +871,18 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         try {
           const tasks = JSON.parse(pendingGuestTasksRaw);
           if (Array.isArray(tasks) && tasks.length > 0) {
+            const preparedTasks = tasks.map((t: any) => {
+              const { id, ...rest } = t;
+              return {
+                ...rest,
+                uuid: rest.uuid || generateSyncUUID('task'),
+                created_at: rest.created_at || adoptNowIso,
+                updated_at: rest.updated_at || adoptNowIso,
+                sync_status: 'pending_create' as const
+              };
+            });
             await db.tasks.clear();
-            await db.tasks.bulkAdd(tasks);
+            await db.tasks.bulkPut(preparedTasks);
           }
         } catch (_) {}
         localStorage.removeItem('skweladabaw_pending_guest_tasks');
@@ -928,14 +950,33 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     if (!pendingCloudUser || !pendingGoogleSession) return;
     setIsResolvingSyncConflict(true);
     try {
-      // Restore pending guest schedules into Dexie before pushing to cloud
+      // Restore pending guest schedules into Dexie before pushing to cloud (tombstone replaced cloud rows)
+      const replaceNowIso = new Date().toISOString();
+      const targetUid = pendingCloudUser.uid || pendingGoogleSession.uid;
       const pendingGuestSchedRaw = localStorage.getItem('skweladabaw_pending_guest_schedules');
       if (pendingGuestSchedRaw) {
         try {
           const scheds = JSON.parse(pendingGuestSchedRaw);
           if (Array.isArray(scheds) && scheds.length > 0) {
+            const existingCloudScheds = await db.schedules.toArray();
+            if (existingCloudScheds.length > 0) {
+              recordClearAllSchedules(
+                existingCloudScheds.map((s) => ({ uuid: s.uuid, updatedAt: s.updatedAt || s.createdAt })),
+                targetUid
+              );
+            }
+            const preparedScheds = scheds.map((s: any) => {
+              const { id, ...rest } = s;
+              return {
+                ...rest,
+                uuid: rest.uuid || generateSyncUUID('sched'),
+                createdAt: rest.createdAt || replaceNowIso,
+                updatedAt: rest.updatedAt || replaceNowIso,
+                syncStatus: 'pending' as const
+              };
+            });
             await db.schedules.clear();
-            await db.schedules.bulkAdd(scheds);
+            await db.schedules.bulkAdd(preparedScheds);
           }
         } catch (_) {}
         localStorage.removeItem('skweladabaw_pending_guest_schedules');
@@ -945,8 +986,24 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         try {
           const tasks = JSON.parse(pendingGuestTasksRaw);
           if (Array.isArray(tasks) && tasks.length > 0) {
+            const existingCloudTasks = await db.tasks.toArray();
+            for (const et of existingCloudTasks) {
+              if (et.uuid) {
+                recordSyncDeletion('tasks', et.uuid, targetUid, et.updated_at || et.created_at);
+              }
+            }
+            const preparedTasks = tasks.map((t: any) => {
+              const { id, ...rest } = t;
+              return {
+                ...rest,
+                uuid: rest.uuid || generateSyncUUID('task'),
+                created_at: rest.created_at || replaceNowIso,
+                updated_at: rest.updated_at || replaceNowIso,
+                sync_status: 'pending_create' as const
+              };
+            });
             await db.tasks.clear();
-            await db.tasks.bulkAdd(tasks);
+            await db.tasks.bulkPut(preparedTasks);
           }
         } catch (_) {}
         localStorage.removeItem('skweladabaw_pending_guest_tasks');

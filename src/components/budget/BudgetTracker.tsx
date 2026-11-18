@@ -16,6 +16,7 @@ import { ExpenseItem } from '../../types';
 import { PageIntroGuide } from '../common/PageIntroGuide';
 import { queueCloudSync } from '../../services/cloudSyncService';
 import { generateSyncUUID, recordSyncDeletion } from '../../services/userScope';
+import { getSavedSession } from '../../services/authService';
 
 type AllowanceFrequency = 'daily' | 'weekly' | 'monthly' | 'custom_days';
 
@@ -123,12 +124,20 @@ export const BudgetTracker: React.FC = () => {
 
   const handleDeleteExpense = async (id?: number) => {
     if (!id) return;
+    const session = getSavedSession();
+    const uid = session?.isLoggedIn && session?.uid ? session.uid : undefined;
     const existing = await db.expenses.get(id);
     if (existing?.uuid) {
-      recordSyncDeletion('expenses', existing.uuid);
+      recordSyncDeletion('expenses', existing.uuid, uid, existing.updatedAt || existing.createdAt);
     }
     await db.expenses.delete(id);
-    queueCloudSync();
+    try {
+      if (uid && typeof localStorage !== 'undefined') {
+        const remaining = await db.expenses.toArray();
+        localStorage.setItem(`skweladabaw_cached_expenses_${uid}`, JSON.stringify(remaining));
+      }
+    } catch (_) {}
+    queueCloudSync(undefined, true);
   };
 
   const toggleDay = (day: string) => {

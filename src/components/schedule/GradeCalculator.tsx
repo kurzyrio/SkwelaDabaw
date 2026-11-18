@@ -15,6 +15,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import confetti from 'canvas-confetti';
 import { queueCloudSync } from '../../services/cloudSyncService';
 import { generateSyncUUID, recordSyncDeletion } from '../../services/userScope';
+import { getSavedSession } from '../../services/authService';
 
 export const GradeCalculator: React.FC = () => {
   const [isAdding, setIsAdding] = useState(false);
@@ -97,12 +98,20 @@ export const GradeCalculator: React.FC = () => {
 
   const handleDelete = async (id?: number) => {
     if (!id) return;
+    const session = getSavedSession();
+    const uid = session?.isLoggedIn && session?.uid ? session.uid : undefined;
     const existing = await db.grades.get(id);
     if (existing?.uuid) {
-      recordSyncDeletion('grades', existing.uuid);
+      recordSyncDeletion('grades', existing.uuid, uid, existing.updatedAt || existing.createdAt);
     }
     await db.grades.delete(id);
-    queueCloudSync();
+    try {
+      if (uid && typeof localStorage !== 'undefined') {
+        const remaining = await db.grades.toArray();
+        localStorage.setItem(`skweladabaw_cached_grades_${uid}`, JSON.stringify(remaining));
+      }
+    } catch (_) {}
+    queueCloudSync(undefined, true);
   };
 
   // Compute overall weighted GWA / Average

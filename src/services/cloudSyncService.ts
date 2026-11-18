@@ -18,13 +18,16 @@ import { syncScheduleToWidgets, syncTasksToWidgets, syncRoutinesToWidgets, syncW
 import {
   SyncTombstones,
   clearSyncedTombstones,
+  enqueueSyncOperation,
   generateSyncUUID,
   getCurrentStorageUid,
   hasPendingTombstones,
+  mergeSyncTombstones,
   parseUtcTimestampMs,
   readScopedJson,
   readSyncTombstones,
   scopedKey,
+  updateServerClockOffset,
   writeScopedJson
 } from './userScope';
 
@@ -368,6 +371,7 @@ export async function restoreUserData(
     return { restored: false, scheduleCount: 0, taskCount: 0, message: 'No auth token available' };
   }
 
+  return enqueueSyncOperation(async (): Promise<CloudSyncResult> => {
   try {
     let responseData: any = null;
     const requestUrl = `${SYNC_API_URL}?t=${Date.now()}&token=${encodeURIComponent(token)}`;
@@ -401,11 +405,20 @@ export async function restoreUserData(
     }
 
     if (responseData && responseData.success && responseData.exists && responseData.user) {
+      updateServerClockOffset(responseData.serverNow || responseData.timestamp);
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('skwela_network_activity', { detail: { isOnline: true } }));
       }
       const u = responseData.user;
-      const targetUid = String(u.user_id || uid || '');
+      const activeTokenUid = extractJwtTokenUid(token);
+      const serverUid = String(u.user_id || uid || '');
+      const targetUid = activeTokenUid || serverUid;
+      if (serverUid && targetUid && serverUid !== targetUid) {
+        mergeSyncTombstones(readSyncTombstones(serverUid), targetUid);
+      }
+      if (uid && targetUid && uid !== targetUid) {
+        mergeSyncTombstones(readSyncTombstones(uid), targetUid);
+      }
       const currentSaved = getSavedSession();
       const tombstones = readSyncTombstones(targetUid);
       const hasPendingSync = typeof window !== 'undefined' && (
@@ -1080,6 +1093,7 @@ export async function restoreUserData(
   }
 
   return { restored: false, scheduleCount: 0, taskCount: 0 };
+  });
 }
 
 export const PENDING_SYNC_KEY = 'skweladabaw_has_pending_cloud_sync';
@@ -1203,7 +1217,7 @@ if (typeof window !== 'undefined') {
  * Trigger background synchronization from local Dexie to MySQL
  * Debounced to bundle rapid successive edits into a single atomic push.
  */
-export function queueCloudSync(session?: StudentAuthSession): void {
+export function queueCloudSync(session?: StudentAuthSession, immediate = false): void {
   if (typeof window !== 'undefined') {
     localStorage.setItem(PENDING_SYNC_KEY, 'true');
     const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
@@ -1212,6 +1226,14 @@ export function queueCloudSync(session?: StudentAuthSession): void {
 
   if (syncTimeout) {
     clearTimeout(syncTimeout);
+    syncTimeout = null;
+  }
+
+  if (immediate && (typeof navigator === 'undefined' || navigator.onLine)) {
+    syncLocalDataToCloud(session).catch((err) => {
+      console.warn('Immediate cloud sync note:', err);
+    });
+    return;
   }
 
   syncTimeout = setTimeout(() => {
@@ -1246,10 +1268,6 @@ export async function syncLocalDataToCloud(session?: StudentAuthSession): Promis
         uid,
         activeUid: auth.currentUser.uid
       });
-      return false;
-    }
-    if (!Capacitor.isNativePlatform() && isFirebaseConfigured && auth && auth.currentUser?.uid !== uid) {
-      console.warn('[cloudSyncService] Refusing push: active Web Firebase user missing or mismatched', { uid });
       return false;
     }
     if (Capacitor.isNativePlatform()) {
@@ -1291,6 +1309,7 @@ export async function syncLocalDataToCloud(session?: StudentAuthSession): Promis
 
   notifySyncStatus('syncing');
 
+  return enqueueSyncOperation(async (): Promise<boolean> => {
   try {
     const tombstoneSnapshot = readSyncTombstones(uid);
     const [localSchedules, allLocalTasks, localRoutines, localExpenses, localGrades] = await Promise.all([
@@ -1534,6 +1553,7 @@ export async function syncLocalDataToCloud(session?: StudentAuthSession): Promis
 
     const postUrl = `${SYNC_API_URL}?token=${encodeURIComponent(token)}`;
     let pushSucceeded = false;
+    let pushResponseData: any = null;
 
     if (Capacitor.isNativePlatform()) {
       const res = await CapacitorHttp.post({
@@ -1547,6 +1567,7 @@ export async function syncLocalDataToCloud(session?: StudentAuthSession): Promis
         readTimeout: 8000
       });
       const data = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
+      pushResponseData = data;
       pushSucceeded = Boolean(res.status >= 200 && res.status < 300 && data?.success);
       if (!pushSucceeded) {
         console.warn('MySQL sync push response status:', res.status, data);
@@ -1566,6 +1587,7 @@ export async function syncLocalDataToCloud(session?: StudentAuthSession): Promis
         });
         if (res.ok) {
           const data = await res.json();
+          pushResponseData = data;
           pushSucceeded = Boolean(data?.success);
         }
       } finally {
@@ -1581,7 +1603,37 @@ export async function syncLocalDataToCloud(session?: StudentAuthSession): Promis
       return false;
     }
 
-    clearSyncedTombstones(tombstoneSnapshot, uid);
+    updateServerClockOffset(pushResponseData?.serverNow || pushResponseData?.timestamp);
+
+    const confirmedDeletes = pushResponseData?.confirmedDeletes;
+    const confirmedTaskSet = confirmedDeletes && Array.isArray(confirmedDeletes.tasks)
+      ? new Set<string>(confirmedDeletes.tasks.map((u: any) => String(u)))
+      : null;
+
+    if (confirmedDeletes && typeof confirmedDeletes === 'object') {
+      const filterByConfirmed = (entries: Array<{ uuid: string; deletedAt: string }>, arr: any) => {
+        if (!Array.isArray(arr)) return [];
+        const allowed = new Set<string>(arr.map((u: any) => String(u)));
+        return entries.filter((e) => allowed.has(e.uuid));
+      };
+      const bmAllowed = Array.isArray(confirmedDeletes.bookmarks)
+        ? new Set<string>(confirmedDeletes.bookmarks.map((u: any) => String(u)))
+        : new Set<string>();
+      const confirmedSnapshot: SyncTombstones = {
+        schedules: filterByConfirmed(tombstoneSnapshot.schedules, confirmedDeletes.schedules),
+        routines: filterByConfirmed(tombstoneSnapshot.routines, confirmedDeletes.routines),
+        expenses: filterByConfirmed(tombstoneSnapshot.expenses, confirmedDeletes.expenses),
+        transit: filterByConfirmed(tombstoneSnapshot.transit, confirmedDeletes.transit),
+        grades: filterByConfirmed(tombstoneSnapshot.grades, confirmedDeletes.grades),
+        places: filterByConfirmed(tombstoneSnapshot.places, confirmedDeletes.places),
+        tasks: filterByConfirmed(tombstoneSnapshot.tasks, confirmedDeletes.tasks),
+        bookmarks: tombstoneSnapshot.bookmarks.filter((id) => bmAllowed.has(id)),
+        clearSchedulesBefore: confirmedDeletes.clearSchedules === true ? tombstoneSnapshot.clearSchedulesBefore : undefined
+      };
+      clearSyncedTombstones(confirmedSnapshot, uid);
+    } else {
+      clearSyncedTombstones(tombstoneSnapshot, uid);
+    }
 
     await db.transaction(
       'rw',
@@ -1607,6 +1659,9 @@ export async function syncLocalDataToCloud(session?: StudentAuthSession): Promis
         }
         for (const td of pendingDeleteMeta) {
           if (td.uuid) {
+            if (confirmedTaskSet && !confirmedTaskSet.has(td.uuid)) {
+              continue;
+            }
             const cur = await db.tasks.where('uuid').equals(td.uuid).first();
             if (cur && cur.sync_status === 'pending_delete' && cur.id) {
               await db.tasks.delete(cur.id);
@@ -1679,6 +1734,7 @@ export async function syncLocalDataToCloud(session?: StudentAuthSession): Promis
     }
     return false;
   }
+  });
 }
 
 /**

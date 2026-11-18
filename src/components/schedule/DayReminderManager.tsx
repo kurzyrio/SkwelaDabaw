@@ -94,14 +94,16 @@ export const DayReminderManager: React.FC = () => {
   };
 
   const deleteReminder = async (id: number) => {
+    const session = getSavedSession();
+    const uid = session?.isLoggedIn && session?.uid ? session.uid : undefined;
     const existing = await db.dayReminders.get(id);
     if (existing?.uuid) {
-      recordSyncDeletion('routines', existing.uuid);
+      recordSyncDeletion('routines', existing.uuid, uid, existing.updatedAt || existing.createdAt);
     }
-    await cancelDayReminder(id);
     await db.dayReminders.delete(id);
+    cancelDayReminder(id).catch(() => {});
     await syncRoutineCache();
-    queueCloudSync();
+    queueCloudSync(undefined, true);
   };
 
   const handleOpenEditReminder = (item: DayReminderItem) => {

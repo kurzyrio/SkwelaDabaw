@@ -19,10 +19,13 @@ import { scheduleTaskReminder, cancelTaskReminder } from './notificationService'
 import {
   clearSyncDeletion,
   clearSyncedTombstones,
+  computeTombstoneDeletedAt,
+  enqueueSyncOperation,
   parseUtcTimestampMs,
   readSyncTombstones,
   recordSyncDeletion,
-  scopedKey
+  scopedKey,
+  updateServerClockOffset
 } from './userScope';
 
 const TASKS_SYNC_API_URL = 'https://skweladabaw.kurzyrio.site/api/tasks_sync.php';
@@ -258,38 +261,48 @@ export async function updateTask(task: TaskItem, updates: Partial<TaskItem>): Pr
  * - If synced or pending_update: mark as pending_delete so it's hidden from UI and sent to cloud
  */
 export async function deleteTask(task: TaskItem): Promise<void> {
-  const taskId = task.id;
-  const taskUuid = task.uuid;
   const uid = getSavedSession()?.uid;
+  const freshTask =
+    (task.id ? await db.tasks.get(task.id).catch(() => undefined) : undefined) ||
+    (task.uuid ? await db.tasks.where('uuid').equals(task.uuid).first().catch(() => undefined) : undefined) ||
+    task;
 
-  // Cancel local notification
-  if (taskId) {
-    await cancelTaskReminder(taskId);
+  const taskId = freshTask.id ?? task.id;
+  const taskUuid = freshTask.uuid || task.uuid;
+  const knownUpdatedAt = freshTask.updated_at || freshTask.created_at || task.updated_at || task.created_at;
+
+  // Always record a deletion tombstone whenever a UUID exists so in-flight creates cannot resurrect it
+  if (taskUuid) {
+    recordSyncDeletion('tasks', taskUuid, uid, knownUpdatedAt);
   }
 
   // Await Dexie persistence BEFORE updating cache/widgets or flushing to server
-  if (task.sync_status === 'pending_create' || !taskUuid) {
-    // Never synced to cloud or missing UUID -> hard delete immediately
+  if (freshTask.sync_status === 'pending_create' || !taskUuid) {
+    // Never synced to cloud or missing UUID -> remove locally (tombstone stays for any in-flight upload)
     if (taskId) {
       await db.tasks.delete(taskId);
     } else if (taskUuid) {
       await db.tasks.where('uuid').equals(taskUuid).delete();
     }
   } else {
-    // Soft mark as pending_delete and record tombstone for unified cloud sync fallback
-    const now = new Date().toISOString();
+    // Soft mark as pending_delete so UI hides it immediately until server confirms deletion
+    const deletedIso = computeTombstoneDeletedAt(knownUpdatedAt);
     if (taskId) {
       await db.tasks.update(taskId, {
         sync_status: 'pending_delete',
-        updated_at: now
+        updated_at: deletedIso
       });
     } else if (taskUuid) {
       await db.tasks.where('uuid').equals(taskUuid).modify({
         sync_status: 'pending_delete',
-        updated_at: now
+        updated_at: deletedIso
       });
     }
-    recordSyncDeletion('tasks', taskUuid, uid);
+  }
+
+  // Cancel local notification safely without blocking deletion
+  if (taskId) {
+    cancelTaskReminder(taskId).catch(() => {});
   }
 
   // Update local cache and Android widgets from committed Dexie state
@@ -339,7 +352,7 @@ export async function flushPendingSync(): Promise<void> {
   isSyncing = true;
   pushEpoch += 1;
 
-  const run = (async () => {
+  const run = enqueueSyncOperation(async () => {
     try {
     const tombstones = readSyncTombstones(session.uid);
     const pendingTasks = await db.tasks
@@ -372,7 +385,11 @@ export async function flushPendingSync(): Promise<void> {
       if (entry.uuid) deletedEntriesMap.set(entry.uuid, entry);
     }
     for (const td of tasksToDelete) {
-      if (td.uuid) deletedEntriesMap.set(td.uuid, { uuid: td.uuid, deletedAt: td.updated_at });
+      if (td.uuid) {
+        const existingDel = deletedEntriesMap.get(td.uuid);
+        const delIso = existingDel?.deletedAt || computeTombstoneDeletedAt(td.updated_at);
+        deletedEntriesMap.set(td.uuid, { uuid: td.uuid, deletedAt: delIso });
+      }
     }
 
     const payload = {
@@ -433,8 +450,17 @@ export async function flushPendingSync(): Promise<void> {
     }
 
     if (responseData && responseData.success) {
-      // Clear only the snapshotted task tombstones acknowledged in this push
-      if (tombstones.tasks.length > 0) {
+      updateServerClockOffset(responseData.serverNow);
+
+      const confirmedDeletedUuids = new Set<string>(
+        Array.isArray(responseData.deleted_uuids)
+          ? responseData.deleted_uuids.map((u: any) => String(u)).filter(Boolean)
+          : []
+      );
+
+      // Clear only task tombstones explicitly confirmed deleted on the server
+      const confirmedTombstones = tombstones.tasks.filter((e) => confirmedDeletedUuids.has(e.uuid));
+      if (confirmedTombstones.length > 0) {
         clearSyncedTombstones(
           {
             schedules: [],
@@ -443,7 +469,7 @@ export async function flushPendingSync(): Promise<void> {
             transit: [],
             grades: [],
             places: [],
-            tasks: tombstones.tasks,
+            tasks: confirmedTombstones,
             bookmarks: []
           },
           session.uid
@@ -469,11 +495,6 @@ export async function flushPendingSync(): Promise<void> {
       }
 
       // 2. Permanently remove ONLY confirmed deleted tasks from Dexie
-      const confirmedDeletedUuids = new Set<string>(
-        Array.isArray(responseData.deleted_uuids)
-          ? responseData.deleted_uuids.map((u: any) => String(u)).filter(Boolean)
-          : tasksToDelete.map((t) => String(t.uuid || '')).filter(Boolean)
-      );
       await db.transaction('rw', db.tasks, async () => {
         for (const uuid of confirmedDeletedUuids) {
           const cur = await db.tasks.where('uuid').equals(uuid).first();
@@ -506,7 +527,7 @@ export async function flushPendingSync(): Promise<void> {
         scheduleSilentSync(250);
       }
     }
-  })();
+  });
 
   activePushPromise = run;
   return run;
@@ -522,13 +543,8 @@ export async function pullCloudTasks(): Promise<void> {
   if (!session || !session.isLoggedIn) return;
   if (typeof navigator !== 'undefined' && !navigator.onLine) return;
 
-  const pullRun = (async () => {
+  const pullRun = enqueueSyncOperation(async () => {
     try {
-      // Serialize behind any in-flight flushPendingSync so newly pushed tasks appear in serverTasks
-      while (isSyncing && activePushPromise) {
-        await activePushPromise.catch(() => {});
-      }
-
       const epochAtStart = pushEpoch;
       const token = await getFirebaseIdToken();
       if (!token) return;
@@ -549,6 +565,7 @@ export async function pullCloudTasks(): Promise<void> {
         if (res.status >= 200 && res.status < 300 && parsed && parsed.success && Array.isArray(parsed.tasks)) {
           serverTasks = parsed.tasks;
           fetchSucceeded = true;
+          updateServerClockOffset(parsed.serverNow);
         }
       } else {
         const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
@@ -565,6 +582,7 @@ export async function pullCloudTasks(): Promise<void> {
             if (json.success && Array.isArray(json.tasks)) {
               serverTasks = json.tasks;
               fetchSucceeded = true;
+              updateServerClockOffset(json.serverNow);
             }
           }
         } finally {
@@ -574,10 +592,6 @@ export async function pullCloudTasks(): Promise<void> {
 
       if (!fetchSucceeded) return;
 
-      // If a background push started while our GET was in-flight, wait for it before reconciling
-      while (isSyncing && activePushPromise) {
-        await activePushPromise.catch(() => {});
-      }
       const allowDeleteUnmatchedSynced = pushEpoch === epochAtStart;
 
       const tombstones = readSyncTombstones(session.uid);
@@ -664,7 +678,7 @@ export async function pullCloudTasks(): Promise<void> {
     } finally {
       activePullPromise = null;
     }
-  })();
+  });
 
   activePullPromise = pullRun;
   return pullRun;

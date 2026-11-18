@@ -16,7 +16,7 @@ import { cancelAllAccountReminders, scheduleAllClassSchedulesReminders, refreshU
 import { syncScheduleToWidgets, syncTasksToWidgets, syncRoutinesToWidgets } from './widgetService';
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { imageCacheService } from './imageCacheService';
-import { SyncTombstones, generateSyncUUID, hasPendingTombstones, purgeUserScopedStorage, readSyncTombstones, scopedKey } from './userScope';
+import { SyncTombstones, generateSyncUUID, hasPendingTombstones, mergeSyncTombstones, purgeUserScopedStorage, readSyncTombstones, scopedKey } from './userScope';
 
 const USER_API_URL = 'https://skweladabaw.kurzyrio.site/api/user.php';
 const REGISTERED_USERS_KEY = 'skweladabaw_registered_accounts';
@@ -925,10 +925,7 @@ export async function switchAccountSchedules(
         localStorage.setItem(scopedKey('skweladabaw_explicit_empty_tasks', newUid), 'true');
       }
       if (accountBackup.tombstones) {
-        const tombKey = scopedKey('skweladabaw_sync_tombstones', newUid);
-        if (!localStorage.getItem(tombKey)) {
-          localStorage.setItem(tombKey, JSON.stringify(accountBackup.tombstones));
-        }
+        mergeSyncTombstones(accountBackup.tombstones, newUid);
       }
 
       await db.transaction(
@@ -1050,6 +1047,9 @@ export async function switchAccountSchedules(
       await syncCloudDataBiDirectional();
     } else {
       await restoreUserData(newUid, token);
+      if (consumedAccountBackup && shouldPushRestoredLocal) {
+        localStorage.setItem(PENDING_SYNC_KEY, 'true');
+      }
     }
   } catch (err) {
     console.warn('MySQL cloud sync on account switch note:', err);

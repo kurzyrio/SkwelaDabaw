@@ -17,10 +17,38 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.5.20',
+    releaseDate: 'November 19, 2026',
+    title: 'Permanent Schedule, Task & Data Deletion Sync Fix',
+    isLatest: true,
+    tagline: 'Deletes for classes, tasks, routines, expenses, grades, and saved transit items now stay deleted permanently across syncs and app restarts.',
+    highlights: [
+      'Fixed single-subject and Delete All class schedule removals reappearing on sync or restart',
+      'Fixed deleted tasks (including newly added tasks), routines, expenses, grades, saved places, favorite routes, and bookmarks coming back',
+      'Updated ongoing notifications and home screen widgets to clear removed schedules cleanly'
+    ],
+    items: [
+      {
+        type: 'fix',
+        title: 'Permanent Class Schedule Deletion',
+        description: 'Ensured imported and manual classes always carry unique IDs and flush removals immediately so deleted subjects and cleared timetables never return.'
+      },
+      {
+        type: 'fix',
+        title: 'Reliable Task & Planner Deletion',
+        description: 'Prevented newly created or edited tasks, daily routines, expenses, and grades from reappearing during background syncs, restarts, or account switches.'
+      },
+      {
+        type: 'fix',
+        title: 'Saved Commuter Spots, Routes & Widget Sync',
+        description: 'Fixed removed places, favorite transit routes, bookmarks, and ongoing status bar notifications so cleared items stay removed everywhere.'
+      }
+    ]
+  },
+  {
     version: '1.11.5.19',
     releaseDate: 'November 17, 2026',
     title: 'Existing Account Sign-In Recovery & Onboarding Bypass Fix',
-    isLatest: true,
     tagline: 'Ensures returning accounts sign straight back into their restored classes, tasks, and profile without repeating onboarding.',
     highlights: [
       'Fixed returning accounts falling back into new-user onboarding steps when signing in with their registered email',

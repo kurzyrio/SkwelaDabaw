@@ -82,14 +82,12 @@ export const AnnouncementBoard: React.FC<AnnouncementBoardProps> = ({
   }, [userSession?.campusId]);
 
   const toggleBookmark = (id: string) => {
-    setBookmarkedIds((prev) => {
-      const isRemoving = prev.includes(id);
-      const next = isRemoving ? prev.filter((b) => b !== id) : [...prev, id];
-      writeScopedJson(BOOKMARKED_BULLETINS_KEY, next, userSession?.uid);
-      recordBookmarkDeletion(id, isRemoving, userSession?.uid);
-      queueCloudSync();
-      return next;
-    });
+    const isRemoving = bookmarkedIds.includes(id);
+    const next = isRemoving ? bookmarkedIds.filter((b) => b !== id) : [...bookmarkedIds, id];
+    setBookmarkedIds(next);
+    writeScopedJson(BOOKMARKED_BULLETINS_KEY, next, userSession?.uid);
+    recordBookmarkDeletion(id, isRemoving, userSession?.uid);
+    queueCloudSync(undefined, true);
   };
 
   const toggleExpand = (id: string) => {

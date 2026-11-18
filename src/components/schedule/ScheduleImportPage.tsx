@@ -42,6 +42,7 @@ import {
 } from '../../services/aiScheduleScanner';
 import { backupSchedulesToCloud } from '../../services/userService';
 import { getSavedSession } from '../../services/authService';
+import { clearSyncDeletion, generateSyncUUID, scopedKey } from '../../services/userScope';
 import { playEagleSound } from '../../utils/audio';
 import confetti from 'canvas-confetti';
 import { Html5Qrcode } from 'html5-qrcode';
@@ -649,17 +650,28 @@ export const ScheduleImportPage: React.FC<ScheduleImportPageProps> = ({
     setErrorMessage(null);
 
     try {
+      const targetUid = session.uid && session.isLoggedIn ? session.uid : undefined;
+      const nowIso = new Date().toISOString();
       const defaultReminder = Number(localStorage.getItem('skweladabaw_reminder_timing')) || 10;
       const cleanItems = selectedItems.map((item) => {
         const { id, ...clean } = item;
+        const itemUuid = clean.uuid || generateSyncUUID('sched');
+        clearSyncDeletion('schedules', itemUuid, targetUid);
         return {
           ...clean,
+          uuid: itemUuid,
           color: clean.color || '#2563EB',
           reminderMinutes: (clean.reminderMinutes !== undefined && clean.reminderMinutes !== null) 
             ? clean.reminderMinutes 
-            : defaultReminder
+            : defaultReminder,
+          createdAt: clean.createdAt || nowIso,
+          updatedAt: nowIso,
+          syncStatus: 'pending' as const
         };
       });
+
+      localStorage.removeItem(scopedKey('skweladabaw_explicit_empty_schedules', targetUid));
+      localStorage.removeItem('skweladabaw_explicit_empty_schedules');
 
       // Atomic bulk addition (instant single-transaction write)
       await db.schedules.bulkAdd(cleanItems as any);
@@ -675,7 +687,7 @@ export const ScheduleImportPage: React.FC<ScheduleImportPageProps> = ({
         refreshUnremovableClassNotification(allClasses).catch(console.warn);
         if (session.uid && session.isLoggedIn) {
           localStorage.setItem(`skweladabaw_cached_schedules_${session.uid}`, JSON.stringify(allClasses));
-          backupSchedulesToCloud(session.uid, allClasses, false, session).catch(console.warn);
+          backupSchedulesToCloud(session.uid, allClasses, true, session).catch(console.warn);
         } else {
           localStorage.setItem('skweladabaw_cached_schedules_guest', JSON.stringify(allClasses));
         }

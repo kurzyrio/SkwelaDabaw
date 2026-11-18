@@ -9,6 +9,53 @@
 const USER_SESSION_STORAGE_KEY = 'skweladabaw_user_session';
 const TOMBSTONE_KEY_PREFIX = 'skweladabaw_sync_tombstones';
 const LEGACY_MIGRATED_PREFIX = 'skweladabaw_legacy_migrated';
+const SERVER_CLOCK_OFFSET_KEY = 'skweladabaw_server_clock_offset_ms';
+
+let networkSyncTail: Promise<void> = Promise.resolve();
+
+/**
+ * Serializes network sync operations across cloudSyncService and taskSyncService
+ * so background pulls never overlap or resurrect items mid-push/delete.
+ */
+export function enqueueSyncOperation<T>(op: () => Promise<T>): Promise<T> {
+  const run = networkSyncTail.then(op, op);
+  networkSyncTail = run.then(() => undefined, () => undefined);
+  return run;
+}
+
+export function updateServerClockOffset(serverNowIso?: string | null): void {
+  if (!serverNowIso || typeof localStorage === 'undefined') return;
+  const serverMs = parseUtcTimestampMs(serverNowIso);
+  if (serverMs <= 0) return;
+  const offset = serverMs - Date.now();
+  // Sanity-clamp offset within +/- 7 days to guard against malformed responses
+  if (Math.abs(offset) <= 7 * 24 * 60 * 60 * 1000) {
+    try {
+      localStorage.setItem(SERVER_CLOCK_OFFSET_KEY, String(offset));
+    } catch {}
+  }
+}
+
+export function getAdjustedUtcNowMs(): number {
+  if (typeof localStorage === 'undefined') return Date.now();
+  try {
+    const raw = localStorage.getItem(SERVER_CLOCK_OFFSET_KEY);
+    if (raw) {
+      const offset = Number(raw);
+      if (Number.isFinite(offset) && Math.abs(offset) <= 7 * 24 * 60 * 60 * 1000) {
+        return Date.now() + offset;
+      }
+    }
+  } catch {}
+  return Date.now();
+}
+
+export function computeTombstoneDeletedAt(knownUpdatedAt?: string | null): string {
+  const nowMs = getAdjustedUtcNowMs();
+  const knownMs = parseUtcTimestampMs(knownUpdatedAt);
+  const effectiveMs = knownMs > 0 ? Math.max(nowMs, knownMs + 1000) : nowMs;
+  return new Date(effectiveMs).toISOString();
+}
 
 export type SyncTombstoneKind =
   | 'schedules'
@@ -155,13 +202,15 @@ function writeSyncTombstones(tombstones: SyncTombstones, explicitUid?: string): 
 export function recordSyncDeletion(
   kind: SyncTombstoneKind,
   uuid?: string | null,
-  explicitUid?: string
+  explicitUid?: string,
+  knownUpdatedAt?: string | null
 ): void {
   if (!uuid || !uuid.trim()) return;
   const cleanUuid = uuid.trim();
+  const deletedAt = computeTombstoneDeletedAt(knownUpdatedAt);
   const tombstones = readSyncTombstones(explicitUid);
   const existing = tombstones[kind].filter((entry) => entry.uuid !== cleanUuid);
-  existing.push({ uuid: cleanUuid, deletedAt: new Date().toISOString() });
+  existing.push({ uuid: cleanUuid, deletedAt });
   tombstones[kind] = existing;
   writeSyncTombstones(tombstones, explicitUid);
 }
@@ -197,21 +246,62 @@ export function recordBookmarkDeletion(announcementId: string, removed: boolean,
 }
 
 /** Record an explicit Delete-All schedules action with a UTC cutoff timestamp */
-export function recordClearAllSchedules(uuids: (string | undefined)[], explicitUid?: string): void {
+export function recordClearAllSchedules(
+  entries: Array<string | { uuid?: string; updatedAt?: string } | undefined>,
+  explicitUid?: string
+): void {
   const tombstones = readSyncTombstones(explicitUid);
-  const now = new Date().toISOString();
+  let maxKnownMs = getAdjustedUtcNowMs();
   const existingMap = new Map<string, TombstoneEntry>();
   for (const item of tombstones.schedules) {
     existingMap.set(item.uuid, item);
   }
-  for (const id of uuids) {
+  for (const raw of entries) {
+    if (!raw) continue;
+    const id = typeof raw === 'string' ? raw : raw.uuid;
+    const updAt = typeof raw === 'string' ? undefined : raw.updatedAt;
+    const updMs = parseUtcTimestampMs(updAt);
+    if (updMs > maxKnownMs) {
+      maxKnownMs = updMs + 1000;
+    }
     if (id && id.trim()) {
-      existingMap.set(id.trim(), { uuid: id.trim(), deletedAt: now });
+      existingMap.set(id.trim(), { uuid: id.trim(), deletedAt: computeTombstoneDeletedAt(updAt) });
     }
   }
   tombstones.schedules = Array.from(existingMap.values());
-  tombstones.clearSchedulesBefore = now;
+  const existingClearMs = parseUtcTimestampMs(tombstones.clearSchedulesBefore);
+  tombstones.clearSchedulesBefore = new Date(Math.max(maxKnownMs, existingClearMs)).toISOString();
   writeSyncTombstones(tombstones, explicitUid);
+}
+
+/** Merge incoming tombstones (e.g. from account-switch backup) into active scoped tombstones */
+export function mergeSyncTombstones(incoming?: SyncTombstones | null, explicitUid?: string): void {
+  if (!incoming) return;
+  const current = readSyncTombstones(explicitUid);
+  const kinds: SyncTombstoneKind[] = ['schedules', 'routines', 'expenses', 'transit', 'grades', 'places', 'tasks'];
+  for (const kind of kinds) {
+    const byUuid = new Map<string, TombstoneEntry>();
+    for (const cur of current[kind] || []) {
+      if (cur?.uuid) byUuid.set(cur.uuid, cur);
+    }
+    for (const inc of incoming[kind] || []) {
+      if (!inc?.uuid) continue;
+      const existing = byUuid.get(inc.uuid);
+      if (!existing || parseUtcTimestampMs(inc.deletedAt) > parseUtcTimestampMs(existing.deletedAt)) {
+        byUuid.set(inc.uuid, inc);
+      }
+    }
+    current[kind] = Array.from(byUuid.values());
+  }
+  const mergedBm = new Set([...(current.bookmarks || []), ...(incoming.bookmarks || [])]);
+  current.bookmarks = Array.from(mergedBm);
+
+  const curClearMs = parseUtcTimestampMs(current.clearSchedulesBefore);
+  const incClearMs = parseUtcTimestampMs(incoming.clearSchedulesBefore);
+  if (incClearMs > curClearMs && incoming.clearSchedulesBefore) {
+    current.clearSchedulesBefore = incoming.clearSchedulesBefore;
+  }
+  writeSyncTombstones(current, explicitUid);
 }
 
 /** Remove only tombstones that were included in a confirmed server sync snapshot */

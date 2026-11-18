@@ -1,7 +1,7 @@
 {
-  "version": "1.11.5.19",
-  "versionCode": 148,
-  "releaseDate": "2026-11-17",
+  "version": "1.11.5.20",
+  "versionCode": 149,
+  "releaseDate": "2026-11-19",
   "versionScheme": {
     "digit1": "App Version",
     "digit2": "Major Features added",
@@ -13,15 +13,15 @@
   "forceUpdate": false,
   "developer": "Kurzyrio",
   "supportEmail": "jerriviencenatad@gmail.com",
-  "title": "Existing Account Sign-In Recovery & Onboarding Bypass Fix",
+  "title": "Permanent Schedule, Task & Data Deletion Sync Fix",
   "releaseNotes": [
-    "Fixed returning student accounts being mistakenly sent to onboarding when signing back in with their registered email.",
-    "Recovered accounts whose profile display name or setup flag had been reset during earlier merges directly into their restored timetable and tasks.",
-    "Saved custom usernames cleanly across onboarding completion and in-app profile prompts without dropping changes."
+    "Fixed deleted class schedules, Delete All classes, and imported classes coming back after closing the app or syncing.",
+    "Fixed deleted tasks, routines, expenses, grades, saved places, favorite routes, and bookmarks staying permanently removed across restarts.",
+    "Cleared lingering deleted classes from ongoing notifications and home screen widgets."
   ],
   "downloadUrl": "https://skweladabaw.kurzyrio.site/download",
-  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.19.apk",
-  "sizeBytes": 27026062,
+  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.20.apk",
+  "sizeBytes": 27028920,
   "sizeFormatted": "25.8 MB",
-  "sha256": "039b4a2eaf310fc55d4f43e0ab9aa36f2479251c37bc1fcdff6d6962ddf8d021"
+  "sha256": "aab4c57333faae29bf95ae263d1847f25e1c3b88fcd338bf8d62859436558d8d"
 }

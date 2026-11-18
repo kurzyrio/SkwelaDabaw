@@ -61,7 +61,8 @@ import {
   StudentAuthSession,
   signOutUser
 } from './services/authService';
-import { restoreUserData, syncLocalDataToCloud, queueCloudSync, syncCloudDataBiDirectional, getFirebaseIdToken } from './services/cloudSyncService';
+import { restoreUserData, syncLocalDataToCloud, queueCloudSync, syncCloudDataBiDirectional, getFirebaseIdToken, hasPendingLocalSync } from './services/cloudSyncService';
+import { flushPendingSync } from './services/taskSyncService';
 import { verifyProfileIntegrity, ProfileVerificationState, saveLocalUserRecord } from './services/userService';
 import { requestNotificationPermission, refreshUnremovableClassNotification, scheduleAllClassSchedulesReminders, initOngoingNotificationLoop } from './services/notificationService';
 import { useScheduleAlarm } from './hooks/useScheduleAlarm';
@@ -269,11 +270,21 @@ export function App() {
   useEffect(() => {
     const saved = getSavedSession();
     if (saved && saved.isLoggedIn && saved.uid && hasCompletedOnboarding()) {
-      // Returning logged-in user who ALREADY completed onboarding: keep onboarding closed, and hydrate data from cloud
+      // Returning logged-in user who ALREADY completed onboarding: keep onboarding closed, flush pending mutations first, then hydrate from cloud
       setIsOnboardingOpen(false);
-      restoreUserData(saved.uid).catch((err) => {
-        console.warn('Initial cloud restore note:', err);
-      });
+      (async () => {
+        try {
+          const hasPending = await hasPendingLocalSync(saved.uid);
+          if (hasPending) {
+            await flushPendingSync().catch(() => {});
+            await syncCloudDataBiDirectional();
+          } else {
+            await restoreUserData(saved.uid);
+          }
+        } catch (err) {
+          console.warn('Initial cloud restore note:', err);
+        }
+      })();
       // Check if user has not yet been prompted for Eagle Overlay (Native Android Only)
       if (Capacitor.isNativePlatform() && typeof localStorage !== 'undefined' && localStorage.getItem('skwela_eagle_overlay_prompted') !== 'true') {
         setIsEagleOverlayPromptOpen(true);
