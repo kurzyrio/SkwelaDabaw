@@ -1,7 +1,7 @@
 {
-  "version": "1.11.5.20",
-  "versionCode": 149,
-  "releaseDate": "2026-11-19",
+  "version": "1.11.5.21",
+  "versionCode": 150,
+  "releaseDate": "2026-11-20",
   "versionScheme": {
     "digit1": "App Version",
     "digit2": "Major Features added",
@@ -13,15 +13,15 @@
   "forceUpdate": false,
   "developer": "Kurzyrio",
   "supportEmail": "jerriviencenatad@gmail.com",
-  "title": "Permanent Schedule, Task & Data Deletion Sync Fix",
+  "title": "Google Maps Pin & Location Accuracy Update for Jeep Transit",
   "releaseNotes": [
-    "Fixed deleted class schedules, Delete All classes, and imported classes coming back after closing the app or syncing.",
-    "Fixed deleted tasks, routines, expenses, grades, saved places, favorite routes, and bookmarks staying permanently removed across restarts.",
-    "Cleared lingering deleted classes from ongoing notifications and home screen widgets."
+    "Re-verified and corrected GPS pins for all 175 selectable Jeep Transit places—including police stations, hospitals, malls, parks, transit hubs, and 55 campuses—directly against Google Maps.",
+    "Fixed major pin offsets (up to 11.8 km), corrected official DCPO PS13 Mandug & PS18 Bajada numbering, and updated relocated offices (TEU Ecoland, Maritime Police Sta. Ana, Central 911 Toril).",
+    "Removed non-existent and duplicate listings across malls, parks, and hospitals for cleaner route search."
   ],
   "downloadUrl": "https://skweladabaw.kurzyrio.site/download",
-  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.20.apk",
-  "sizeBytes": 27028920,
+  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.21.apk",
+  "sizeBytes": 27029804,
   "sizeFormatted": "25.8 MB",
-  "sha256": "aab4c57333faae29bf95ae263d1847f25e1c3b88fcd338bf8d62859436558d8d"
+  "sha256": "bb88f9bc97a84e4f27f04ebef629c942a84ccb98a9518b27f27ddfb21cff98c4"
 }

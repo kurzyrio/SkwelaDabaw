@@ -175,7 +175,7 @@ export const JeepRouteFinder: React.FC<JeepRouteFinderProps> = ({
         onCloseControlled={() => setIsGuideOpen(false)}
         icon={<Bus className="w-6 h-6 text-white" />}
         title="Davao City PUJ & Transit System"
-        description="Interactive 2-point transit map, saved places & favorite routes, 114+ route directory, verified 54 Davao campuses, and official LTFRB 2026 student fare calculation."
+        description="Interactive 2-point transit map, saved places & favorite routes, 114+ route directory, verified 55 Davao campuses, and official LTFRB 2026 student fare calculation."
         tips={[
           'Search verified Davao campuses or tap Pin Mode to place pins with 100% free map movement.',
           'Save your home, university campus, and daily commute routes in the Saved section for 1-tap navigation.',

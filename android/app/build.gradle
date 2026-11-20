@@ -8,8 +8,8 @@ android {
         applicationId "com.kurzyrio.skweladabaw.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 149
-        versionName "1.11.5.20"
+        versionCode 150
+        versionName "1.11.5.21"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'

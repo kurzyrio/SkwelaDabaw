@@ -186,7 +186,7 @@ export const EmergencyDirectory: React.FC = () => {
         pageKey="emergency"
         icon={<ShieldAlert className="w-6 h-6 text-[#FF453A]" />}
         title="Davao City Emergency &amp; Medical Directory"
-        description="Comprehensive city-wide directory of all 34 DCPO police stations and 36 public/private hospitals with GPS proximity routing."
+        description={`Comprehensive city-wide directory of ${DAVAO_POLICE_LOCATIONS.length} DCPO police & 911 facilities and ${DAVAO_HOSPITAL_LOCATIONS.length} public/private hospitals with GPS proximity routing.`}
         tips={[
           'Tap "Get Location" to sort stations and hospitals by nearest distance to you.',
           'Tap "Navigate" for instant turn-by-turn Google Maps routing.'

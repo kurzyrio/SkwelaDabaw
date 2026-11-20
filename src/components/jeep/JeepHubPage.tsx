@@ -72,10 +72,10 @@ export const JeepHubPage: React.FC<JeepHubPageProps> = ({
         },
         {
           id: 'schools',
-          title: '54 Davao Campuses Directory',
+          title: '55 Davao Campuses Directory',
           desc: 'Find verified campuses, nearest drop-off points, and connecting jeeps.',
           icon: School,
-          badge: '54 Campuses',
+          badge: '55 Campuses',
           onClick: onOpenSchools
         }
       ]
@@ -137,7 +137,7 @@ export const JeepHubPage: React.FC<JeepHubPageProps> = ({
             Jeepney &amp; Public Transit
           </h2>
           <p className="text-xs sm:text-sm font-normal text-[var(--text-secondary)] leading-relaxed max-w-xl">
-            Point-to-point journey planner, 114 traditional routes, 54 college campuses, and official LTFRB student fare calculation.
+            Point-to-point journey planner, 114 traditional routes, 55 college campuses, and official LTFRB student fare calculation.
           </p>
         </div>
 

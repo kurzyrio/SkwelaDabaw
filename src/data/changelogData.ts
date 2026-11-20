@@ -17,10 +17,38 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.5.21',
+    releaseDate: 'November 20, 2026',
+    title: 'Google Maps Pin & Location Accuracy Update for Jeep Transit',
+    isLatest: true,
+    tagline: 'All 175 selectable places in Jeep Transit and the Emergency Directory now use exact Google Maps pin coordinates and verified Davao City addresses.',
+    highlights: [
+      'Corrected GPS pins across all 175 selectable police stations, hospitals, malls, parks, hubs, and 55 Davao campuses directly against Google Maps',
+      'Fixed swapped DCPO PS13 Mandug / PS18 Bajada designations and relocated offices (TEU Ecoland, PNP Maritime Sta. Ana, PS17 Baliok, Central 911 Toril)',
+      'Removed non-existent and duplicate mall, park, and hospital entries for cleaner search and accurate jeepney routing'
+    ],
+    items: [
+      {
+        type: 'fix',
+        title: 'Police, 911 & Hospital Pin Accuracy',
+        description: 'Corrected shifted emergency pins across Davao City (including PS19 Eden, PS12 Marilog, Paquibato District Hospital, PS17 Baliok, TFD Lasang, PS16 Ma-a, and Malta Medical) and fixed DCPO PS13/PS18 labels.'
+      },
+      {
+        type: 'fix',
+        title: 'Malls, Parks, Hubs & Campuses Calibration',
+        description: 'Aligned all 55 campuses, 20 malls, 23 parks, and 8 transit hubs (including AdDU Matina, Centerpoint Matina, Citygate Buhangin, S&R, Eden, and Calinan Terminal) to their exact Google Maps pins and street addresses.'
+      },
+      {
+        type: 'improvement',
+        title: 'Cleaner Place Directory',
+        description: 'Removed non-existent listings and merged duplicate malls so commuters only see real, verified Davao destinations.'
+      }
+    ]
+  },
+  {
     version: '1.11.5.20',
     releaseDate: 'November 19, 2026',
     title: 'Permanent Schedule, Task & Data Deletion Sync Fix',
-    isLatest: true,
     tagline: 'Deletes for classes, tasks, routines, expenses, grades, and saved transit items now stay deleted permanently across syncs and app restarts.',
     highlights: [
       'Fixed single-subject and Delete All class schedule removals reappearing on sync or restart',
