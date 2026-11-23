@@ -64,7 +64,7 @@ import {
 import { restoreUserData, syncLocalDataToCloud, queueCloudSync, syncCloudDataBiDirectional, getFirebaseIdToken, hasPendingLocalSync } from './services/cloudSyncService';
 import { flushPendingSync } from './services/taskSyncService';
 import { verifyProfileIntegrity, ProfileVerificationState, saveLocalUserRecord } from './services/userService';
-import { requestNotificationPermission, refreshUnremovableClassNotification, scheduleAllClassSchedulesReminders, initOngoingNotificationLoop } from './services/notificationService';
+import { requestNotificationPermission, refreshUnremovableClassNotification, scheduleAllClassSchedulesReminders, scheduleCommuteAndEasterNotifications, initOngoingNotificationLoop } from './services/notificationService';
 import { useScheduleAlarm } from './hooks/useScheduleAlarm';
 import { useBackHandler } from './hooks/useBackHandler';
 import { useAntiSnooperEasterEgg } from './hooks/useAntiSnooperEasterEgg';
@@ -85,6 +85,7 @@ const WidgetDexieSync: React.FC = React.memo(() => {
       } else {
         syncScheduleToWidgets(liveSchedules);
       }
+      scheduleCommuteAndEasterNotifications(liveSchedules).catch(() => {});
     }
   }, [liveSchedules]);
 
@@ -112,6 +113,7 @@ export function App() {
   const [viewHistory, setViewHistory] = useState<AppView[]>(['main']);
   const [isExitToastVisible, setIsExitToastVisible] = useState<boolean>(false);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(false);
+  const [pendingOnboardingGoogleSession, setPendingOnboardingGoogleSession] = useState<StudentAuthSession | null>(null);
   const [isSessionExpiredModalOpen, setIsSessionExpiredModalOpen] = useState<boolean>(false);
   const [missingProfileFields, setMissingProfileFields] = useState<string[]>([]);
   const [isMissingProfileModalOpen, setIsMissingProfileModalOpen] = useState<boolean>(false);
@@ -300,11 +302,13 @@ export function App() {
 
     // Immediate 0ms offline startup synchronization for unremovable notification, widgets & reminders
     db.schedules.toArray().then((scheds) => {
-      if (scheds && scheds.length > 0) {
-        scheduleAllClassSchedulesReminders(scheds).catch(console.warn);
-        refreshUnremovableClassNotification(scheds).catch(console.warn);
-        syncScheduleToWidgets(scheds).catch(console.warn);
+      const safeScheds = scheds || [];
+      if (safeScheds.length > 0) {
+        scheduleAllClassSchedulesReminders(safeScheds).catch(console.warn);
+        refreshUnremovableClassNotification(safeScheds).catch(console.warn);
+        syncScheduleToWidgets(safeScheds).catch(console.warn);
       }
+      scheduleCommuteAndEasterNotifications(safeScheds).catch(() => {});
     }).catch(console.warn);
   }, []);
 
@@ -817,6 +821,7 @@ export function App() {
   }, [theme]);
 
   const handleFinishOnboarding = (session: StudentAuthSession) => {
+    setPendingOnboardingGoogleSession(null);
     setUserSession(session);
     saveSession(session);
     setIsOnboardingOpen(false);
@@ -825,7 +830,17 @@ export function App() {
     }
   };
 
+  const handleStartFreshOnboarding = useCallback((googleSession: StudentAuthSession) => {
+    forceUnlockBodyScroll();
+    setUserSession(googleSession);
+    setCurrentView('main');
+    setViewHistory(['main']);
+    setPendingOnboardingGoogleSession(googleSession);
+    setIsOnboardingOpen(true);
+  }, []);
+
   const handleLogout = useCallback(() => {
+    setPendingOnboardingGoogleSession(null);
     setCurrentView('main');
     setViewHistory(['main']);
     setActiveTab('schedule');
@@ -884,6 +899,7 @@ export function App() {
           onComplete={handleFinishOnboarding} 
           currentTheme={theme}
           onChangeTheme={setTheme}
+          initialGoogleSession={pendingOnboardingGoogleSession}
         />
       );
     }
@@ -896,6 +912,7 @@ export function App() {
               userSession={userSession}
               onUpdateSession={handleUpdateSession}
               onLogout={handleLogout}
+              onStartFreshOnboarding={handleStartFreshOnboarding}
               currentTheme={theme}
               onChangeTheme={setTheme}
               onBack={handleBackView}
@@ -1093,6 +1110,7 @@ export function App() {
                   userSession={userSession} 
                   onBack={handleBackTab}
                   onNavigateTab={navigateToTab}
+                  onOpenAuth={() => setIsOnboardingOpen(true)}
                 />
               </ErrorBoundary>
             )}

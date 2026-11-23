@@ -24,6 +24,11 @@ import { imageCacheService } from './imageCacheService';
 let webConfirmationResult: any = null;
 let nativePhoneCodeListener: any = null;
 let activeAuthTransactionCount = 0;
+let isDeferredGuestChoicePending = false;
+
+export const setDeferredGuestChoicePending = (pending: boolean): void => {
+  isDeferredGuestChoicePending = pending;
+};
 
 export const ensureFirebaseAuth = async (): Promise<string | null> => {
   if (!isFirebaseConfigured || !auth) return null;
@@ -167,6 +172,8 @@ async function preparePreviousSessionBeforeSwitch(prevSession: StudentAuthSessio
 export const rollbackFailedAuth = async (prevSession?: StudentAuthSession): Promise<StudentAuthSession> => {
   const restoredSession = prevSession ? { ...prevSession } : { ...DEFAULT_GUEST_SESSION };
   const wasAlreadyLoggedIn = Boolean(restoredSession.isLoggedIn && restoredSession.uid);
+  const wasOnboardingAlreadyDone = hasCompletedOnboarding();
+  isDeferredGuestChoicePending = false;
   activeAuthTransactionCount++;
   try {
     await withTimeout(
@@ -187,7 +194,9 @@ export const rollbackFailedAuth = async (prevSession?: StudentAuthSession): Prom
     if (!wasAlreadyLoggedIn) {
       localStorage.removeItem('skwela_password_set');
       sessionStorage.removeItem('skwela_session_checked');
-      setOnboardingCompleted(false);
+      if (!wasOnboardingAlreadyDone) {
+        setOnboardingCompleted(false);
+      }
     }
     saveSession(restoredSession);
     return restoredSession;
@@ -196,7 +205,10 @@ export const rollbackFailedAuth = async (prevSession?: StudentAuthSession): Prom
   }
 };
 
-const performGoogleSignIn = async (currentCampusId: string): Promise<StudentAuthSession | null> => {
+const performGoogleSignIn = async (
+  currentCampusId: string,
+  options?: { deferGuestMigration?: boolean }
+): Promise<StudentAuthSession | null> => {
   const prevSession = getSavedSession();
   const prevUid = prevSession.isLoggedIn ? prevSession.uid : undefined;
 
@@ -263,27 +275,33 @@ const performGoogleSignIn = async (currentCampusId: string): Promise<StudentAuth
           const userCred = await signInWithCredential(auth!, credential);
           const firebaseUser = userCred.user;
           const isSameOrGuest = !prevUid || prevUid === firebaseUser.uid;
+          const deferGuest = Boolean(!prevUid && options?.deferGuestMigration);
+          const inheritPrevProfile = isSameOrGuest && !deferGuest;
+
+          if (deferGuest) {
+            isDeferredGuestChoicePending = true;
+          }
 
           const resolvedNativeEmail =
             firebaseUser.email ||
             firebaseUser.providerData?.find((p) => Boolean(p?.email))?.email ||
             nativeResult!.email ||
-            (isSameOrGuest ? prevSession.email : '') ||
+            (inheritPrevProfile ? prevSession.email : '') ||
             '';
 
           const session: StudentAuthSession = {
             isLoggedIn: true,
             uid: firebaseUser.uid,
-            name: firebaseUser.displayName || nativeResult!.displayName || (isSameOrGuest ? prevSession.name : '') || 'Student',
+            name: firebaseUser.displayName || nativeResult!.displayName || (inheritPrevProfile ? prevSession.name : '') || 'Student',
             email: resolvedNativeEmail,
-            avatar: firebaseUser.photoURL || nativeResult!.photoUrl || (isSameOrGuest ? prevSession.avatar : '') || '',
-            campusId: currentCampusId || (isSameOrGuest ? prevSession.campusId : '') || '',
-            studentId: isSameOrGuest ? (prevSession.studentId || '') : '',
-            course: isSameOrGuest ? (prevSession.course || 'Enrolled Student') : 'Enrolled Student',
-            yearLevel: isSameOrGuest ? (prevSession.yearLevel || 'College Student') : 'College Student',
-            role: isSameOrGuest ? (prevSession.role || 'student') : 'student',
-            age: isSameOrGuest ? prevSession.age : undefined,
-            gender: isSameOrGuest ? prevSession.gender : undefined
+            avatar: firebaseUser.photoURL || nativeResult!.photoUrl || (inheritPrevProfile ? prevSession.avatar : '') || '',
+            campusId: deferGuest ? '' : (currentCampusId || (isSameOrGuest ? prevSession.campusId : '') || ''),
+            studentId: inheritPrevProfile ? (prevSession.studentId || '') : '',
+            course: inheritPrevProfile ? (prevSession.course || 'Enrolled Student') : 'Enrolled Student',
+            yearLevel: inheritPrevProfile ? (prevSession.yearLevel || 'College Student') : 'Freshman',
+            role: inheritPrevProfile ? (prevSession.role || 'student') : 'student',
+            age: inheritPrevProfile ? prevSession.age : undefined,
+            gender: inheritPrevProfile ? prevSession.gender : undefined
           };
           try { localStorage.removeItem('skweladabaw_auth_token'); } catch (_) {}
           saveSession(session);
@@ -293,8 +311,9 @@ const performGoogleSignIn = async (currentCampusId: string): Promise<StudentAuth
           const switchRes = await switchAccountSchedules(
             prevUid,
             firebaseUser.uid,
-            prevSession.isLoggedIn ? prevSession : undefined,
-            firebaseIdToken
+            prevSession,
+            firebaseIdToken,
+            options
           );
           if (!switchRes.success) {
             await rollbackFailedAuth(prevSession);
@@ -315,9 +334,22 @@ const performGoogleSignIn = async (currentCampusId: string): Promise<StudentAuth
 
   // 2. Web Browser ONLY (Desktop/Browser dev testing)
   if (isFirebaseConfigured && auth) {
-    const result = await signInWithPopup(auth, googleProvider);
+    const deferGuest = Boolean(!prevUid && options?.deferGuestMigration);
+    if (deferGuest) {
+      isDeferredGuestChoicePending = true;
+    }
+    let result;
+    try {
+      result = await signInWithPopup(auth, googleProvider);
+    } catch (popupErr) {
+      if (deferGuest) {
+        isDeferredGuestChoicePending = false;
+      }
+      throw popupErr;
+    }
     const user = result.user;
     const isSameOrGuest = !prevUid || prevUid === user.uid;
+    const inheritPrevProfile = isSameOrGuest && !deferGuest;
 
     activeAuthTransactionCount++;
     try {
@@ -326,22 +358,22 @@ const performGoogleSignIn = async (currentCampusId: string): Promise<StudentAuth
           const resolvedWebEmail =
             user.email ||
             user.providerData?.find((p) => Boolean(p?.email))?.email ||
-            (isSameOrGuest ? prevSession.email : '') ||
+            (inheritPrevProfile ? prevSession.email : '') ||
             '';
 
           const session: StudentAuthSession = {
             isLoggedIn: true,
             uid: user.uid,
-            name: user.displayName || (isSameOrGuest ? prevSession.name : '') || 'Student',
+            name: user.displayName || (inheritPrevProfile ? prevSession.name : '') || 'Student',
             email: resolvedWebEmail,
-            avatar: user.photoURL || (isSameOrGuest ? prevSession.avatar : '') || '',
-            campusId: currentCampusId || (isSameOrGuest ? prevSession.campusId : '') || '',
-            studentId: isSameOrGuest ? (prevSession.studentId || '') : '',
-            course: isSameOrGuest ? (prevSession.course || 'Enrolled Student') : 'Enrolled Student',
-            yearLevel: isSameOrGuest ? (prevSession.yearLevel || 'College Student') : 'College Student',
-            role: isSameOrGuest ? (prevSession.role || 'student') : 'student',
-            age: isSameOrGuest ? prevSession.age : undefined,
-            gender: isSameOrGuest ? prevSession.gender : undefined
+            avatar: user.photoURL || (inheritPrevProfile ? prevSession.avatar : '') || '',
+            campusId: deferGuest ? '' : (currentCampusId || (isSameOrGuest ? prevSession.campusId : '') || ''),
+            studentId: inheritPrevProfile ? (prevSession.studentId || '') : '',
+            course: inheritPrevProfile ? (prevSession.course || 'Enrolled Student') : 'Enrolled Student',
+            yearLevel: inheritPrevProfile ? (prevSession.yearLevel || 'College Student') : 'Freshman',
+            role: inheritPrevProfile ? (prevSession.role || 'student') : 'student',
+            age: inheritPrevProfile ? prevSession.age : undefined,
+            gender: inheritPrevProfile ? prevSession.gender : undefined
           };
           try { localStorage.removeItem('skweladabaw_auth_token'); } catch (_) {}
           saveSession(session);
@@ -349,8 +381,9 @@ const performGoogleSignIn = async (currentCampusId: string): Promise<StudentAuth
           const switchRes = await switchAccountSchedules(
             prevUid,
             user.uid,
-            prevSession.isLoggedIn ? prevSession : undefined,
-            idToken
+            prevSession,
+            idToken,
+            options
           );
           if (!switchRes.success) {
             await rollbackFailedAuth(prevSession);
@@ -372,10 +405,13 @@ const performGoogleSignIn = async (currentCampusId: string): Promise<StudentAuth
   return null;
 };
 
-export const signInWithGoogle = async (currentCampusId?: string): Promise<StudentAuthSession | null> => {
+export const signInWithGoogle = async (
+  currentCampusId?: string,
+  options?: { deferGuestMigration?: boolean }
+): Promise<StudentAuthSession | null> => {
   const resolvedCampus = currentCampusId || getSavedSession().campusId || '';
   try {
-    const session = await performGoogleSignIn(resolvedCampus);
+    const session = await performGoogleSignIn(resolvedCampus, options);
     return session;
   } catch (err: any) {
     const isCancellation =
@@ -703,6 +739,7 @@ export const signOutUser = async (
   currentUid?: string,
   options?: { skipAccountSync?: boolean }
 ): Promise<StudentAuthSession> => {
+  isDeferredGuestChoicePending = false;
   activeAuthTransactionCount++;
   try {
     const activeSession = getSavedSession();
@@ -749,8 +786,8 @@ export const subscribeToAuthChanges = (callback: (session: StudentAuthSession) =
   }
 
   return onAuthStateChanged(auth, (firebaseUser: FirebaseUser | null) => {
-    // Ignore intermediate Firebase auth transitions while an explicit login/logout transaction is active
-    if (activeAuthTransactionCount > 0) {
+    // Ignore intermediate Firebase auth transitions while an explicit login/logout transaction or guest link choice is active
+    if (activeAuthTransactionCount > 0 || isDeferredGuestChoicePending) {
       return;
     }
 

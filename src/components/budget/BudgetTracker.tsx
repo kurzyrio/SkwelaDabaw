@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { 
   Wallet, 
@@ -14,9 +14,10 @@ import {
 import { db } from '../../db';
 import { ExpenseItem } from '../../types';
 import { PageIntroGuide } from '../common/PageIntroGuide';
-import { queueCloudSync } from '../../services/cloudSyncService';
+import { queueCloudSync, syncLocalDataToCloud } from '../../services/cloudSyncService';
 import { generateSyncUUID, recordSyncDeletion } from '../../services/userScope';
 import { getSavedSession } from '../../services/authService';
+import { useProcessingOverlay } from '../../contexts/ProcessingOverlayContext';
 
 type AllowanceFrequency = 'daily' | 'weekly' | 'monthly' | 'custom_days';
 
@@ -38,6 +39,9 @@ export const BudgetTracker: React.FC = () => {
   const [amount, setAmount] = useState<number>(21);
   const [amountInput, setAmountInput] = useState<string>('21');
   const [note, setNote] = useState<string>('');
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const isDeletingRef = useRef<boolean>(false);
+  const { withProcessing } = useProcessingOverlay();
 
   const todayStr = new Date().toISOString().split('T')[0];
   const expenses = useLiveQuery(() => db.expenses.toArray(), []) || [];
@@ -123,21 +127,57 @@ export const BudgetTracker: React.FC = () => {
   };
 
   const handleDeleteExpense = async (id?: number) => {
-    if (!id) return;
-    const session = getSavedSession();
-    const uid = session?.isLoggedIn && session?.uid ? session.uid : undefined;
-    const existing = await db.expenses.get(id);
-    if (existing?.uuid) {
-      recordSyncDeletion('expenses', existing.uuid, uid, existing.updatedAt || existing.createdAt);
-    }
-    await db.expenses.delete(id);
+    if (!id || isDeletingRef.current) return;
+    isDeletingRef.current = true;
+    setIsDeleting(true);
     try {
-      if (uid && typeof localStorage !== 'undefined') {
-        const remaining = await db.expenses.toArray();
-        localStorage.setItem(`skweladabaw_cached_expenses_${uid}`, JSON.stringify(remaining));
-      }
-    } catch (_) {}
-    queueCloudSync(undefined, true);
+      await withProcessing(
+        {
+          message: 'Deleting Expense • Please wait',
+          submessage: 'Removing entry and updating database',
+          minVisibleMs: 250
+        },
+        async () => {
+          const session = getSavedSession();
+          const uid = session?.isLoggedIn && session?.uid ? session.uid : undefined;
+          const existing = await db.expenses.get(id);
+          if (existing?.uuid) {
+            recordSyncDeletion('expenses', existing.uuid, uid, existing.updatedAt || existing.createdAt);
+          }
+          await db.expenses.delete(id);
+          try {
+            if (uid && typeof localStorage !== 'undefined') {
+              const remaining = await db.expenses.toArray();
+              localStorage.setItem(`skweladabaw_cached_expenses_${uid}`, JSON.stringify(remaining));
+            }
+          } catch (_) {}
+          queueCloudSync(undefined, true);
+          const isOnline = typeof navigator === 'undefined' ? true : navigator.onLine;
+          if (session?.isLoggedIn && session?.uid && isOnline) {
+            let timer: ReturnType<typeof setTimeout> | null = null;
+            try {
+              await Promise.race([
+                syncLocalDataToCloud(session).catch((err) => {
+                  console.warn('Expense delete cloud sync note:', err);
+                }),
+                new Promise<void>((r) => {
+                  timer = setTimeout(r, 4000);
+                })
+              ]);
+            } catch (_) {
+              // Offline-safe fallback
+            } finally {
+              if (timer) clearTimeout(timer);
+            }
+          }
+        }
+      );
+    } catch (err) {
+      console.error('Failed to delete expense:', err);
+    } finally {
+      isDeletingRef.current = false;
+      setIsDeleting(false);
+    }
   };
 
   const toggleDay = (day: string) => {
@@ -416,8 +456,11 @@ export const BudgetTracker: React.FC = () => {
                   -₱{Number(exp.amount).toFixed(2)}
                 </span>
                 <button
+                  type="button"
+                  disabled={isDeleting}
                   onClick={() => handleDeleteExpense(exp.id)}
-                  className="p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[#FF453A] hover:bg-[var(--nested-bg)] transition-colors"
+                  className="p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[#FF453A] hover:bg-[var(--nested-bg)] transition-colors disabled:opacity-50"
+                  aria-label="Delete expense"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>

@@ -17,10 +17,38 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.6.0',
+    releaseDate: 'November 23, 2026',
+    title: 'Loading Overlays, Guest Account Linking & Ingat Notifications',
+    isLatest: true,
+    tagline: 'Unified Bayani loading screens across delete, sync, and import flows, restored Guest-to-Account linking choice, and pre-/post-class Ingat commute reminders.',
+    highlights: [
+      'Unified Bayani loading screen on deleting items, syncing to cloud, and importing schedules (blocking duplicate imports)',
+      'Restored Guest-to-Account linking choice to keep & sync guest data or start fresh from onboarding',
+      'Restored pre- and post-class "Ingat / Take Care" commute notifications, respecting the Live Notification Updates toggle'
+    ],
+    items: [
+      {
+        type: 'improvement',
+        title: 'Unified Bayani Loading Overlays',
+        description: 'Shows the Bayani loading overlay when deleting items, syncing to cloud, or importing schedules while blocking accidental duplicate taps and imports.'
+      },
+      {
+        type: 'fix',
+        title: 'Guest-to-Account Linking Choice',
+        description: 'Restored the prompt allowing guest users to keep and sync their local data or start fresh from onboarding when linking an account.'
+      },
+      {
+        type: 'feature',
+        title: 'Ingat / Take Care Commute Notifications',
+        description: 'Restored pre- and post-class "Ingat / Take Care" commute alerts that automatically follow your Live Notification Updates toggle.'
+      }
+    ]
+  },
+  {
     version: '1.11.5.21',
     releaseDate: 'November 20, 2026',
     title: 'Google Maps Pin & Location Accuracy Update for Jeep Transit',
-    isLatest: true,
     tagline: 'All 175 selectable places in Jeep Transit and the Emergency Directory now use exact Google Maps pin coordinates and verified Davao City addresses.',
     highlights: [
       'Corrected GPS pins across all 175 selectable police stations, hospitals, malls, parks, hubs, and 55 Davao campuses directly against Google Maps',

@@ -57,6 +57,7 @@ import { syncCloudDataBiDirectional } from '../../services/cloudSyncService';
 import { playEagleSound } from '../../utils/audio';
 import { useBackHandler, BackPriority } from '../../hooks/useBackHandler';
 import { EagleBuddy } from '../common/EagleBuddy';
+import { useProcessingOverlay } from '../../contexts/ProcessingOverlayContext';
 
 
 const DAYS: DayOfWeek[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -89,6 +90,9 @@ interface ScheduleManagerProps {
 }
 
 export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }) => {
+  const { withProcessing } = useProcessingOverlay();
+  const actionLockRef = useRef<boolean>(false);
+
   const [activeSubTab, setActiveSubTab] = useState<'today' | 'weekly' | 'reminders'>(() => {
     const pref = localStorage.getItem('skweladabaw_default_view');
     if (pref === 'grid' || pref === 'weekly') return 'weekly';
@@ -216,32 +220,60 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
   };
 
   const handleResolveReplaceLocal = async () => {
-    if (!conflictData) return;
+    if (!conflictData || actionLockRef.current) return;
+    actionLockRef.current = true;
+    const currentConflict = conflictData;
     try {
-      recordExcludedScheduleDeletions(conflictData.uid, conflictData.cloudSchedules, conflictData.localSchedules);
-      await db.schedules.clear();
-      await db.schedules.bulkAdd(conflictData.cloudSchedules.map(({ id, ...rest }) => rest as ClassSchedule));
-      setConflictData(null);
-      setOverlapWarningItems(null);
+      await withProcessing(
+        {
+          message: 'Syncing Schedule • Please wait',
+          submessage: 'Applying timetable selection to database',
+          timeoutMs: 20000,
+          minVisibleMs: 250
+        },
+        async () => {
+          recordExcludedScheduleDeletions(currentConflict.uid, currentConflict.cloudSchedules, currentConflict.localSchedules);
+          await db.schedules.clear();
+          await db.schedules.bulkAdd(currentConflict.cloudSchedules.map(({ id, ...rest }) => rest as ClassSchedule));
+          setConflictData(null);
+          setOverlapWarningItems(null);
+        }
+      );
     } catch (err) {
       console.warn('Error replacing local schedules:', err);
+    } finally {
+      actionLockRef.current = false;
     }
   };
 
   const handleResolveKeepLocal = async () => {
-    if (!conflictData) return;
+    if (!conflictData || actionLockRef.current) return;
+    actionLockRef.current = true;
+    const currentConflict = conflictData;
     try {
-      recordExcludedScheduleDeletions(conflictData.uid, conflictData.localSchedules, conflictData.cloudSchedules);
-      await backupSchedulesToCloud(conflictData.uid, conflictData.localSchedules, true);
-      setConflictData(null);
-      setOverlapWarningItems(null);
+      await withProcessing(
+        {
+          message: 'Syncing Schedule • Please wait',
+          submessage: 'Applying timetable selection to database',
+          timeoutMs: 20000,
+          minVisibleMs: 250
+        },
+        async () => {
+          recordExcludedScheduleDeletions(currentConflict.uid, currentConflict.localSchedules, currentConflict.cloudSchedules);
+          await backupSchedulesToCloud(currentConflict.uid, currentConflict.localSchedules, true);
+          setConflictData(null);
+          setOverlapWarningItems(null);
+        }
+      );
     } catch (err) {
       console.warn('Error keeping local schedules:', err);
+    } finally {
+      actionLockRef.current = false;
     }
   };
 
   const handleResolveCombine = async () => {
-    if (!conflictData) return;
+    if (!conflictData || actionLockRef.current) return;
     const { localSchedules, cloudSchedules, uid } = conflictData;
     const overlaps: { local: ClassSchedule; cloud: ClassSchedule }[] = [];
     const mergedList: ClassSchedule[] = [...localSchedules];
@@ -271,73 +303,126 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
       return;
     }
 
+    actionLockRef.current = true;
     try {
-      await db.schedules.clear();
-      await db.schedules.bulkAdd(mergedList.map(({ id, ...rest }) => rest as ClassSchedule));
-      await backupSchedulesToCloud(uid, mergedList, true);
-      setConflictData(null);
-      setOverlapWarningItems(null);
+      await withProcessing(
+        {
+          message: 'Syncing Schedule • Please wait',
+          submessage: 'Applying timetable selection to database',
+          timeoutMs: 20000,
+          minVisibleMs: 250
+        },
+        async () => {
+          await db.schedules.clear();
+          await db.schedules.bulkAdd(mergedList.map(({ id, ...rest }) => rest as ClassSchedule));
+          await backupSchedulesToCloud(uid, mergedList, true);
+          setConflictData(null);
+          setOverlapWarningItems(null);
+        }
+      );
     } catch (err) {
       console.warn('Error combining schedules:', err);
+    } finally {
+      actionLockRef.current = false;
     }
   };
 
   const handleResolveOverlapKeepLocal = async () => {
-    if (!conflictData) return;
+    if (!conflictData || actionLockRef.current) return;
+    actionLockRef.current = true;
     const { localSchedules, cloudSchedules, uid } = conflictData;
     const nonCollidingCloud = cloudSchedules.filter((c) => {
       return !overlapWarningItems?.some((ov) => ov.cloud.subjectCode === c.subjectCode && ov.cloud.startTime === c.startTime);
     });
     const merged = [...localSchedules, ...nonCollidingCloud.map(({ id, ...rest }) => rest as ClassSchedule)];
     try {
-      recordExcludedScheduleDeletions(uid, merged, [...localSchedules, ...cloudSchedules]);
-      await db.schedules.clear();
-      await db.schedules.bulkAdd(merged.map(({ id, ...rest }) => rest as ClassSchedule));
-      await backupSchedulesToCloud(uid, merged, true);
-      setConflictData(null);
-      setOverlapWarningItems(null);
+      await withProcessing(
+        {
+          message: 'Syncing Schedule • Please wait',
+          submessage: 'Applying timetable selection to database',
+          timeoutMs: 20000,
+          minVisibleMs: 250
+        },
+        async () => {
+          recordExcludedScheduleDeletions(uid, merged, [...localSchedules, ...cloudSchedules]);
+          await db.schedules.clear();
+          await db.schedules.bulkAdd(merged.map(({ id, ...rest }) => rest as ClassSchedule));
+          await backupSchedulesToCloud(uid, merged, true);
+          setConflictData(null);
+          setOverlapWarningItems(null);
+        }
+      );
     } catch (err) {
       console.warn('Error resolving overlap keep local:', err);
+    } finally {
+      actionLockRef.current = false;
     }
   };
 
   const handleResolveOverlapKeepCloud = async () => {
-    if (!conflictData) return;
+    if (!conflictData || actionLockRef.current) return;
+    actionLockRef.current = true;
     const { localSchedules, cloudSchedules, uid } = conflictData;
     const filteredLocal = localSchedules.filter((l) => {
       return !overlapWarningItems?.some((ov) => ov.local.subjectCode === l.subjectCode && ov.local.startTime === l.startTime);
     });
     const merged = [...filteredLocal, ...cloudSchedules.map(({ id, ...rest }) => rest as ClassSchedule)];
     try {
-      recordExcludedScheduleDeletions(uid, merged, [...localSchedules, ...cloudSchedules]);
-      await db.schedules.clear();
-      await db.schedules.bulkAdd(merged.map(({ id, ...rest }) => rest as ClassSchedule));
-      await backupSchedulesToCloud(uid, merged, true);
-      setConflictData(null);
-      setOverlapWarningItems(null);
+      await withProcessing(
+        {
+          message: 'Syncing Schedule • Please wait',
+          submessage: 'Applying timetable selection to database',
+          timeoutMs: 20000,
+          minVisibleMs: 250
+        },
+        async () => {
+          recordExcludedScheduleDeletions(uid, merged, [...localSchedules, ...cloudSchedules]);
+          await db.schedules.clear();
+          await db.schedules.bulkAdd(merged.map(({ id, ...rest }) => rest as ClassSchedule));
+          await backupSchedulesToCloud(uid, merged, true);
+          setConflictData(null);
+          setOverlapWarningItems(null);
+        }
+      );
     } catch (err) {
       console.warn('Error resolving overlap keep cloud:', err);
+    } finally {
+      actionLockRef.current = false;
     }
   };
 
   const handleResolveOverlapKeepBoth = async () => {
-    if (!conflictData) return;
+    if (!conflictData || actionLockRef.current) return;
+    actionLockRef.current = true;
     const { localSchedules, cloudSchedules, uid } = conflictData;
     const merged = [...localSchedules, ...cloudSchedules.map(({ id, ...rest }) => rest as ClassSchedule)];
     try {
-      await db.schedules.clear();
-      await db.schedules.bulkAdd(merged.map(({ id, ...rest }) => rest as ClassSchedule));
-      await backupSchedulesToCloud(uid, merged, true);
-      setConflictData(null);
-      setOverlapWarningItems(null);
+      await withProcessing(
+        {
+          message: 'Syncing Schedule • Please wait',
+          submessage: 'Applying timetable selection to database',
+          timeoutMs: 20000,
+          minVisibleMs: 250
+        },
+        async () => {
+          await db.schedules.clear();
+          await db.schedules.bulkAdd(merged.map(({ id, ...rest }) => rest as ClassSchedule));
+          await backupSchedulesToCloud(uid, merged, true);
+          setConflictData(null);
+          setOverlapWarningItems(null);
+        }
+      );
     } catch (err) {
       console.warn('Error resolving overlap keep both:', err);
+    } finally {
+      actionLockRef.current = false;
     }
   };
 
   // Granular Selective Conflict Overlap Resolution
   const handleResolveIndividualOverlaps = async () => {
-    if (!conflictData || !overlapWarningItems) return;
+    if (!conflictData || !overlapWarningItems || actionLockRef.current) return;
+    actionLockRef.current = true;
     const { localSchedules, cloudSchedules, uid } = conflictData;
     
     // Non-colliding cloud items
@@ -370,21 +455,34 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
     });
 
     try {
-      recordExcludedScheduleDeletions(uid, resolvedItems, [...localSchedules, ...cloudSchedules]);
-      await db.schedules.clear();
-      await db.schedules.bulkAdd(resolvedItems.map(({ id, ...rest }) => rest as ClassSchedule));
-      await backupSchedulesToCloud(uid, resolvedItems, true);
-      setConflictData(null);
-      setOverlapWarningItems(null);
-      setIndividualOverlapChoices({});
+      await withProcessing(
+        {
+          message: 'Syncing Schedule • Please wait',
+          submessage: 'Applying timetable selection to database',
+          timeoutMs: 20000,
+          minVisibleMs: 250
+        },
+        async () => {
+          recordExcludedScheduleDeletions(uid, resolvedItems, [...localSchedules, ...cloudSchedules]);
+          await db.schedules.clear();
+          await db.schedules.bulkAdd(resolvedItems.map(({ id, ...rest }) => rest as ClassSchedule));
+          await backupSchedulesToCloud(uid, resolvedItems, true);
+          setConflictData(null);
+          setOverlapWarningItems(null);
+          setIndividualOverlapChoices({});
+        }
+      );
       playEagleSound('success');
     } catch (err) {
       console.warn('Error applying selective overlap choices:', err);
+    } finally {
+      actionLockRef.current = false;
     }
   };
 
   // Manual Cloud Sync Trigger
   const handleManualCloudSync = async () => {
+    if (actionLockRef.current || isSyncingCloud) return;
     const session = getSavedSession();
     if (!session.isLoggedIn || !session.uid) {
       setCloudSyncFeedback('Sign in with Google in Settings to sync with cloud.');
@@ -392,10 +490,19 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
       return;
     }
 
+    actionLockRef.current = true;
     setIsSyncingCloud(true);
     setCloudSyncFeedback(null);
     try {
-      const res = await syncCloudDataBiDirectional();
+      const res = await withProcessing(
+        {
+          message: 'Syncing to Database • Please wait',
+          submessage: 'Synchronizing timetable and student data with cloud',
+          timeoutMs: 20000,
+          minVisibleMs: 300
+        },
+        () => syncCloudDataBiDirectional()
+      );
       if (res.success) {
         setCloudSyncFeedback(`Synced! (${res.scheduleCount} classes up to date)`);
       } else {
@@ -403,8 +510,9 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
       }
     } catch (err: any) {
       console.warn('Manual cloud sync note:', err);
-      setCloudSyncFeedback('Sync check completed.');
+      setCloudSyncFeedback(err?.message || 'Sync check completed.');
     } finally {
+      actionLockRef.current = false;
       setIsSyncingCloud(false);
       setTimeout(() => setCloudSyncFeedback(null), 3500);
     }
@@ -412,38 +520,63 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
 
   // Delete All Schedules Handler
   const handleConfirmDeleteAll = async () => {
+    if (actionLockRef.current) return;
+    actionLockRef.current = true;
+    setIsDeleteAllModalOpen(false);
     try {
-      const userSession = getSavedSession();
-      const targetUid = userSession.isLoggedIn && userSession.uid ? userSession.uid : undefined;
-      const latestSchedules = await db.schedules.toArray();
-      const itemsToClear = latestSchedules.length > 0 ? latestSchedules : schedules;
-      for (const s of itemsToClear) {
-        if (s.id) cancelScheduleReminder(s.id).catch(() => {});
-      }
-      recordClearAllSchedules(
-        itemsToClear.map((s) => ({ uuid: s.uuid, updatedAt: s.updatedAt || s.createdAt })),
-        targetUid
+      await withProcessing(
+        {
+          message: 'Deleting All Classes • Please wait',
+          submessage: 'Clearing timetable and updating database',
+          minVisibleMs: 300
+        },
+        async () => {
+          const userSession = getSavedSession();
+          const targetUid = userSession.isLoggedIn && userSession.uid ? userSession.uid : undefined;
+          const latestSchedules = await db.schedules.toArray();
+          const itemsToClear = latestSchedules.length > 0 ? latestSchedules : schedules;
+          for (const s of itemsToClear) {
+            if (s.id) cancelScheduleReminder(s.id).catch(() => {});
+          }
+          recordClearAllSchedules(
+            itemsToClear.map((s) => ({ uuid: s.uuid, updatedAt: s.updatedAt || s.createdAt })),
+            targetUid
+          );
+          await db.schedules.clear();
+
+          localStorage.setItem(scopedKey('skweladabaw_explicit_empty_schedules', targetUid), 'true');
+          localStorage.removeItem('skweladabaw_explicit_empty_schedules');
+          const cacheKey = userSession.isLoggedIn && userSession.uid
+            ? `skweladabaw_cached_schedules_${userSession.uid}`
+            : 'skweladabaw_cached_schedules_guest';
+          localStorage.setItem(cacheKey, JSON.stringify([]));
+
+          await Promise.allSettled([
+            scheduleCommuteAndEasterNotifications([]),
+            refreshUnremovableClassNotification([]),
+            syncScheduleToWidgets([])
+          ]);
+
+          if (
+            userSession.isLoggedIn &&
+            userSession.uid &&
+            (typeof navigator === 'undefined' || navigator.onLine)
+          ) {
+            await Promise.race([
+              backupSchedulesToCloud(userSession.uid, [], true, userSession).catch((err) => {
+                console.warn('Cloud backup after delete-all note:', err);
+              }),
+              new Promise<void>((r) => setTimeout(r, 6000))
+            ]);
+          }
+        }
       );
-      await db.schedules.clear();
-
-      localStorage.setItem(scopedKey('skweladabaw_explicit_empty_schedules', targetUid), 'true');
-      localStorage.removeItem('skweladabaw_explicit_empty_schedules');
-      const cacheKey = userSession.isLoggedIn && userSession.uid
-        ? `skweladabaw_cached_schedules_${userSession.uid}`
-        : 'skweladabaw_cached_schedules_guest';
-      localStorage.setItem(cacheKey, JSON.stringify([]));
-
-      refreshUnremovableClassNotification([]);
-      syncScheduleToWidgets([]);
-
-      if (userSession.isLoggedIn && userSession.uid) {
-        await backupSchedulesToCloud(userSession.uid, [], true, userSession);
-      }
       playEagleSound('alert');
     } catch (err) {
       console.warn('Error deleting all schedules:', err);
+    } finally {
+      actionLockRef.current = false;
     }
-    setIsDeleteAllModalOpen(false);
   };
 
   // Form State
@@ -470,8 +603,8 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
     if (schedules) {
       if (schedules.length > 0) {
         scheduleAllClassSchedulesReminders(schedules);
-        scheduleCommuteAndEasterNotifications(schedules);
       }
+      scheduleCommuteAndEasterNotifications(schedules);
       refreshUnremovableClassNotification(schedules);
       syncScheduleToWidgets(schedules);
     }
@@ -646,49 +779,73 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
   };
 
   const handleConfirmDelete = async () => {
-    if (!scheduleToDelete) return;
+    if (!scheduleToDelete || actionLockRef.current) return;
+    actionLockRef.current = true;
     const targetToDelete = scheduleToDelete;
     setScheduleToDelete(null);
 
     try {
-      const userSession = getSavedSession();
-      const targetUid = userSession.isLoggedIn && userSession.uid ? userSession.uid : undefined;
-      const freshRecord =
-        (targetToDelete.id ? await db.schedules.get(targetToDelete.id).catch(() => undefined) : undefined) ||
-        targetToDelete;
-      const targetId = freshRecord.id ?? targetToDelete.id;
-      const targetUuid = freshRecord.uuid || targetToDelete.uuid;
-      const knownUpdatedAt = freshRecord.updatedAt || freshRecord.createdAt;
+      await withProcessing(
+        {
+          message: 'Deleting Class • Please wait',
+          submessage: 'Removing subject and syncing to database',
+          minVisibleMs: 250
+        },
+        async () => {
+          const userSession = getSavedSession();
+          const targetUid = userSession.isLoggedIn && userSession.uid ? userSession.uid : undefined;
+          const freshRecord =
+            (targetToDelete.id ? await db.schedules.get(targetToDelete.id).catch(() => undefined) : undefined) ||
+            targetToDelete;
+          const targetId = freshRecord.id ?? targetToDelete.id;
+          const targetUuid = freshRecord.uuid || targetToDelete.uuid;
+          const knownUpdatedAt = freshRecord.updatedAt || freshRecord.createdAt;
 
-      if (targetUuid) {
-        recordSyncDeletion('schedules', targetUuid, targetUid, knownUpdatedAt);
-      }
-      if (targetId) {
-        await db.schedules.delete(targetId);
-        cancelScheduleReminder(targetId).catch(() => {});
-      } else if (targetUuid) {
-        await db.schedules.filter((s) => s.uuid === targetUuid).delete();
-      }
+          if (targetUuid) {
+            recordSyncDeletion('schedules', targetUuid, targetUid, knownUpdatedAt);
+          }
+          if (targetId) {
+            await db.schedules.delete(targetId);
+            cancelScheduleReminder(targetId).catch(() => {});
+          } else if (targetUuid) {
+            await db.schedules.filter((s) => s.uuid === targetUuid).delete();
+          }
 
-      const allNow = await db.schedules.toArray();
-      const cacheKey = userSession.isLoggedIn && userSession.uid
-        ? `skweladabaw_cached_schedules_${userSession.uid}`
-        : 'skweladabaw_cached_schedules_guest';
-      localStorage.setItem(cacheKey, JSON.stringify(allNow));
-      if (allNow.length === 0) {
-        localStorage.setItem(scopedKey('skweladabaw_explicit_empty_schedules', targetUid), 'true');
-        localStorage.removeItem('skweladabaw_explicit_empty_schedules');
-      } else {
-        localStorage.removeItem(scopedKey('skweladabaw_explicit_empty_schedules', targetUid));
-        localStorage.removeItem('skweladabaw_explicit_empty_schedules');
-      }
-      refreshUnremovableClassNotification(allNow);
-      syncScheduleToWidgets(allNow);
-      if (userSession.isLoggedIn && userSession.uid) {
-        backupSchedulesToCloud(userSession.uid, allNow, true, userSession);
-      }
+          const allNow = await db.schedules.toArray();
+          const cacheKey = userSession.isLoggedIn && userSession.uid
+            ? `skweladabaw_cached_schedules_${userSession.uid}`
+            : 'skweladabaw_cached_schedules_guest';
+          localStorage.setItem(cacheKey, JSON.stringify(allNow));
+          if (allNow.length === 0) {
+            localStorage.setItem(scopedKey('skweladabaw_explicit_empty_schedules', targetUid), 'true');
+            localStorage.removeItem('skweladabaw_explicit_empty_schedules');
+          } else {
+            localStorage.removeItem(scopedKey('skweladabaw_explicit_empty_schedules', targetUid));
+            localStorage.removeItem('skweladabaw_explicit_empty_schedules');
+          }
+          await Promise.allSettled([
+            scheduleCommuteAndEasterNotifications(allNow),
+            refreshUnremovableClassNotification(allNow),
+            syncScheduleToWidgets(allNow)
+          ]);
+          if (
+            userSession.isLoggedIn &&
+            userSession.uid &&
+            (typeof navigator === 'undefined' || navigator.onLine)
+          ) {
+            await Promise.race([
+              backupSchedulesToCloud(userSession.uid, allNow, true, userSession).catch((err) => {
+                console.warn('Cloud backup after delete note:', err);
+              }),
+              new Promise<void>((r) => setTimeout(r, 5000))
+            ]);
+          }
+        }
+      );
     } catch (err) {
       console.warn('Error deleting schedule:', err);
+    } finally {
+      actionLockRef.current = false;
     }
   };
 
@@ -1652,6 +1809,7 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ onOpenImport }
           setIsImportModalOpen(false);
           db.schedules.toArray().then((items) => {
             scheduleAllClassSchedulesReminders(items);
+            scheduleCommuteAndEasterNotifications(items);
             syncScheduleToWidgets(items);
             refreshUnremovableClassNotification(items);
           });

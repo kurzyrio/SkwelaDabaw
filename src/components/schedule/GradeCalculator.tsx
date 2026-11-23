@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   Calculator, 
   Award, 
@@ -13,9 +13,10 @@ import { db } from '../../db';
 import { GradeItem } from '../../types';
 import { useLiveQuery } from 'dexie-react-hooks';
 import confetti from 'canvas-confetti';
-import { queueCloudSync } from '../../services/cloudSyncService';
+import { queueCloudSync, syncLocalDataToCloud } from '../../services/cloudSyncService';
 import { generateSyncUUID, recordSyncDeletion } from '../../services/userScope';
 import { getSavedSession } from '../../services/authService';
+import { useProcessingOverlay } from '../../contexts/ProcessingOverlayContext';
 
 export const GradeCalculator: React.FC = () => {
   const [isAdding, setIsAdding] = useState(false);
@@ -27,6 +28,9 @@ export const GradeCalculator: React.FC = () => {
   const [prefinal, setPrefinal] = useState(85);
   const [finals, setFinals] = useState(85);
   const [gradingScale, setGradingScale] = useState<'1.0-5.0' | 'qpi-4.0' | 'percentage'>('1.0-5.0');
+  const [isDeleting, setIsDeleting] = useState(false);
+  const isDeletingRef = useRef(false);
+  const { withProcessing } = useProcessingOverlay();
 
   const grades = useLiveQuery(() => db.grades.toArray(), []) || [];
 
@@ -97,21 +101,57 @@ export const GradeCalculator: React.FC = () => {
   };
 
   const handleDelete = async (id?: number) => {
-    if (!id) return;
-    const session = getSavedSession();
-    const uid = session?.isLoggedIn && session?.uid ? session.uid : undefined;
-    const existing = await db.grades.get(id);
-    if (existing?.uuid) {
-      recordSyncDeletion('grades', existing.uuid, uid, existing.updatedAt || existing.createdAt);
-    }
-    await db.grades.delete(id);
+    if (!id || isDeletingRef.current) return;
+    isDeletingRef.current = true;
+    setIsDeleting(true);
     try {
-      if (uid && typeof localStorage !== 'undefined') {
-        const remaining = await db.grades.toArray();
-        localStorage.setItem(`skweladabaw_cached_grades_${uid}`, JSON.stringify(remaining));
-      }
-    } catch (_) {}
-    queueCloudSync(undefined, true);
+      await withProcessing(
+        {
+          message: 'Deleting Grade • Please wait',
+          submessage: 'Removing grade entry and updating database',
+          minVisibleMs: 250
+        },
+        async () => {
+          const session = getSavedSession();
+          const uid = session?.isLoggedIn && session?.uid ? session.uid : undefined;
+          const existing = await db.grades.get(id);
+          if (existing?.uuid) {
+            recordSyncDeletion('grades', existing.uuid, uid, existing.updatedAt || existing.createdAt);
+          }
+          await db.grades.delete(id);
+          try {
+            if (uid && typeof localStorage !== 'undefined') {
+              const remaining = await db.grades.toArray();
+              localStorage.setItem(`skweladabaw_cached_grades_${uid}`, JSON.stringify(remaining));
+            }
+          } catch (_) {}
+          queueCloudSync(undefined, true);
+          const isOnline = typeof navigator === 'undefined' ? true : navigator.onLine;
+          if (session?.isLoggedIn && session?.uid && isOnline) {
+            let timer: ReturnType<typeof setTimeout> | null = null;
+            try {
+              await Promise.race([
+                syncLocalDataToCloud(session).catch((err) => {
+                  console.warn('Grade delete cloud sync note:', err);
+                }),
+                new Promise<void>((r) => {
+                  timer = setTimeout(r, 4000);
+                })
+              ]);
+            } catch (_) {
+              // Offline-safe fallback
+            } finally {
+              if (timer) clearTimeout(timer);
+            }
+          }
+        }
+      );
+    } catch (err) {
+      console.error('Failed to delete grade:', err);
+    } finally {
+      isDeletingRef.current = false;
+      setIsDeleting(false);
+    }
   };
 
   // Compute overall weighted GWA / Average
@@ -332,9 +372,12 @@ export const GradeCalculator: React.FC = () => {
                   </div>
 
                   <button
+                    type="button"
+                    disabled={isDeleting}
                     onClick={() => handleDelete(item.id)}
-                    className="p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[#FF453A] hover:bg-[var(--nested-bg)] transition-colors"
+                    className="p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[#FF453A] hover:bg-[var(--nested-bg)] transition-colors disabled:opacity-50"
                     title="Delete"
+                    aria-label="Delete grade"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>

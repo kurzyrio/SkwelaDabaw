@@ -51,11 +51,13 @@ import { Camera as CapacitorCamera } from '@capacitor/camera';
 import { Capacitor } from '@capacitor/core';
 import { 
   scheduleAllClassSchedulesReminders, 
+  scheduleCommuteAndEasterNotifications,
   refreshUnremovableClassNotification 
 } from '../../services/notificationService';
 import { syncScheduleToWidgets } from '../../services/widgetService';
 import { useBackHandler } from '../../hooks/useBackHandler';
 import { BackPriority } from '../../services/navigationManager';
+import { useProcessingOverlay } from '../../contexts/ProcessingOverlayContext';
 
 export interface ScheduleImportPageProps {
   onBack: () => void;
@@ -68,8 +70,18 @@ export const ScheduleImportPage: React.FC<ScheduleImportPageProps> = ({
   onImportComplete,
   initialCode
 }) => {
+  const { withProcessing } = useProcessingOverlay();
+  const isImportingRef = useRef<boolean>(false);
+  const hasImportedRef = useRef<boolean>(false);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+
+  const handleSafeBack = () => {
+    if (isSaving || isImportingRef.current) return;
+    onBack();
+  };
+
   // Navigation & hardware back button handling
-  useBackHandler(true, onBack, BackPriority.SUBVIEW, 'schedule_import_page');
+  useBackHandler(true, handleSafeBack, BackPriority.SUBVIEW, 'schedule_import_page');
 
   // Mode Selection
   const [importMode, setImportMode] = useState<'qr-scan' | 'camera' | 'text' | 'json' | 'prompt-guide'>('qr-scan');
@@ -91,11 +103,11 @@ export const ScheduleImportPage: React.FC<ScheduleImportPageProps> = ({
   const [parsedSchedules, setParsedSchedules] = useState<ClassSchedule[]>([]);
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState<boolean>(false);
 
-  // Auto-select all parsed subjects on change
+  // Auto-select all parsed subjects on change and reset import completion flag
   useEffect(() => {
     setSelectedIndices(new Set(parsedSchedules.map((_, i) => i)));
+    hasImportedRef.current = false;
   }, [parsedSchedules]);
 
   // AI & OCR States
@@ -337,7 +349,13 @@ export const ScheduleImportPage: React.FC<ScheduleImportPageProps> = ({
     if (trimmed.startsWith('ID:') || (/^[A-Z0-9]{6}$/i.test(trimmed) && !trimmed.includes('{') && !trimmed.includes('['))) {
       setIsProcessing(true);
       try {
-        const cloudRes = await fetchScheduleByCloudCode(trimmed);
+        const cloudRes = await withProcessing(
+          {
+            message: 'Loading Shared Schedule • Please wait',
+            submessage: 'Fetching timetable from cloud code'
+          },
+          () => fetchScheduleByCloudCode(trimmed)
+        );
         if (cloudRes.success && cloudRes.schedules.length > 0) {
           setParsedSchedules(cloudRes.schedules);
           setQrMetadata({ student: cloudRes.studentName, campus: cloudRes.campusName });
@@ -358,9 +376,16 @@ export const ScheduleImportPage: React.FC<ScheduleImportPageProps> = ({
     // 2. Decode QR payload
     const qrRes = decodeScheduleFromQrPayload(text);
     if (qrRes.isCloudLookup && qrRes.shortCode) {
+      const shortCode = qrRes.shortCode;
       setIsProcessing(true);
       try {
-        const cloudRes = await fetchScheduleByCloudCode(qrRes.shortCode);
+        const cloudRes = await withProcessing(
+          {
+            message: 'Loading Shared Schedule • Please wait',
+            submessage: 'Fetching timetable from cloud code'
+          },
+          () => fetchScheduleByCloudCode(shortCode)
+        );
         if (cloudRes.success && cloudRes.schedules.length > 0) {
           setParsedSchedules(cloudRes.schedules);
           setQrMetadata({ student: cloudRes.studentName, campus: cloudRes.campusName });
@@ -368,7 +393,7 @@ export const ScheduleImportPage: React.FC<ScheduleImportPageProps> = ({
           confetti({ particleCount: 50, spread: 60 });
           return;
         } else {
-          setErrorMessage(cloudRes.error || `Could not find schedule with code ${qrRes.shortCode}`);
+          setErrorMessage(cloudRes.error || `Could not find schedule with code ${shortCode}`);
         }
       } catch (err: any) {
         setErrorMessage('Network error fetching schedule: ' + (err?.message || 'Please check connection.'));
@@ -642,15 +667,17 @@ export const ScheduleImportPage: React.FC<ScheduleImportPageProps> = ({
 
   // Confirmation & Save
   const handleConfirmImport = async () => {
-    if (isSaving) return;
+    if (isImportingRef.current || hasImportedRef.current || isSaving) return;
     const selectedItems = parsedSchedules.filter((_, i) => selectedIndices.has(i));
     if (selectedItems.length === 0) return;
 
+    isImportingRef.current = true;
     setIsSaving(true);
     setErrorMessage(null);
 
     try {
-      const targetUid = session.uid && session.isLoggedIn ? session.uid : undefined;
+      const currentSession = getSavedSession();
+      const targetUid = currentSession.uid && currentSession.isLoggedIn ? currentSession.uid : undefined;
       const nowIso = new Date().toISOString();
       const defaultReminder = Number(localStorage.getItem('skweladabaw_reminder_timing')) || 10;
       const cleanItems = selectedItems.map((item) => {
@@ -661,8 +688,8 @@ export const ScheduleImportPage: React.FC<ScheduleImportPageProps> = ({
           ...clean,
           uuid: itemUuid,
           color: clean.color || '#2563EB',
-          reminderMinutes: (clean.reminderMinutes !== undefined && clean.reminderMinutes !== null) 
-            ? clean.reminderMinutes 
+          reminderMinutes: (clean.reminderMinutes !== undefined && clean.reminderMinutes !== null)
+            ? clean.reminderMinutes
             : defaultReminder,
           createdAt: clean.createdAt || nowIso,
           updatedAt: nowIso,
@@ -670,38 +697,76 @@ export const ScheduleImportPage: React.FC<ScheduleImportPageProps> = ({
         };
       });
 
-      localStorage.removeItem(scopedKey('skweladabaw_explicit_empty_schedules', targetUid));
-      localStorage.removeItem('skweladabaw_explicit_empty_schedules');
+      await withProcessing(
+        {
+          message: 'Importing Schedule • Please wait',
+          submessage: 'Saving subjects, alarms, and syncing to database',
+          timeoutMs: 20000,
+          minVisibleMs: 300
+        },
+        async () => {
+          localStorage.removeItem(scopedKey('skweladabaw_explicit_empty_schedules', targetUid));
+          localStorage.removeItem('skweladabaw_explicit_empty_schedules');
 
-      // Atomic bulk addition (instant single-transaction write)
-      await db.schedules.bulkAdd(cleanItems as any);
+          // Atomic bulk addition (single-transaction write)
+          await db.schedules.bulkAdd(cleanItems as any);
+          hasImportedRef.current = true;
 
-      // Play success audio & celebration immediately
+          // Update account-scoped cache, alarms, notifications, widgets, and bounded cloud backup
+          const allClasses = await db.schedules.toArray();
+          try {
+            if (currentSession.uid && currentSession.isLoggedIn) {
+              localStorage.setItem(`skweladabaw_cached_schedules_${currentSession.uid}`, JSON.stringify(allClasses));
+            } else {
+              localStorage.setItem('skweladabaw_cached_schedules_guest', JSON.stringify(allClasses));
+            }
+          } catch (_) {}
+
+          await Promise.allSettled([
+            scheduleAllClassSchedulesReminders(allClasses),
+            scheduleCommuteAndEasterNotifications(allClasses),
+            syncScheduleToWidgets(allClasses),
+            refreshUnremovableClassNotification(allClasses)
+          ]);
+
+          if (
+            currentSession.uid &&
+            currentSession.isLoggedIn &&
+            (typeof navigator === 'undefined' || navigator.onLine)
+          ) {
+            await Promise.race([
+              backupSchedulesToCloud(currentSession.uid, allClasses, true, currentSession).catch((err) => {
+                console.warn('Cloud backup after import note:', err);
+              }),
+              new Promise<void>((r) => setTimeout(r, 6000))
+            ]);
+          }
+        }
+      );
+
+      // Play success audio & celebration once committed
       confetti({ particleCount: 80, spread: 70 });
       playEagleSound('success');
 
-      // Schedule background notifications, widget sync, and account cache without blocking the UI
-      db.schedules.toArray().then((allClasses) => {
-        scheduleAllClassSchedulesReminders(allClasses).catch(console.warn);
-        syncScheduleToWidgets(allClasses).catch(console.warn);
-        refreshUnremovableClassNotification(allClasses).catch(console.warn);
-        if (session.uid && session.isLoggedIn) {
-          localStorage.setItem(`skweladabaw_cached_schedules_${session.uid}`, JSON.stringify(allClasses));
-          backupSchedulesToCloud(session.uid, allClasses, true, session).catch(console.warn);
-        } else {
-          localStorage.setItem('skweladabaw_cached_schedules_guest', JSON.stringify(allClasses));
-        }
-      });
-
-      // Transition immediately so user never experiences lag
       if (onImportComplete) {
         onImportComplete();
       } else {
         onBack();
       }
     } catch (err: any) {
-      setIsSaving(false);
-      setErrorMessage(err?.message || 'Failed to save imported courses to local database.');
+      if (!hasImportedRef.current) {
+        isImportingRef.current = false;
+        setIsSaving(false);
+        setErrorMessage(err?.message || 'Failed to save imported courses to local database.');
+      } else {
+        confetti({ particleCount: 80, spread: 70 });
+        playEagleSound('success');
+        if (onImportComplete) {
+          onImportComplete();
+        } else {
+          onBack();
+        }
+      }
     }
   };
 
@@ -712,8 +777,9 @@ export const ScheduleImportPage: React.FC<ScheduleImportPageProps> = ({
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
-              onClick={onBack}
-              className="p-2 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] hover:bg-[var(--nested-bg)] text-[var(--text-primary)] transition-all pressable"
+              onClick={handleSafeBack}
+              disabled={isSaving}
+              className="p-2 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] hover:bg-[var(--nested-bg)] text-[var(--text-primary)] transition-all pressable disabled:opacity-40 disabled:cursor-not-allowed"
               title="Back"
             >
               <ArrowLeft className="w-5 h-5" />
@@ -785,24 +851,28 @@ export const ScheduleImportPage: React.FC<ScheduleImportPageProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   type="button"
+                  disabled={isSaving}
                   onClick={() => {
+                    if (isSaving) return;
                     if (selectedIndices.size === parsedSchedules.length) {
                       setSelectedIndices(new Set());
                     } else {
                       setSelectedIndices(new Set(parsedSchedules.map((_, i) => i)));
                     }
                   }}
-                  className="py-1.5 px-3 rounded-xl bg-[var(--nested-bg)] border border-[var(--card-border)] text-xs font-semibold text-[var(--text-primary)] pressable"
+                  className="py-1.5 px-3 rounded-xl bg-[var(--nested-bg)] border border-[var(--card-border)] text-xs font-semibold text-[var(--text-primary)] pressable disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {selectedIndices.size === parsedSchedules.length ? 'Deselect All' : 'Select All'}
                 </button>
                 <button
                   type="button"
+                  disabled={isSaving}
                   onClick={() => {
+                    if (isSaving) return;
                     setParsedSchedules([]);
                     setQrMetadata(null);
                   }}
-                  className="py-1.5 px-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs font-semibold pressable"
+                  className="py-1.5 px-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs font-semibold pressable disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Clear
                 </button>
@@ -817,6 +887,7 @@ export const ScheduleImportPage: React.FC<ScheduleImportPageProps> = ({
                   <div
                     key={idx}
                     onClick={() => {
+                      if (isSaving) return;
                       const updated = new Set(selectedIndices);
                       if (updated.has(idx)) {
                         updated.delete(idx);
@@ -880,11 +951,13 @@ export const ScheduleImportPage: React.FC<ScheduleImportPageProps> = ({
                     {/* Delete Single Button */}
                     <button
                       type="button"
+                      disabled={isSaving}
                       onClick={(e) => {
                         e.stopPropagation();
+                        if (isSaving) return;
                         setParsedSchedules(prev => prev.filter((_, i) => i !== idx));
                       }}
-                      className="p-2 rounded-xl text-[var(--text-secondary)] hover:text-rose-500 transition-colors"
+                      className="p-2 rounded-xl text-[var(--text-secondary)] hover:text-rose-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                       title="Remove course"
                     >
                       <Trash2 className="w-4 h-4" />

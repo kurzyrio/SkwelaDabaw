@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Bookmark, 
   Home, 
@@ -26,6 +26,9 @@ import {
 } from '../../services/savedRoutesService';
 import { DAVAO_CAMPUSES } from '../../data/davaoCampuses';
 import { LatLng } from '../../utils/davaoTransitRouter';
+import { useProcessingOverlay } from '../../contexts/ProcessingOverlayContext';
+import { syncLocalDataToCloud } from '../../services/cloudSyncService';
+import { getSavedSession } from '../../services/authService';
 
 export interface JeepSavedPageProps {
   onPlanTrip: (origin: LatLng, destination: LatLng) => void;
@@ -48,6 +51,9 @@ export const JeepSavedPage: React.FC<JeepSavedPageProps> = ({
   const [isAddingPlace, setIsAddingPlace] = useState<boolean>(false);
   const [customPlaceName, setCustomPlaceName] = useState<string>('');
   const [customHomeName, setCustomHomeName] = useState<string>('');
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const isDeletingRef = useRef<boolean>(false);
+  const { withProcessing } = useProcessingOverlay();
 
   useEffect(() => {
     setSavedPlaces(getSavedPlaces());
@@ -55,16 +61,78 @@ export const JeepSavedPage: React.FC<JeepSavedPageProps> = ({
     setRecentTrips(getRecentTrips());
   }, []);
 
-  const handleRemovePlace = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const updated = deletePlace(id);
-    setSavedPlaces(updated);
+  const syncDeletedSavedItemToCloud = async () => {
+    const session = getSavedSession();
+    const isOnline = typeof navigator === 'undefined' ? true : navigator.onLine;
+    if (session?.isLoggedIn && session?.uid && isOnline) {
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      try {
+        await Promise.race([
+          syncLocalDataToCloud(session).catch((err) => {
+            console.warn('Saved item delete cloud sync note:', err);
+          }),
+          new Promise<void>((r) => {
+            timer = setTimeout(r, 4000);
+          })
+        ]);
+      } catch (_) {
+        // Offline-safe fallback
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    }
   };
 
-  const handleRemoveFavorite = (route: FavoriteRoute, e: React.MouseEvent) => {
+  const handleRemovePlace = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const { favorites } = toggleFavoriteRoute(route);
-    setFavoriteRoutes(favorites);
+    if (!id || isDeletingRef.current) return;
+    isDeletingRef.current = true;
+    setIsDeleting(true);
+    try {
+      await withProcessing(
+        {
+          message: 'Removing Saved Item • Please wait',
+          submessage: 'Updating saved commuter list and database',
+          minVisibleMs: 250
+        },
+        async () => {
+          const updated = deletePlace(id);
+          setSavedPlaces(updated);
+          await syncDeletedSavedItemToCloud();
+        }
+      );
+    } catch (err) {
+      console.error('Failed to remove saved place:', err);
+    } finally {
+      isDeletingRef.current = false;
+      setIsDeleting(false);
+    }
+  };
+
+  const handleRemoveFavorite = async (route: FavoriteRoute, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!route?.id || isDeletingRef.current) return;
+    isDeletingRef.current = true;
+    setIsDeleting(true);
+    try {
+      await withProcessing(
+        {
+          message: 'Removing Saved Item • Please wait',
+          submessage: 'Updating saved commuter list and database',
+          minVisibleMs: 250
+        },
+        async () => {
+          const { favorites } = toggleFavoriteRoute(route);
+          setFavoriteRoutes(favorites);
+          await syncDeletedSavedItemToCloud();
+        }
+      );
+    } catch (err) {
+      console.error('Failed to remove favorite route:', err);
+    } finally {
+      isDeletingRef.current = false;
+      setIsDeleting(false);
+    }
   };
 
   const handleSelectCampus = (campus: typeof DAVAO_CAMPUSES[0]) => {
@@ -396,8 +464,9 @@ export const JeepSavedPage: React.FC<JeepSavedPageProps> = ({
                     )}
                     <button
                       type="button"
+                      disabled={isDeleting}
                       onClick={(e) => handleRemovePlace(place.id, e)}
-                      className="p-1 text-[var(--text-muted)] hover:text-rose-400 transition-colors"
+                      className="p-1 text-[var(--text-muted)] hover:text-rose-400 transition-colors disabled:opacity-50"
                       title="Delete saved place"
                       aria-label={`Delete ${place.name}`}
                     >
@@ -509,8 +578,11 @@ export const JeepSavedPage: React.FC<JeepSavedPageProps> = ({
                   </span>
                   <button
                     type="button"
+                    disabled={isDeleting}
                     onClick={(e) => handleRemoveFavorite(route, e)}
-                    className="p-1.5 text-amber-400 hover:text-rose-400 transition-colors"
+                    className="p-1.5 text-amber-400 hover:text-rose-400 transition-colors disabled:opacity-50"
+                    title="Remove saved corridor"
+                    aria-label={`Remove ${route.name}`}
                   >
                     <Bookmark className="w-4 h-4 fill-amber-400" />
                   </button>

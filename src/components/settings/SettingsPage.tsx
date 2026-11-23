@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { 
   ArrowLeft,
@@ -73,23 +73,24 @@ import {
   autoSyncCurrentStateToOverlay 
 } from '../../services/eagleOverlayService';
 import { flushPendingSync } from '../../services/taskSyncService';
-import { StudentAuthSession, signInWithGoogle, signOutUser, rollbackFailedAuth, setOnboardingCompleted, saveSession, getSavedSession } from '../../services/authService';
+import { StudentAuthSession, signInWithGoogle, signOutUser, rollbackFailedAuth, setOnboardingCompleted, saveSession, getSavedSession, setDeferredGuestChoicePending } from '../../services/authService';
 import { 
   checkUsernameAvailable, 
   updateUsername, 
   fetchLiveUserProfile, 
   UserAccountRecord, 
   saveUserProfile, 
-  switchAccountSchedules,
   checkExistingUserDetailed,
-  syncUserSchedules,
   saveLocalUserRecord,
   updateUserProfileFields,
-  deleteUserAccount
+  deleteUserAccount,
+  getPendingGuestDataCounts,
+  hasPendingGuestSnapshot,
+  restorePendingGuestDataToDexie,
+  clearPendingGuestData,
+  PendingGuestDataCounts
 } from '../../services/userService';
-import type { ClassSchedule } from '../../types';
 import { syncLocalDataToCloud, queueCloudSync, syncCloudDataBiDirectional, LAST_SYNC_KEY } from '../../services/cloudSyncService';
-import { generateSyncUUID, recordSyncDeletion, recordClearAllSchedules } from '../../services/userScope';
 import { AccountLinkSyncModal } from '../auth/AccountLinkSyncModal';
 import { useProcessingOverlay } from '../../contexts/ProcessingOverlayContext';
 import { EagleBuddy } from '../common/EagleBuddy';
@@ -107,11 +108,13 @@ import {
   updatePersistentNextClassNotification,
   refreshUnremovableClassNotification,
   cancelPersistentNextClassNotification,
+  cancelAllAccountReminders,
   requestNotificationPermission,
   checkNotificationPermission,
-  scheduleAllClassSchedulesReminders
+  scheduleAllClassSchedulesReminders,
+  syncIngatNotificationsForLiveToggle
 } from '../../services/notificationService';
-import { requestBatteryExemption, isBatteryExemptionActive, syncScheduleToWidgets, syncWeatherAlertPreference } from '../../services/widgetService';
+import { requestBatteryExemption, isBatteryExemptionActive, syncScheduleToWidgets, syncTasksToWidgets, syncRoutinesToWidgets, syncWeatherAlertPreference } from '../../services/widgetService';
 import {
   TapEffectStyle,
   TapSoundType,
@@ -251,6 +254,7 @@ interface SettingsPageProps {
   onOpenFeedback?: () => void;
   initialCategory?: SettingsCategory;
   onLogout?: () => void;
+  onStartFreshOnboarding?: (googleSession: StudentAuthSession) => void;
 }
 
 export const SettingsPage: React.FC<SettingsPageProps> = ({
@@ -263,7 +267,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   onOpenChangelog,
   onOpenFeedback,
   initialCategory,
-  onLogout
+  onLogout,
+  onStartFreshOnboarding
 }) => {
   const { withProcessing, showProcessing, hideProcessing } = useProcessingOverlay();
   const [activeCategory, setActiveCategory] = useState<SettingsCategory | null>(initialCategory || null);
@@ -354,11 +359,27 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const [loginErrorToast, setLoginErrorToast] = useState<string | null>(null);
 
   // Account Link Conflict State
+  const prevGuestSessionRef = useRef<StudentAuthSession | null>(null);
   const [isAccountLinkSyncModalOpen, setIsAccountLinkSyncModalOpen] = useState<boolean>(false);
+  const [accountLinkMode, setAccountLinkMode] = useState<'existing-account' | 'new-account'>('existing-account');
   const [pendingCloudUser, setPendingCloudUser] = useState<UserAccountRecord | null>(null);
   const [pendingGoogleSession, setPendingGoogleSession] = useState<StudentAuthSession | null>(null);
-  const [pendingScheduleCount, setPendingScheduleCount] = useState<number>(0);
+  const [pendingGuestSessionSnapshot, setPendingGuestSessionSnapshot] = useState<StudentAuthSession | null>(null);
+  const [pendingGuestCounts, setPendingGuestCounts] = useState<PendingGuestDataCounts>({
+    schedules: 0,
+    tasks: 0,
+    routines: 0,
+    expenses: 0,
+    grades: 0,
+    total: 0
+  });
   const [isResolvingSyncConflict, setIsResolvingSyncConflict] = useState<boolean>(false);
+
+  useEffect(() => {
+    return () => {
+      setDeferredGuestChoicePending(false);
+    };
+  }, []);
 
   // Comprehensive Edit Profile Modal State
   const [isEditProfileOpen, setIsEditProfileOpen] = useState<boolean>(false);
@@ -374,7 +395,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
   // Hardware Back Button Interception for Settings Sub-pages & Modals
   useBackHandler(Boolean(activeCategory), () => setActiveCategory(null), BackPriority.SUBVIEW, 'settings_subpage');
-  useBackHandler(isAccountLinkSyncModalOpen, () => setIsAccountLinkSyncModalOpen(false), BackPriority.MODAL, 'settings_account_link_sync');
   useBackHandler(isEditProfileOpen, () => setIsEditProfileOpen(false), BackPriority.MODAL, 'settings_edit_profile');
   useBackHandler(isLogoutModalOpen, () => setIsLogoutModalOpen(false), BackPriority.MODAL, 'settings_logout');
   useBackHandler(isResetModalOpen, () => setIsResetModalOpen(false), BackPriority.MODAL, 'settings_reset');
@@ -541,9 +561,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         }
         const allSchedules = await db.schedules.toArray();
         await refreshUnremovableClassNotification(allSchedules, persistentTheme);
+        await syncIngatNotificationsForLiveToggle(true, allSchedules);
       } catch (_) {}
     } else {
       await cancelPersistentNextClassNotification();
+      await syncIngatNotificationsForLiveToggle(false).catch(() => {});
     }
   };
 
@@ -770,20 +792,40 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     return () => clearTimeout(timer);
   }, [newUsernameInput, userSession.username, userSession.uid]);
 
+  const runBoundedCloudSync = useCallback(async (syncTask: () => Promise<unknown>, maxWaitMs = 8000): Promise<void> => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    try {
+      await Promise.race([
+        syncTask().catch((err) => {
+          console.warn('Bounded post-commit cloud sync note:', err);
+        }),
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, maxWaitMs);
+        })
+      ]);
+    } finally {
+      if (timer !== null) {
+        clearTimeout(timer);
+      }
+    }
+  }, []);
+
   const handleGoogleLogin = async () => {
     setIsLoggingIn(true);
     showProcessing('Authenticating • Please wait', 'Connecting securely to SkwelaDabaw cloud');
     setLoginErrorToast(null);
     const prevSessionBeforeLogin = getSavedSession();
+    const isFromGuest = !userSession.isLoggedIn;
+    prevGuestSessionRef.current = prevSessionBeforeLogin;
     try {
-      const isFromGuest = !userSession.isLoggedIn;
-      let guestSchedCount = 0;
-      try {
-        guestSchedCount = await db.schedules.count();
-      } catch (_) {}
-
-      const googleSession = await signInWithGoogle(userSession.campusId);
+      const googleSession = await signInWithGoogle(userSession.campusId, {
+        deferGuestMigration: isFromGuest
+      });
       if (!googleSession) {
+        setDeferredGuestChoicePending(false);
         setIsLoggingIn(false);
         return;
       }
@@ -792,6 +834,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       const checkResult = await checkExistingUserDetailed(googleSession.uid || '', googleSession.email || '');
       if (checkResult.state === 'NETWORK_OR_DB_ERROR') {
         await rollbackFailedAuth(prevSessionBeforeLogin);
+        if (isFromGuest && hasPendingGuestSnapshot()) {
+          await restorePendingGuestDataToDexie({ markPendingForSync: false }).catch(() => {});
+          clearPendingGuestData();
+        }
         setLoginErrorToast(checkResult.error || 'Could not reach server to verify account. Check your connection and try again.');
         setTimeout(() => setLoginErrorToast(null), 4000);
         setIsLoggingIn(false);
@@ -799,93 +845,64 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       }
 
       const existingCloud = checkResult.user;
+      let hydratedCloudScheduleCount = 0;
+      try {
+        hydratedCloudScheduleCount = await db.schedules.count();
+      } catch (_) {}
+
       const hasCloudData = Boolean(
         existingCloud &&
-        ((existingCloud.username && existingCloud.username.trim().length > 0) ||
-         (existingCloud.displayName && existingCloud.displayName.trim().length > 0) ||
-         existingCloud.isSetupComplete)
+        (checkResult.state === 'PROFILE_COMPLETE' ||
+         checkResult.isReturningAccount ||
+         existingCloud.isSetupComplete ||
+         (existingCloud.username && existingCloud.username.trim().length > 0 && !/^student_[a-f0-9]{6,16}$/i.test(existingCloud.username.trim())) ||
+         (existingCloud.displayName && existingCloud.displayName.trim().length > 0 && existingCloud.displayName !== 'Davao Student' && existingCloud.displayName !== 'Student') ||
+         hydratedCloudScheduleCount > 0)
       );
 
-      // Read any pending guest schedules preserved during switchAccountSchedules
-      const pendingGuestSchedRaw = localStorage.getItem('skweladabaw_pending_guest_schedules');
-      const pendingGuestScheds: ClassSchedule[] = pendingGuestSchedRaw ? JSON.parse(pendingGuestSchedRaw) : [];
-      const hasGuestSchedules = isFromGuest && (guestSchedCount > 0 || pendingGuestScheds.length > 0);
+      if (isFromGuest) {
+        const guestCounts = getPendingGuestDataCounts();
+        setPendingGuestCounts(guestCounts);
+        setPendingGuestSessionSnapshot(prevSessionBeforeLogin);
+        setPendingGoogleSession(googleSession);
 
-      if (hasCloudData && existingCloud) {
-        if (hasGuestSchedules) {
-          // Existing account AND guest had local schedules -> prompt student to choose
+        if (hasCloudData && existingCloud) {
           setPendingCloudUser(existingCloud);
-          setPendingGoogleSession(googleSession);
-          setPendingScheduleCount(pendingGuestScheds.length || guestSchedCount);
-          setIsAccountLinkSyncModalOpen(true);
-          setIsLoggingIn(false);
-          return;
+          setAccountLinkMode('existing-account');
         } else {
-          // Existing account and guest had NO schedules -> auto-restore cloud data immediately without modal!
-          localStorage.removeItem('skweladabaw_pending_guest_schedules');
-          localStorage.removeItem('skweladabaw_pending_guest_tasks');
-          await syncCloudDataBiDirectional();
-          const restoredSession: StudentAuthSession = {
-            isLoggedIn: true,
-            uid: existingCloud.uid || googleSession.uid,
-            name: existingCloud.displayName || googleSession.name,
-            username: existingCloud.username || googleSession.username,
-            email: existingCloud.email || googleSession.email,
-            avatar: existingCloud.avatar || googleSession.avatar,
-            campusId: existingCloud.campusId || userSession.campusId,
-            course: existingCloud.course || userSession.course || 'Enrolled Student',
-            yearLevel: existingCloud.yearLevel || userSession.yearLevel || 'College Student',
-            role: existingCloud.role || 'student',
-            age: existingCloud.age,
-            gender: existingCloud.gender
-          };
-          saveSession(restoredSession);
-          saveLocalUserRecord(existingCloud);
-          setOnboardingCompleted(true);
-          sessionStorage.setItem('skwela_session_checked', 'true');
-          onUpdateSession(restoredSession);
-          setIsLoggingIn(false);
-          return;
+          setPendingCloudUser(null);
+          setAccountLinkMode('new-account');
         }
+        setIsAccountLinkSyncModalOpen(true);
+        setIsLoggingIn(false);
+        return;
       }
 
-      // If new account or no cloud data conflict, adopt guest profile into the account
-      const adoptNowIso = new Date().toISOString();
-      if (hasGuestSchedules && pendingGuestScheds.length > 0) {
-        const preparedScheds = pendingGuestScheds.map((s: any) => {
-          const { id, ...rest } = s;
-          return {
-            ...rest,
-            uuid: rest.uuid || generateSyncUUID('sched'),
-            createdAt: rest.createdAt || adoptNowIso,
-            updatedAt: rest.updatedAt || adoptNowIso,
-            syncStatus: 'pending' as const
-          };
-        });
-        await db.schedules.clear();
-        await db.schedules.bulkAdd(preparedScheds);
-        localStorage.removeItem('skweladabaw_pending_guest_schedules');
-      }
-      const pendingGuestTasksRaw = localStorage.getItem('skweladabaw_pending_guest_tasks');
-      if (pendingGuestTasksRaw) {
-        try {
-          const tasks = JSON.parse(pendingGuestTasksRaw);
-          if (Array.isArray(tasks) && tasks.length > 0) {
-            const preparedTasks = tasks.map((t: any) => {
-              const { id, ...rest } = t;
-              return {
-                ...rest,
-                uuid: rest.uuid || generateSyncUUID('task'),
-                created_at: rest.created_at || adoptNowIso,
-                updated_at: rest.updated_at || adoptNowIso,
-                sync_status: 'pending_create' as const
-              };
-            });
-            await db.tasks.clear();
-            await db.tasks.bulkPut(preparedTasks);
-          }
-        } catch (_) {}
-        localStorage.removeItem('skweladabaw_pending_guest_tasks');
+      setDeferredGuestChoicePending(false);
+      if (hasCloudData && existingCloud) {
+        clearPendingGuestData();
+        await syncCloudDataBiDirectional();
+        const restoredSession: StudentAuthSession = {
+          isLoggedIn: true,
+          uid: existingCloud.uid || googleSession.uid,
+          name: existingCloud.displayName || googleSession.name,
+          username: existingCloud.username || googleSession.username,
+          email: existingCloud.email || googleSession.email,
+          avatar: existingCloud.avatar || googleSession.avatar,
+          campusId: existingCloud.campusId || userSession.campusId,
+          course: existingCloud.course || userSession.course || 'Enrolled Student',
+          yearLevel: existingCloud.yearLevel || userSession.yearLevel || 'College Student',
+          role: existingCloud.role || 'student',
+          age: existingCloud.age,
+          gender: existingCloud.gender
+        };
+        saveSession(restoredSession);
+        saveLocalUserRecord(existingCloud);
+        setOnboardingCompleted(true);
+        sessionStorage.setItem('skwela_session_checked', 'true');
+        onUpdateSession(restoredSession);
+        setIsLoggingIn(false);
+        return;
       }
 
       const merged: StudentAuthSession = {
@@ -903,6 +920,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     } catch (err: any) {
       console.error('Google login error:', err);
       await rollbackFailedAuth(prevSessionBeforeLogin).catch(() => {});
+      if (isFromGuest && hasPendingGuestSnapshot()) {
+        await restorePendingGuestDataToDexie({ markPendingForSync: false }).catch(() => {});
+        clearPendingGuestData();
+      }
       setLoginErrorToast(err?.message || 'Google Sign-in failed or could not connect.');
       setTimeout(() => setLoginErrorToast(null), 4000);
     } finally {
@@ -911,130 +932,298 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     }
   };
 
-  const handleRestoreCloudAccount = async () => {
-    if (!pendingCloudUser || !pendingGoogleSession) return;
+  const handleCancelAccountLink = async () => {
+    if (isResolvingSyncConflict) return;
     setIsResolvingSyncConflict(true);
     try {
-      const restored: StudentAuthSession = {
-        isLoggedIn: true,
-        uid: pendingCloudUser.uid,
-        name: pendingCloudUser.displayName || pendingGoogleSession.name,
-        username: pendingCloudUser.username,
-        email: pendingCloudUser.email || pendingGoogleSession.email,
-        avatar: pendingCloudUser.avatar || pendingGoogleSession.avatar,
-        campusId: pendingCloudUser.campusId || pendingGoogleSession.campusId,
-        studentId: '',
-        course: pendingCloudUser.course || 'Enrolled Student',
-        yearLevel: pendingCloudUser.yearLevel || 'College Student',
-        role: pendingCloudUser.role || 'student',
-        age: pendingCloudUser.age,
-        gender: pendingCloudUser.gender
-      };
-      saveSession(restored);
-      saveLocalUserRecord(pendingCloudUser);
-      setOnboardingCompleted(true);
-      sessionStorage.setItem('skwela_session_checked', 'true');
-      localStorage.removeItem('skweladabaw_pending_guest_schedules');
-      localStorage.removeItem('skweladabaw_pending_guest_tasks');
-      await syncCloudDataBiDirectional();
-      onUpdateSession(restored);
-      setIsAccountLinkSyncModalOpen(false);
+      await withProcessing({
+        message: 'Restoring Guest Session • Please wait',
+        submessage: 'Returning to your offline guest workspace',
+        minVisibleMs: 250
+      }, async () => {
+        const prevGuest = prevGuestSessionRef.current || pendingGuestSessionSnapshot || userSession;
+        await rollbackFailedAuth(prevGuest);
+        if (hasPendingGuestSnapshot()) {
+          await restorePendingGuestDataToDexie({ markPendingForSync: false });
+        }
+        clearPendingGuestData();
+        setIsAccountLinkSyncModalOpen(false);
+        setPendingCloudUser(null);
+        setPendingGoogleSession(null);
+        setPendingGuestSessionSnapshot(null);
+      });
     } catch (e) {
+      console.error('Cancel account link error:', e);
+      setDeferredGuestChoicePending(false);
+      setIsAccountLinkSyncModalOpen(false);
+    } finally {
+      setIsResolvingSyncConflict(false);
+    }
+  };
+
+  const handleKeepGuestNewAccount = async () => {
+    if (!pendingGoogleSession || isResolvingSyncConflict) return;
+    setIsResolvingSyncConflict(true);
+    try {
+      await withProcessing({
+        message: 'Syncing Guest Data • Please wait',
+        submessage: 'Transferring your guest timetable, tasks, and preferences to cloud',
+        timeoutMs: 20000,
+        minVisibleMs: 300
+      }, async () => {
+        const guestProfile = prevGuestSessionRef.current || pendingGuestSessionSnapshot || userSession;
+        const guestUsername = (guestProfile.username || '').trim().toLowerCase();
+        const hasRealUsername = Boolean(
+          guestUsername &&
+          guestUsername.length >= 3 &&
+          guestUsername !== 'guest_student' &&
+          !/^student_[a-f0-9]{6,16}$/i.test(guestUsername)
+        );
+        const resolvedUsername = hasRealUsername ? guestUsername : '';
+
+        const merged: StudentAuthSession = {
+          isLoggedIn: true,
+          uid: pendingGoogleSession.uid,
+          name: pendingGoogleSession.name || guestProfile.name || 'Student',
+          username: resolvedUsername,
+          email: pendingGoogleSession.email || '',
+          avatar: pendingGoogleSession.avatar || guestProfile.avatar || '',
+          campusId: guestProfile.campusId || '',
+          studentId: guestProfile.studentId || '',
+          course: guestProfile.course || 'Enrolled Student',
+          yearLevel: guestProfile.yearLevel || 'Freshman',
+          role: guestProfile.role || 'student',
+          age: guestProfile.age,
+          gender: guestProfile.gender
+        };
+
+        saveSession(merged);
+        setOnboardingCompleted(true);
+        await restorePendingGuestDataToDexie({ markPendingForSync: true });
+
+        const needsProfileCompletion = !resolvedUsername || !merged.gender || !merged.age || merged.age <= 0;
+        if (needsProfileCompletion) {
+          sessionStorage.removeItem('skwela_session_checked');
+        } else {
+          sessionStorage.setItem('skwela_session_checked', 'true');
+        }
+
+        await runBoundedCloudSync(async () => {
+          await saveUserProfile(merged);
+          await syncLocalDataToCloud(merged);
+        }, 8000);
+
+        clearPendingGuestData();
+        setDeferredGuestChoicePending(false);
+        setIsAccountLinkSyncModalOpen(false);
+        setPendingCloudUser(null);
+        setPendingGoogleSession(null);
+        setPendingGuestSessionSnapshot(null);
+        onUpdateSession(merged);
+      });
+    } catch (e: any) {
+      console.error('Keep guest new account error:', e);
+      setLoginErrorToast(e?.message || 'Could not sync guest data to cloud. Please try again.');
+      setTimeout(() => setLoginErrorToast(null), 4000);
+    } finally {
+      setIsResolvingSyncConflict(false);
+    }
+  };
+
+  const handleStartFreshNewAccount = async () => {
+    if (!pendingGoogleSession || isResolvingSyncConflict) return;
+    setIsResolvingSyncConflict(true);
+    try {
+      await withProcessing({
+        message: 'Preparing Fresh Onboarding • Please wait',
+        submessage: 'Clearing temporary guest data for a fresh start',
+        minVisibleMs: 300
+      }, async () => {
+        clearPendingGuestData();
+
+        await db.transaction(
+          'rw',
+          [db.schedules, db.tasks, db.dayReminders, db.expenses, db.grades],
+          async () => {
+            await Promise.all([
+              db.schedules.clear(),
+              db.tasks.clear(),
+              db.dayReminders.clear(),
+              db.expenses.clear(),
+              db.grades.clear()
+            ]);
+          }
+        );
+
+        const guestCacheKeys = [
+          'skweladabaw_cached_schedules_guest',
+          'skweladabaw_cached_tasks_guest',
+          'skweladabaw_cached_routines_guest',
+          'skweladabaw_cached_expenses_guest',
+          'skweladabaw_cached_grades_guest',
+          'skweladabaw_has_pending_cloud_sync',
+          'skweladabaw_pending_sync',
+          'skweladabaw_profile_dirty'
+        ];
+        for (const key of guestCacheKeys) {
+          try { localStorage.removeItem(key); } catch (_) {}
+        }
+
+        await cancelAllAccountReminders().catch(() => {});
+        syncScheduleToWidgets([]);
+        syncTasksToWidgets([]);
+        syncRoutinesToWidgets([]);
+
+        const freshGoogleSession: StudentAuthSession = {
+          isLoggedIn: true,
+          uid: pendingGoogleSession.uid,
+          name: pendingGoogleSession.name || '',
+          username: '',
+          email: pendingGoogleSession.email || '',
+          avatar: pendingGoogleSession.avatar || '',
+          campusId: '',
+          studentId: '',
+          course: '',
+          yearLevel: 'Freshman',
+          role: 'student',
+          age: undefined,
+          gender: undefined
+        };
+
+        setOnboardingCompleted(false);
+        sessionStorage.removeItem('skwela_session_checked');
+        saveSession(freshGoogleSession);
+        setDeferredGuestChoicePending(false);
+
+        setIsAccountLinkSyncModalOpen(false);
+        setPendingCloudUser(null);
+        setPendingGoogleSession(null);
+        setPendingGuestSessionSnapshot(null);
+
+        onStartFreshOnboarding?.(freshGoogleSession);
+      });
+    } catch (e: any) {
+      console.error('Start fresh new account error:', e);
+      setLoginErrorToast(e?.message || 'Could not start fresh onboarding. Please try again.');
+      setTimeout(() => setLoginErrorToast(null), 4000);
+    } finally {
+      setIsResolvingSyncConflict(false);
+    }
+  };
+
+  const handleRestoreCloudAccount = async () => {
+    if (!pendingCloudUser || !pendingGoogleSession || isResolvingSyncConflict) return;
+    setIsResolvingSyncConflict(true);
+    try {
+      await withProcessing({
+        message: 'Restoring Cloud Account • Please wait',
+        submessage: 'Loading your saved timetable and preferences from database',
+        timeoutMs: 20000,
+        minVisibleMs: 300
+      }, async () => {
+        const restored: StudentAuthSession = {
+          isLoggedIn: true,
+          uid: pendingCloudUser.uid || pendingGoogleSession.uid,
+          name: pendingCloudUser.displayName || pendingGoogleSession.name,
+          username: pendingCloudUser.username,
+          email: pendingCloudUser.email || pendingGoogleSession.email,
+          avatar: pendingCloudUser.avatar || pendingGoogleSession.avatar,
+          campusId: pendingCloudUser.campusId || pendingGoogleSession.campusId,
+          studentId: '',
+          course: pendingCloudUser.course || 'Enrolled Student',
+          yearLevel: pendingCloudUser.yearLevel || 'College Student',
+          role: pendingCloudUser.role || 'student',
+          age: pendingCloudUser.age,
+          gender: pendingCloudUser.gender
+        };
+        saveSession(restored);
+        saveLocalUserRecord(pendingCloudUser);
+        setOnboardingCompleted(true);
+        sessionStorage.setItem('skwela_session_checked', 'true');
+
+        await runBoundedCloudSync(() => syncCloudDataBiDirectional(), 8000);
+
+        clearPendingGuestData();
+        setDeferredGuestChoicePending(false);
+        setIsAccountLinkSyncModalOpen(false);
+        setPendingCloudUser(null);
+        setPendingGoogleSession(null);
+        setPendingGuestSessionSnapshot(null);
+        onUpdateSession(restored);
+      });
+    } catch (e: any) {
       console.error('Restore cloud account error:', e);
+      setLoginErrorToast(e?.message || 'Could not restore cloud account. Please try again.');
+      setTimeout(() => setLoginErrorToast(null), 4000);
     } finally {
       setIsResolvingSyncConflict(false);
     }
   };
 
   const handleSyncGuestProfileToCloud = async () => {
-    if (!pendingCloudUser || !pendingGoogleSession) return;
+    if (!pendingCloudUser || !pendingGoogleSession || isResolvingSyncConflict) return;
     setIsResolvingSyncConflict(true);
     try {
-      // Restore pending guest schedules into Dexie before pushing to cloud (tombstone replaced cloud rows)
-      const replaceNowIso = new Date().toISOString();
-      const targetUid = pendingCloudUser.uid || pendingGoogleSession.uid;
-      const pendingGuestSchedRaw = localStorage.getItem('skweladabaw_pending_guest_schedules');
-      if (pendingGuestSchedRaw) {
-        try {
-          const scheds = JSON.parse(pendingGuestSchedRaw);
-          if (Array.isArray(scheds) && scheds.length > 0) {
-            const existingCloudScheds = await db.schedules.toArray();
-            if (existingCloudScheds.length > 0) {
-              recordClearAllSchedules(
-                existingCloudScheds.map((s) => ({ uuid: s.uuid, updatedAt: s.updatedAt || s.createdAt })),
-                targetUid
-              );
-            }
-            const preparedScheds = scheds.map((s: any) => {
-              const { id, ...rest } = s;
-              return {
-                ...rest,
-                uuid: rest.uuid || generateSyncUUID('sched'),
-                createdAt: rest.createdAt || replaceNowIso,
-                updatedAt: rest.updatedAt || replaceNowIso,
-                syncStatus: 'pending' as const
-              };
-            });
-            await db.schedules.clear();
-            await db.schedules.bulkAdd(preparedScheds);
-          }
-        } catch (_) {}
-        localStorage.removeItem('skweladabaw_pending_guest_schedules');
-      }
-      const pendingGuestTasksRaw = localStorage.getItem('skweladabaw_pending_guest_tasks');
-      if (pendingGuestTasksRaw) {
-        try {
-          const tasks = JSON.parse(pendingGuestTasksRaw);
-          if (Array.isArray(tasks) && tasks.length > 0) {
-            const existingCloudTasks = await db.tasks.toArray();
-            for (const et of existingCloudTasks) {
-              if (et.uuid) {
-                recordSyncDeletion('tasks', et.uuid, targetUid, et.updated_at || et.created_at);
-              }
-            }
-            const preparedTasks = tasks.map((t: any) => {
-              const { id, ...rest } = t;
-              return {
-                ...rest,
-                uuid: rest.uuid || generateSyncUUID('task'),
-                created_at: rest.created_at || replaceNowIso,
-                updated_at: rest.updated_at || replaceNowIso,
-                sync_status: 'pending_create' as const
-              };
-            });
-            await db.tasks.clear();
-            await db.tasks.bulkPut(preparedTasks);
-          }
-        } catch (_) {}
-        localStorage.removeItem('skweladabaw_pending_guest_tasks');
-      }
+      await withProcessing({
+        message: 'Syncing Guest Data • Please wait',
+        submessage: 'Uploading guest data to your linked account',
+        timeoutMs: 20000,
+        minVisibleMs: 300
+      }, async () => {
+        const guestProfile = prevGuestSessionRef.current || pendingGuestSessionSnapshot || userSession;
+        const targetUid = pendingCloudUser.uid || pendingGoogleSession.uid;
 
-      const merged: StudentAuthSession = {
-        isLoggedIn: true,
-        uid: pendingCloudUser.uid || pendingGoogleSession.uid,
-        // CRITICAL RULE: Display Name and Username remain strictly locked to existing account database values
-        name: pendingCloudUser.displayName || pendingGoogleSession.name,
-        username: pendingCloudUser.username || pendingGoogleSession.username,
-        email: pendingCloudUser.email || pendingGoogleSession.email,
-        avatar: pendingGoogleSession.avatar || pendingCloudUser.avatar || userSession.avatar,
-        campusId: userSession.campusId || pendingCloudUser.campusId,
-        studentId: userSession.studentId || '',
-        course: userSession.course || pendingCloudUser.course || 'Enrolled Student',
-        yearLevel: userSession.yearLevel || pendingCloudUser.yearLevel || 'College Student',
-        role: pendingCloudUser.role || 'student',
-        age: userSession.age ?? pendingCloudUser.age,
-        gender: userSession.gender ?? pendingCloudUser.gender
-      };
-      saveSession(merged);
-      saveLocalUserRecord(merged as any);
-      setOnboardingCompleted(true);
-      sessionStorage.setItem('skwela_session_checked', 'true');
-      await saveUserProfile(merged);
-      await syncLocalDataToCloud(merged);
-      onUpdateSession(merged);
-      setIsAccountLinkSyncModalOpen(false);
-    } catch (e) {
+        const merged: StudentAuthSession = {
+          isLoggedIn: true,
+          uid: targetUid,
+          // CRITICAL RULE: Display Name and Username remain strictly locked to existing account database values
+          name: pendingCloudUser.displayName || pendingGoogleSession.name,
+          username: pendingCloudUser.username || pendingGoogleSession.username,
+          email: pendingCloudUser.email || pendingGoogleSession.email,
+          avatar: pendingGoogleSession.avatar || pendingCloudUser.avatar || guestProfile.avatar,
+          campusId: guestProfile.campusId || pendingCloudUser.campusId,
+          studentId: guestProfile.studentId || '',
+          course: guestProfile.course || pendingCloudUser.course || 'Enrolled Student',
+          yearLevel: guestProfile.yearLevel || pendingCloudUser.yearLevel || 'College Student',
+          role: pendingCloudUser.role || 'student',
+          age: guestProfile.age ?? pendingCloudUser.age,
+          gender: guestProfile.gender ?? pendingCloudUser.gender
+        };
+
+        saveSession(merged);
+        saveLocalUserRecord({
+          ...pendingCloudUser,
+          campusId: merged.campusId,
+          course: merged.course || pendingCloudUser.course,
+          yearLevel: merged.yearLevel || pendingCloudUser.yearLevel,
+          age: merged.age,
+          gender: merged.gender
+        });
+        setOnboardingCompleted(true);
+        sessionStorage.setItem('skwela_session_checked', 'true');
+
+        await restorePendingGuestDataToDexie({
+          markPendingForSync: true,
+          tombstoneExistingForUid: targetUid
+        });
+
+        await runBoundedCloudSync(async () => {
+          await saveUserProfile(merged);
+          await syncLocalDataToCloud(merged);
+        }, 8000);
+
+        clearPendingGuestData();
+        setDeferredGuestChoicePending(false);
+        setIsAccountLinkSyncModalOpen(false);
+        setPendingCloudUser(null);
+        setPendingGoogleSession(null);
+        setPendingGuestSessionSnapshot(null);
+        onUpdateSession(merged);
+      });
+    } catch (e: any) {
       console.error('Sync guest profile error:', e);
+      setLoginErrorToast(e?.message || 'Could not sync guest data. Please try again.');
+      setTimeout(() => setLoginErrorToast(null), 4000);
     } finally {
       setIsResolvingSyncConflict(false);
     }
@@ -1147,9 +1336,19 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
   const handleConfirmReset = async () => {
     setIsResetModalOpen(false);
-    await clearAllDexieData(true);
-    setResetSuccessToast(true);
-    setTimeout(() => setResetSuccessToast(false), 3000);
+    try {
+      await withProcessing({
+        message: 'Deleting Local Data • Please wait',
+        submessage: 'Clearing schedules, tasks, and offline cache',
+        minVisibleMs: 300
+      }, async () => {
+        await clearAllDexieData(true);
+      });
+      setResetSuccessToast(true);
+      setTimeout(() => setResetSuccessToast(false), 3000);
+    } catch (err) {
+      console.error('Reset local data error:', err);
+    }
   };
 
   const handleUpdateTapSettings = (
@@ -2425,7 +2624,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     <span>Unremovable Status Bar Card</span>
                   </div>
                   <p className="text-[11px] text-[var(--text-secondary)]">
-                    Pins an ongoing status card on Android status bar that cannot be swiped away or cleared.
+                    Pins an ongoing status card on Android status bar and enables pre- &amp; post-class &ldquo;Ingat&rdquo; commute alerts.
                   </p>
                 </div>
 
@@ -3220,7 +3419,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     <span>Unremovable Status Bar Card</span>
                   </div>
                   <p className="text-[11px] text-[var(--text-secondary)]">
-                    Pins an ongoing status card on Android status bar that cannot be swiped away or cleared.
+                    Pins an ongoing status card on Android status bar and enables pre- &amp; post-class &ldquo;Ingat&rdquo; commute alerts.
                   </p>
                 </div>
 
@@ -3456,16 +3655,20 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         document.body
       )}
 
-      {/* Account Link Conflict Resolution Modal */}
-      {pendingCloudUser && pendingGoogleSession && (
+      {/* Account Link Choice / Conflict Resolution Modal */}
+      {pendingGoogleSession && (accountLinkMode === 'new-account' || pendingCloudUser) && (
         <AccountLinkSyncModal
           isOpen={isAccountLinkSyncModalOpen}
-          onClose={() => setIsAccountLinkSyncModalOpen(false)}
+          onClose={handleCancelAccountLink}
+          mode={accountLinkMode}
           cloudUser={pendingCloudUser}
-          guestSession={userSession}
-          localScheduleCount={pendingScheduleCount}
+          googleSession={pendingGoogleSession}
+          guestSession={pendingGuestSessionSnapshot || prevGuestSessionRef.current || userSession}
+          localScheduleCount={pendingGuestCounts.schedules}
+          guestDataCounts={pendingGuestCounts}
           onRestoreCloud={handleRestoreCloudAccount}
-          onSyncGuest={handleSyncGuestProfileToCloud}
+          onSyncGuest={accountLinkMode === 'new-account' ? handleKeepGuestNewAccount : handleSyncGuestProfileToCloud}
+          onStartFresh={handleStartFreshNewAccount}
           isProcessing={isResolvingSyncConflict}
         />
       )}

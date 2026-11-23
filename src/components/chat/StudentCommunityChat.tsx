@@ -220,13 +220,15 @@ interface StudentCommunityChatProps {
   onTypingChange?: (isTyping: boolean) => void;
   onBack?: () => void;
   onNavigateTab?: (tab: NavigationTab) => void;
+  onOpenAuth?: () => void;
 }
 
 export const StudentCommunityChat: React.FC<StudentCommunityChatProps> = ({ 
   userSession, 
   onTypingChange,
   onBack,
-  onNavigateTab
+  onNavigateTab,
+  onOpenAuth
 }) => {
   const { withProcessing } = useProcessingOverlay();
   const [channels, setChannels] = useState<ChatChannel[]>(() => {
@@ -1467,6 +1469,10 @@ export const StudentCommunityChat: React.FC<StudentCommunityChatProps> = ({
           <button
             type="button"
             onClick={async () => {
+              if (onOpenAuth) {
+                onOpenAuth();
+                return;
+              }
               await signInWithGoogle(userSession?.campusId || '');
               window.location.reload();
             }}

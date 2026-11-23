@@ -12,11 +12,28 @@ import {
   hasPendingLocalSync,
   getFirebaseIdToken
 } from './cloudSyncService';
-import { cancelAllAccountReminders, scheduleAllClassSchedulesReminders, refreshUnremovableClassNotification } from './notificationService';
+import {
+  cancelAllAccountReminders,
+  scheduleAllClassSchedulesReminders,
+  refreshUnremovableClassNotification,
+  scheduleCommuteAndEasterNotifications,
+  scheduleDayReminder
+} from './notificationService';
 import { syncScheduleToWidgets, syncTasksToWidgets, syncRoutinesToWidgets } from './widgetService';
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { imageCacheService } from './imageCacheService';
-import { SyncTombstones, generateSyncUUID, hasPendingTombstones, mergeSyncTombstones, purgeUserScopedStorage, readSyncTombstones, scopedKey } from './userScope';
+import {
+  SyncTombstones,
+  generateSyncUUID,
+  hasPendingTombstones,
+  mergeSyncTombstones,
+  parseUtcTimestampMs,
+  purgeUserScopedStorage,
+  readSyncTombstones,
+  recordClearAllSchedules,
+  recordSyncDeletion,
+  scopedKey
+} from './userScope';
 
 const USER_API_URL = 'https://skweladabaw.kurzyrio.site/api/user.php';
 const REGISTERED_USERS_KEY = 'skweladabaw_registered_accounts';
@@ -649,6 +666,289 @@ export async function backupSchedulesToCloud(
 
 export const ACCOUNT_BACKUP_KEY_PREFIX = 'skweladabaw_account_backup_';
 
+const PENDING_GUEST_SCHEDULES_KEY = 'skweladabaw_pending_guest_schedules';
+const PENDING_GUEST_TASKS_KEY = 'skweladabaw_pending_guest_tasks';
+const PENDING_GUEST_ROUTINES_KEY = 'skweladabaw_pending_guest_routines';
+const PENDING_GUEST_EXPENSES_KEY = 'skweladabaw_pending_guest_expenses';
+const PENDING_GUEST_GRADES_KEY = 'skweladabaw_pending_guest_grades';
+const PENDING_GUEST_PROFILE_KEY = 'skweladabaw_pending_guest_profile';
+
+export interface PendingGuestDataCounts {
+  schedules: number;
+  tasks: number;
+  routines: number;
+  expenses: number;
+  grades: number;
+  total: number;
+}
+
+function readPendingGuestArray(key: string): any[] {
+  if (typeof localStorage === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function getPendingGuestDataCounts(): PendingGuestDataCounts {
+  const schedules = readPendingGuestArray(PENDING_GUEST_SCHEDULES_KEY).length;
+  const tasks = readPendingGuestArray(PENDING_GUEST_TASKS_KEY).filter(
+    (t: any) => t && t.sync_status !== 'pending_delete'
+  ).length;
+  const routines = readPendingGuestArray(PENDING_GUEST_ROUTINES_KEY).length;
+  const expenses = readPendingGuestArray(PENDING_GUEST_EXPENSES_KEY).length;
+  const grades = readPendingGuestArray(PENDING_GUEST_GRADES_KEY).length;
+  return {
+    schedules,
+    tasks,
+    routines,
+    expenses,
+    grades,
+    total: schedules + tasks + routines + expenses + grades
+  };
+}
+
+export function hasPendingGuestSnapshot(): boolean {
+  if (typeof localStorage === 'undefined') return false;
+  try {
+    return (
+      localStorage.getItem(PENDING_GUEST_PROFILE_KEY) !== null ||
+      localStorage.getItem(PENDING_GUEST_SCHEDULES_KEY) !== null ||
+      localStorage.getItem(PENDING_GUEST_TASKS_KEY) !== null ||
+      localStorage.getItem(PENDING_GUEST_ROUTINES_KEY) !== null ||
+      localStorage.getItem(PENDING_GUEST_EXPENSES_KEY) !== null ||
+      localStorage.getItem(PENDING_GUEST_GRADES_KEY) !== null
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function clearPendingGuestData(): void {
+  if (typeof localStorage === 'undefined') return;
+  const keys = [
+    PENDING_GUEST_SCHEDULES_KEY,
+    PENDING_GUEST_TASKS_KEY,
+    PENDING_GUEST_ROUTINES_KEY,
+    PENDING_GUEST_EXPENSES_KEY,
+    PENDING_GUEST_GRADES_KEY,
+    PENDING_GUEST_PROFILE_KEY
+  ];
+  for (const key of keys) {
+    try {
+      localStorage.removeItem(key);
+    } catch (_) {}
+  }
+}
+
+/**
+ * Atomically restores all 5 stashed guest Dexie tables into IndexedDB.
+ * - No-ops safely without touching Dexie if no pending guest snapshot exists.
+ * - When `tombstoneExistingForUid` is provided, records deletion tombstones for any replaced cloud records before clearing.
+ * - When `markPendingForSync` is true, marks schedules/routines/expenses/grades as `syncStatus: 'pending'`
+ *   and tasks as `sync_status: 'pending_create'` with fresh UUIDs if missing.
+ * - Refreshes local caches, home-screen widgets, and notifications.
+ */
+export async function restorePendingGuestDataToDexie(options: {
+  markPendingForSync: boolean;
+  tombstoneExistingForUid?: string;
+}): Promise<void> {
+  if (!hasPendingGuestSnapshot()) {
+    return;
+  }
+  const { markPendingForSync, tombstoneExistingForUid } = options;
+
+  const rawSchedules = readPendingGuestArray(PENDING_GUEST_SCHEDULES_KEY);
+  const rawTasks = readPendingGuestArray(PENDING_GUEST_TASKS_KEY).filter(
+    (t: any) => t && t.sync_status !== 'pending_delete'
+  );
+  const rawRoutines = readPendingGuestArray(PENDING_GUEST_ROUTINES_KEY);
+  const rawExpenses = readPendingGuestArray(PENDING_GUEST_EXPENSES_KEY);
+  const rawGrades = readPendingGuestArray(PENDING_GUEST_GRADES_KEY);
+
+  if (tombstoneExistingForUid) {
+    const [existingScheds, existingTasks, existingRoutines, existingExpenses, existingGrades] = await Promise.all([
+      db.schedules.toArray(),
+      db.tasks.toArray(),
+      db.dayReminders.toArray(),
+      db.expenses.toArray(),
+      db.grades.toArray()
+    ]);
+
+    if (existingScheds.length > 0) {
+      recordClearAllSchedules(
+        existingScheds.map((s) => ({ uuid: s.uuid, updatedAt: s.updatedAt || s.createdAt })),
+        tombstoneExistingForUid
+      );
+    }
+    for (const et of existingTasks) {
+      if (et.uuid) {
+        recordSyncDeletion('tasks', et.uuid, tombstoneExistingForUid, et.updated_at || et.created_at);
+      }
+    }
+    for (const er of existingRoutines) {
+      if (er.uuid) {
+        recordSyncDeletion('routines', er.uuid, tombstoneExistingForUid, er.updatedAt || er.createdAt);
+      }
+    }
+    for (const ee of existingExpenses) {
+      if (ee.uuid) {
+        recordSyncDeletion('expenses', ee.uuid, tombstoneExistingForUid, ee.updatedAt || ee.createdAt);
+      }
+    }
+    for (const eg of existingGrades) {
+      if (eg.uuid) {
+        recordSyncDeletion('grades', eg.uuid, tombstoneExistingForUid, eg.updatedAt || eg.createdAt);
+      }
+    }
+  }
+
+  // Guarantee newly pushed guest schedules are strictly newer than any clearSchedulesBefore cutoff
+  const clearBeforeMs = tombstoneExistingForUid
+    ? parseUtcTimestampMs(readSyncTombstones(tombstoneExistingForUid).clearSchedulesBefore)
+    : 0;
+  const nowIso = new Date(Math.max(Date.now(), clearBeforeMs > 0 ? clearBeforeMs + 2000 : 0)).toISOString();
+
+  const preparedSchedules = rawSchedules.map((s: any) => {
+    const { id: _id, ...rest } = s || {};
+    return {
+      ...rest,
+      uuid: rest.uuid || generateSyncUUID('sched'),
+      createdAt: rest.createdAt || nowIso,
+      updatedAt: markPendingForSync ? nowIso : (rest.updatedAt || rest.createdAt || nowIso),
+      ...(markPendingForSync ? { syncStatus: 'pending' as const } : {})
+    };
+  });
+
+  const taskByUuid = new Map<string, any>();
+  for (const t of rawTasks) {
+    const { id: _id, ...rest } = t || {};
+    const uuid = rest.uuid || generateSyncUUID('task');
+    const isCompleted = Boolean(rest.is_completed ?? rest.completed);
+    taskByUuid.set(uuid, {
+      ...rest,
+      uuid,
+      completed: isCompleted,
+      is_completed: isCompleted,
+      created_at: rest.created_at || nowIso,
+      updated_at: markPendingForSync ? nowIso : (rest.updated_at || rest.created_at || nowIso),
+      sync_status: markPendingForSync ? ('pending_create' as const) : (rest.sync_status || 'synced')
+    });
+  }
+  const preparedTasks = Array.from(taskByUuid.values());
+
+  const preparedRoutines = rawRoutines.map((r: any) => {
+    const { id: _id, ...rest } = r || {};
+    return {
+      ...rest,
+      uuid: rest.uuid || generateSyncUUID('routine'),
+      createdAt: rest.createdAt || nowIso,
+      updatedAt: markPendingForSync ? nowIso : (rest.updatedAt || rest.createdAt || nowIso),
+      ...(markPendingForSync ? { syncStatus: 'pending' as const } : {})
+    };
+  });
+
+  const preparedExpenses = rawExpenses.map((e: any) => {
+    const { id: _id, ...rest } = e || {};
+    return {
+      ...rest,
+      uuid: rest.uuid || generateSyncUUID('exp'),
+      createdAt: rest.createdAt || nowIso,
+      updatedAt: markPendingForSync ? nowIso : (rest.updatedAt || rest.createdAt || nowIso),
+      ...(markPendingForSync ? { syncStatus: 'pending' as const } : {})
+    };
+  });
+
+  const preparedGrades = rawGrades.map((g: any) => {
+    const { id: _id, ...rest } = g || {};
+    return {
+      ...rest,
+      uuid: rest.uuid || generateSyncUUID('grade'),
+      createdAt: rest.createdAt || nowIso,
+      updatedAt: markPendingForSync ? nowIso : (rest.updatedAt || rest.createdAt || nowIso),
+      ...(markPendingForSync ? { syncStatus: 'pending' as const } : {})
+    };
+  });
+
+  await db.transaction(
+    'rw',
+    [db.schedules, db.tasks, db.dayReminders, db.expenses, db.grades],
+    async () => {
+      await Promise.all([
+        db.schedules.clear(),
+        db.tasks.clear(),
+        db.dayReminders.clear(),
+        db.expenses.clear(),
+        db.grades.clear()
+      ]);
+      if (preparedSchedules.length > 0) await db.schedules.bulkAdd(preparedSchedules);
+      if (preparedTasks.length > 0) await db.tasks.bulkPut(preparedTasks);
+      if (preparedRoutines.length > 0) await db.dayReminders.bulkAdd(preparedRoutines);
+      if (preparedExpenses.length > 0) await db.expenses.bulkAdd(preparedExpenses);
+      if (preparedGrades.length > 0) await db.grades.bulkAdd(preparedGrades);
+    }
+  );
+
+  const [restoredSchedules, restoredTasks, restoredRoutines, restoredExpenses, restoredGrades] = await Promise.all([
+    db.schedules.toArray(),
+    db.tasks.toArray(),
+    db.dayReminders.toArray(),
+    db.expenses.toArray(),
+    db.grades.toArray()
+  ]);
+
+  const activeTasks = restoredTasks.filter((t) => t.sync_status !== 'pending_delete');
+
+  try {
+    const activeSession = getSavedSession();
+    const cacheUid = tombstoneExistingForUid || (activeSession.isLoggedIn && activeSession.uid ? activeSession.uid : 'guest');
+    localStorage.setItem(`skweladabaw_cached_schedules_${cacheUid}`, JSON.stringify(restoredSchedules));
+    localStorage.setItem(`skweladabaw_cached_tasks_${cacheUid}`, JSON.stringify(activeTasks));
+    localStorage.setItem(`skweladabaw_cached_routines_${cacheUid}`, JSON.stringify(restoredRoutines));
+    localStorage.setItem(`skweladabaw_cached_expenses_${cacheUid}`, JSON.stringify(restoredExpenses));
+    localStorage.setItem(`skweladabaw_cached_grades_${cacheUid}`, JSON.stringify(restoredGrades));
+
+    if (markPendingForSync) {
+      localStorage.setItem(PENDING_SYNC_KEY, 'true');
+      if (tombstoneExistingForUid) {
+        if (restoredSchedules.length === 0) {
+          localStorage.setItem(scopedKey('skweladabaw_explicit_empty_schedules', tombstoneExistingForUid), 'true');
+        } else {
+          localStorage.removeItem(scopedKey('skweladabaw_explicit_empty_schedules', tombstoneExistingForUid));
+        }
+        if (activeTasks.length === 0) {
+          localStorage.setItem(scopedKey('skweladabaw_explicit_empty_tasks', tombstoneExistingForUid), 'true');
+        } else {
+          localStorage.removeItem(scopedKey('skweladabaw_explicit_empty_tasks', tombstoneExistingForUid));
+        }
+      }
+    }
+  } catch (_) {}
+
+  try {
+    await cancelAllAccountReminders();
+    if (restoredSchedules.length > 0) {
+      await scheduleAllClassSchedulesReminders(restoredSchedules);
+    }
+    await scheduleCommuteAndEasterNotifications(restoredSchedules);
+    await refreshUnremovableClassNotification(restoredSchedules);
+    for (const routine of restoredRoutines) {
+      if (routine.enabled && routine.id) {
+        await scheduleDayReminder(routine);
+      }
+    }
+    syncScheduleToWidgets(restoredSchedules);
+    syncTasksToWidgets(activeTasks);
+    syncRoutinesToWidgets(restoredRoutines);
+  } catch (err) {
+    console.warn('Error refreshing widgets/notifications after guest restore:', err);
+  }
+}
+
 export interface AccountSwitchBackup {
   version: number;
   uid: string;
@@ -735,16 +1035,19 @@ export async function switchAccountSchedules(
   oldUid?: string,
   newUid?: string,
   session?: StudentAuthSession,
-  token?: string
+  token?: string,
+  options?: { deferGuestMigration?: boolean }
 ): Promise<{ success: boolean; abortedOffline?: boolean; message?: string }> {
   if (oldUid && newUid && oldUid === newUid) {
     return { success: true };
   }
 
+  const deferGuestMigration = Boolean(!oldUid && options?.deferGuestMigration);
+
   // 1. Back up or preserve previous schedules, tasks, routines, expenses, and grades
   try {
     if (!oldUid) {
-      // Switching from guest mode: preserve all 5 Dexie stores for guest-to-login migration
+      // Switching from guest mode: preserve all 5 Dexie stores + guest profile for guest-to-login migration
       const [currentSchedules, currentTasks, currentRoutines, currentExpenses, currentGrades] = await Promise.all([
         db.schedules.toArray(),
         db.tasks.toArray(),
@@ -754,30 +1057,40 @@ export async function switchAccountSchedules(
       ]);
       const activeTasks = currentTasks.filter((t) => t.sync_status !== 'pending_delete');
       if (currentSchedules.length > 0) {
-        localStorage.setItem('skweladabaw_pending_guest_schedules', JSON.stringify(currentSchedules));
+        localStorage.setItem(PENDING_GUEST_SCHEDULES_KEY, JSON.stringify(currentSchedules));
       } else {
-        localStorage.removeItem('skweladabaw_pending_guest_schedules');
+        localStorage.removeItem(PENDING_GUEST_SCHEDULES_KEY);
       }
       if (activeTasks.length > 0) {
-        localStorage.setItem('skweladabaw_pending_guest_tasks', JSON.stringify(activeTasks));
+        localStorage.setItem(PENDING_GUEST_TASKS_KEY, JSON.stringify(activeTasks));
       } else {
-        localStorage.removeItem('skweladabaw_pending_guest_tasks');
+        localStorage.removeItem(PENDING_GUEST_TASKS_KEY);
       }
       if (currentRoutines.length > 0) {
-        localStorage.setItem('skweladabaw_pending_guest_routines', JSON.stringify(currentRoutines));
+        localStorage.setItem(PENDING_GUEST_ROUTINES_KEY, JSON.stringify(currentRoutines));
       } else {
-        localStorage.removeItem('skweladabaw_pending_guest_routines');
+        localStorage.removeItem(PENDING_GUEST_ROUTINES_KEY);
       }
       if (currentExpenses.length > 0) {
-        localStorage.setItem('skweladabaw_pending_guest_expenses', JSON.stringify(currentExpenses));
+        localStorage.setItem(PENDING_GUEST_EXPENSES_KEY, JSON.stringify(currentExpenses));
       } else {
-        localStorage.removeItem('skweladabaw_pending_guest_expenses');
+        localStorage.removeItem(PENDING_GUEST_EXPENSES_KEY);
       }
       if (currentGrades.length > 0) {
-        localStorage.setItem('skweladabaw_pending_guest_grades', JSON.stringify(currentGrades));
+        localStorage.setItem(PENDING_GUEST_GRADES_KEY, JSON.stringify(currentGrades));
       } else {
-        localStorage.removeItem('skweladabaw_pending_guest_grades');
+        localStorage.removeItem(PENDING_GUEST_GRADES_KEY);
       }
+
+      try {
+        const guestSessionSnapshot = (session && !session.isLoggedIn)
+          ? session
+          : (() => {
+              const saved = getSavedSession();
+              return !saved.isLoggedIn ? saved : { ...saved, isLoggedIn: false, uid: undefined };
+            })();
+        localStorage.setItem(PENDING_GUEST_PROFILE_KEY, JSON.stringify(guestSessionSnapshot));
+      } catch (_) {}
     } else if (oldUid !== newUid && session && session.uid === oldUid && session.isLoggedIn) {
       const [currentSchedules, currentTasks, currentRoutines, currentExpenses, currentGrades] = await Promise.all([
         db.schedules.toArray(),
@@ -955,10 +1268,10 @@ export async function switchAccountSchedules(
       let cachedExpenses = parseArray(`skweladabaw_cached_expenses_${newUid}`);
       let cachedGrades = parseArray(`skweladabaw_cached_grades_${newUid}`);
 
-      if (!oldUid) {
-        const guestRoutines = parseArray('skweladabaw_pending_guest_routines');
-        const guestExpenses = parseArray('skweladabaw_pending_guest_expenses');
-        const guestGrades = parseArray('skweladabaw_pending_guest_grades');
+      if (!oldUid && !deferGuestMigration) {
+        const guestRoutines = parseArray(PENDING_GUEST_ROUTINES_KEY);
+        const guestExpenses = parseArray(PENDING_GUEST_EXPENSES_KEY);
+        const guestGrades = parseArray(PENDING_GUEST_GRADES_KEY);
         const nowIso = new Date().toISOString();
 
         if (guestRoutines.length > 0) {
@@ -1015,15 +1328,15 @@ export async function switchAccountSchedules(
       restoredWidgetTasks = cachedTasks;
     }
 
-    if (consumedAccountBackup) {
+    if (consumedAccountBackup && !deferGuestMigration) {
       clearAccountBackup(newUid);
     }
     if (consumedGuestExtras) {
-      localStorage.removeItem('skweladabaw_pending_guest_routines');
-      localStorage.removeItem('skweladabaw_pending_guest_expenses');
-      localStorage.removeItem('skweladabaw_pending_guest_grades');
+      localStorage.removeItem(PENDING_GUEST_ROUTINES_KEY);
+      localStorage.removeItem(PENDING_GUEST_EXPENSES_KEY);
+      localStorage.removeItem(PENDING_GUEST_GRADES_KEY);
     }
-    if (shouldPushRestoredLocal) {
+    if (shouldPushRestoredLocal && !deferGuestMigration) {
       localStorage.setItem(PENDING_SYNC_KEY, 'true');
     }
   } catch (restoreErr) {
@@ -1043,11 +1356,11 @@ export async function switchAccountSchedules(
 
   // Then flush any restored pending backup under newUid's active token & fetch latest authoritative data from MySQL
   try {
-    if (shouldPushRestoredLocal && hasCompletedOnboarding() && (typeof navigator === 'undefined' || navigator.onLine)) {
+    if (!deferGuestMigration && shouldPushRestoredLocal && hasCompletedOnboarding() && (typeof navigator === 'undefined' || navigator.onLine)) {
       await syncCloudDataBiDirectional();
     } else {
-      await restoreUserData(newUid, token);
-      if (consumedAccountBackup && shouldPushRestoredLocal) {
+      await restoreUserData(newUid, token, deferGuestMigration);
+      if (consumedAccountBackup && shouldPushRestoredLocal && !deferGuestMigration) {
         localStorage.setItem(PENDING_SYNC_KEY, 'true');
       }
     }
@@ -1440,11 +1753,12 @@ export async function deleteUserAccount(): Promise<{ success: boolean; message: 
       'skweladabaw_user_profile_cache',
       'skweladabaw_profile_dirty',
       'skweladabaw_profile_updated_at',
-      'skweladabaw_pending_guest_schedules',
-      'skweladabaw_pending_guest_tasks',
-      'skweladabaw_pending_guest_routines',
-      'skweladabaw_pending_guest_expenses',
-      'skweladabaw_pending_guest_grades',
+      PENDING_GUEST_SCHEDULES_KEY,
+      PENDING_GUEST_TASKS_KEY,
+      PENDING_GUEST_ROUTINES_KEY,
+      PENDING_GUEST_EXPENSES_KEY,
+      PENDING_GUEST_GRADES_KEY,
+      PENDING_GUEST_PROFILE_KEY,
       'skweladabaw_last_sync_timestamp',
       'skweladabaw_pending_sync',
       PENDING_SYNC_KEY,

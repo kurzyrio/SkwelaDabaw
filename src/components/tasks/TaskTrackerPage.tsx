@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { 
@@ -30,6 +30,7 @@ import { SelectWithOther } from '../common/SelectWithOther';
 import { CustomDatePickerModal } from '../common/CustomDatePickerModal';
 import { CustomTimePickerModal } from '../common/CustomTimePickerModal';
 import { useBackHandler, BackPriority } from '../../hooks/useBackHandler';
+import { useProcessingOverlay } from '../../contexts/ProcessingOverlayContext';
 import { EagleBuddy } from '../common/EagleBuddy';
 import confetti from 'canvas-confetti';
 
@@ -82,9 +83,14 @@ export const TaskTrackerPage: React.FC = () => {
   const [editingTask, setEditingTask] = useState<TaskItem | null>(null);
   const [showEditModal, setShowEditModal] = useState<boolean>(false);
   const [taskPendingDelete, setTaskPendingDelete] = useState<TaskItem | null>(null);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const isDeletingRef = useRef<boolean>(false);
+  const { withProcessing } = useProcessingOverlay();
 
   // Hardware Back Button Interception for Task Modals
-  useBackHandler(Boolean(taskPendingDelete), () => setTaskPendingDelete(null), BackPriority.MODAL, 'task_delete_modal');
+  useBackHandler(Boolean(taskPendingDelete), () => {
+    if (!isDeletingRef.current) setTaskPendingDelete(null);
+  }, BackPriority.MODAL, 'task_delete_modal');
   useBackHandler(Boolean(timePickerTarget), () => setTimePickerTarget(null), BackPriority.POPUP, 'task_time_picker');
   useBackHandler(Boolean(datePickerTarget), () => setDatePickerTarget(null), BackPriority.POPUP, 'task_date_picker');
   useBackHandler(showAddModal, () => setShowAddModal(false), BackPriority.MODAL, 'task_add_modal');
@@ -167,20 +173,34 @@ export const TaskTrackerPage: React.FC = () => {
   };
 
   const handleDeleteTask = async (taskOrId: TaskItem | number | undefined) => {
-    if (!taskOrId) return;
+    if (!taskOrId || isDeletingRef.current) return;
+    isDeletingRef.current = true;
+    setIsDeleting(true);
     try {
-      if (typeof taskOrId === 'number') {
-        const found = tasks.find((t) => t.id === taskOrId) || await db.tasks.get(taskOrId);
-        if (found) {
-          await deleteTask(found);
-        } else {
-          await db.tasks.delete(taskOrId);
+      await withProcessing(
+        {
+          message: 'Deleting Task • Please wait',
+          submessage: 'Removing task and syncing with database',
+          minVisibleMs: 250
+        },
+        async () => {
+          if (typeof taskOrId === 'number') {
+            const found = tasks.find((t) => t.id === taskOrId) || await db.tasks.get(taskOrId);
+            if (found) {
+              await deleteTask(found, { awaitFlush: true });
+            } else {
+              await db.tasks.delete(taskOrId);
+            }
+          } else {
+            await deleteTask(taskOrId, { awaitFlush: true });
+          }
         }
-      } else {
-        await deleteTask(taskOrId);
-      }
+      );
     } catch (err) {
       console.error('Failed to delete task:', err);
+    } finally {
+      isDeletingRef.current = false;
+      setIsDeleting(false);
     }
   };
 
@@ -394,8 +414,12 @@ export const TaskTrackerPage: React.FC = () => {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setTaskPendingDelete(task)}
-                    className="p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[#FF453A] hover:bg-[var(--card-bg)] transition-colors pressable"
+                    disabled={isDeleting}
+                    onClick={() => {
+                      if (isDeletingRef.current) return;
+                      setTaskPendingDelete(task);
+                    }}
+                    className="p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[#FF453A] hover:bg-[var(--card-bg)] transition-colors pressable disabled:opacity-50"
                     title="Delete Task"
                     aria-label="Delete Task"
                   >
@@ -929,7 +953,9 @@ export const TaskTrackerPage: React.FC = () => {
       {taskPendingDelete && createPortal(
         <div 
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm sheet-backdrop-enter select-none"
-          onClick={() => setTaskPendingDelete(null)}
+          onClick={() => {
+            if (!isDeletingRef.current) setTaskPendingDelete(null);
+          }}
         >
           <div 
             className="w-full max-w-sm rounded-2xl p-5 bg-[var(--card-bg)] border border-[var(--border-color)] shadow-2xl space-y-4"
@@ -952,19 +978,24 @@ export const TaskTrackerPage: React.FC = () => {
             <div className="flex items-center justify-end gap-2 pt-1">
               <button
                 type="button"
-                onClick={() => setTaskPendingDelete(null)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--nested-bg)] transition-colors pressable"
+                disabled={isDeleting}
+                onClick={() => {
+                  if (!isDeletingRef.current) setTaskPendingDelete(null);
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--nested-bg)] transition-colors pressable disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="button"
+                disabled={isDeleting}
                 onClick={async () => {
+                  if (isDeletingRef.current || !taskPendingDelete) return;
                   const toDelete = taskPendingDelete;
                   setTaskPendingDelete(null);
                   await handleDeleteTask(toDelete);
                 }}
-                className="px-4 py-2 rounded-xl bg-[#FF453A] hover:bg-red-600 text-white font-bold text-xs shadow-sm transition-colors pressable flex items-center gap-1.5"
+                className="px-4 py-2 rounded-xl bg-[#FF453A] hover:bg-red-600 text-white font-bold text-xs shadow-sm transition-colors pressable flex items-center gap-1.5 disabled:opacity-50"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 Delete Task

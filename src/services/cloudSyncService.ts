@@ -13,7 +13,11 @@ import { ClassSchedule, DayOfWeek, TaskItem, DayReminderItem, ExpenseItem, Grade
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
 import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
-import { scheduleAllClassSchedulesReminders, refreshUnremovableClassNotification } from './notificationService';
+import {
+  scheduleAllClassSchedulesReminders,
+  refreshUnremovableClassNotification,
+  scheduleCommuteAndEasterNotifications
+} from './notificationService';
 import { syncScheduleToWidgets, syncTasksToWidgets, syncRoutinesToWidgets, syncWeatherAlertPreference } from './widgetService';
 import {
   SyncTombstones,
@@ -987,6 +991,7 @@ export async function restoreUserData(
       }
 
       // 7. Restore Settings into localStorage
+      let restoredPersistentNotifSetting = false;
       if (responseData.settings) {
         const set = responseData.settings;
         try {
@@ -998,8 +1003,12 @@ export async function restoreUserData(
           if (set.language) localStorage.setItem('skweladabaw_mascot_language', set.language);
           if (set.persistent_next_class !== undefined && set.persistent_next_class !== null) {
             localStorage.setItem('skweladabaw_persistent_next_class', Number(set.persistent_next_class) === 1 ? 'true' : 'false');
+            restoredPersistentNotifSetting = true;
           }
-          if (set.persistent_theme) localStorage.setItem('skweladabaw_persistent_theme', set.persistent_theme);
+          if (set.persistent_theme) {
+            localStorage.setItem('skweladabaw_persistent_theme', set.persistent_theme);
+            restoredPersistentNotifSetting = true;
+          }
           if (set.connect_allowance !== undefined && set.connect_allowance !== null) {
             localStorage.setItem('skweladabaw_connect_allowance', Number(set.connect_allowance) === 1 ? 'true' : 'false');
           }
@@ -1015,6 +1024,17 @@ export async function restoreUserData(
           }
         } catch {}
       }
+
+      // Sync ongoing status bar card & Ingat commute alerts after settings + schedules are restored
+      try {
+        if (restoredPersistentNotifSetting) {
+          await refreshUnremovableClassNotification(txResult.finalSchedules);
+        }
+        if (typeof window !== 'undefined' && (restoredPersistentNotifSetting || txResult.schedulesChanged || scheduleCount === 0)) {
+          window.dispatchEvent(new Event('skweladabaw_persistent_notif_changed'));
+        }
+        scheduleCommuteAndEasterNotifications(txResult.finalSchedules).catch(() => {});
+      } catch (_) {}
 
       // 9. Restore Saved Commuter Places into UID-scoped localStorage
       if (Array.isArray(responseData.savedPlaces)) {
@@ -1542,7 +1562,7 @@ export async function syncLocalDataToCloud(session?: StudentAuthSession): Promis
         language: localStorage.getItem('skweladabaw_mascot_language') || 'en',
         tapFx: localStorage.getItem('skweladabaw_tap_fx_enabled') !== 'false' ? 1 : 0,
         tapSound: localStorage.getItem('skweladabaw_tap_fx_sound') || 'chirp',
-        persistentNextClass: localStorage.getItem('skweladabaw_persistent_next_class') !== 'false' ? 1 : 0,
+        persistentNextClass: localStorage.getItem('skweladabaw_persistent_next_class') === 'true' ? 1 : 0,
         persistentTheme: localStorage.getItem('skweladabaw_persistent_theme') || 'midnight',
         connectAllowance: localStorage.getItem('skweladabaw_connect_allowance') === 'true' ? 1 : 0,
         weatherAlertsEnabled: localStorage.getItem('skweladabaw_weather_alerts_enabled') !== 'false' ? 1 : 0,

@@ -1,14 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Bell, Plus, Trash2, X, Clock, CalendarDays, Check, Pencil } from 'lucide-react';
 import { db } from '../../db';
 import { DayReminderItem, DayOfWeek } from '../../types';
 import { scheduleDayReminder, cancelDayReminder } from '../../services/notificationService';
 import { CustomTimePicker } from '../common/CustomTimePicker';
-import { queueCloudSync } from '../../services/cloudSyncService';
+import { queueCloudSync, syncLocalDataToCloud } from '../../services/cloudSyncService';
 import { generateSyncUUID, recordSyncDeletion } from '../../services/userScope';
 import { syncRoutinesToWidgets } from '../../services/widgetService';
 import { getSavedSession } from '../../services/authService';
+import { useProcessingOverlay } from '../../contexts/ProcessingOverlayContext';
 
 const DAYS_OF_WEEK: DayOfWeek[] = [
   'Everyday',
@@ -28,6 +29,9 @@ export const DayReminderManager: React.FC = () => {
   const [time, setTime] = useState('07:00');
   const [notes, setNotes] = useState('');
   const [editingReminder, setEditingReminder] = useState<DayReminderItem | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const isDeletingRef = useRef(false);
+  const { withProcessing } = useProcessingOverlay();
 
   const reminders = useLiveQuery(() => db.dayReminders.toArray(), []) || [];
 
@@ -94,16 +98,53 @@ export const DayReminderManager: React.FC = () => {
   };
 
   const deleteReminder = async (id: number) => {
-    const session = getSavedSession();
-    const uid = session?.isLoggedIn && session?.uid ? session.uid : undefined;
-    const existing = await db.dayReminders.get(id);
-    if (existing?.uuid) {
-      recordSyncDeletion('routines', existing.uuid, uid, existing.updatedAt || existing.createdAt);
+    if (!id || isDeletingRef.current) return;
+    isDeletingRef.current = true;
+    setIsDeleting(true);
+    try {
+      await withProcessing(
+        {
+          message: 'Deleting Routine • Please wait',
+          submessage: 'Removing routine and updating alarms',
+          minVisibleMs: 250
+        },
+        async () => {
+          const session = getSavedSession();
+          const uid = session?.isLoggedIn && session?.uid ? session.uid : undefined;
+          const existing = await db.dayReminders.get(id);
+          if (existing?.uuid) {
+            recordSyncDeletion('routines', existing.uuid, uid, existing.updatedAt || existing.createdAt);
+          }
+          await db.dayReminders.delete(id);
+          await cancelDayReminder(id).catch(() => {});
+          await syncRoutineCache();
+          queueCloudSync(undefined, true);
+          const isOnline = typeof navigator === 'undefined' ? true : navigator.onLine;
+          if (session?.isLoggedIn && session?.uid && isOnline) {
+            let timer: ReturnType<typeof setTimeout> | null = null;
+            try {
+              await Promise.race([
+                syncLocalDataToCloud(session).catch((err) => {
+                  console.warn('Routine delete cloud sync note:', err);
+                }),
+                new Promise<void>((r) => {
+                  timer = setTimeout(r, 4000);
+                })
+              ]);
+            } catch (_) {
+              // Offline-safe fallback
+            } finally {
+              if (timer) clearTimeout(timer);
+            }
+          }
+        }
+      );
+    } catch (err) {
+      console.error('Failed to delete routine:', err);
+    } finally {
+      isDeletingRef.current = false;
+      setIsDeleting(false);
     }
-    await db.dayReminders.delete(id);
-    cancelDayReminder(id).catch(() => {});
-    await syncRoutineCache();
-    queueCloudSync(undefined, true);
   };
 
   const handleOpenEditReminder = (item: DayReminderItem) => {
@@ -433,8 +474,10 @@ export const DayReminderManager: React.FC = () => {
                 </button>
 
                 <button
+                  type="button"
+                  disabled={isDeleting}
                   onClick={() => item.id && deleteReminder(item.id)}
-                  className="p-2 rounded-xl text-[var(--text-secondary)] hover:text-[#FF453A] hover:bg-[var(--nested-bg)] transition-colors pressable"
+                  className="p-2 rounded-xl text-[var(--text-secondary)] hover:text-[#FF453A] hover:bg-[var(--nested-bg)] transition-colors pressable disabled:opacity-50"
                   aria-label="Delete routine"
                 >
                   <Trash2 className="w-4 h-4" />

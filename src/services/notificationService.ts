@@ -2,6 +2,7 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
 import { ClassSchedule, TaskItem, DayReminderItem } from '../types';
 import { db } from '../db';
+import { getBayaniLanguage } from '../utils/bayaniDialogues';
 import { 
   postNativeUnremovableNotification, 
   cancelNativeUnremovableNotification,
@@ -17,6 +18,9 @@ export const APP_UPDATE_NOTIFICATION_ID = 99999;
 export const WEATHER_NOTIFICATION_CHANNEL_ID = 'skweladabaw_weather';
 export const WEATHER_HEAT_NOTIFICATION_ID = 95001;
 export const WEATHER_RAIN_NOTIFICATION_ID = 95002;
+export const INGAT_PRE_CLASS_ID_BASE = 81000;
+export const INGAT_POST_CLASS_ID_BASE = 82000;
+export const INGAT_PRE_CLASS_LEAD_MINUTES = 45;
 
 /**
  * Thoroughly purge any legacy or orphaned notifications that were scheduled in previous app builds
@@ -896,6 +900,7 @@ export async function updatePersistentNextClassNotification(
 let lastOngoingEnabledState: boolean | null = null;
 let ongoingNotificationTimeout: ReturnType<typeof setTimeout> | null = null;
 let ongoingLoopCleanup: (() => void) | null = null;
+let ingatOpChain: Promise<void> = Promise.resolve();
 
 /**
  * Compute and push real-time status bar ongoing class notification & widgets
@@ -1026,7 +1031,7 @@ export function initOngoingNotificationLoop(): () => void {
   const handleStateOrVisibility = () => {
     if (isDisposed) return;
     if (
-      localStorage.getItem('skweladabaw_persistent_next_class') === 'true' &&
+      isLiveNotificationsEnabled() &&
       (typeof document === 'undefined' || !document.hidden)
     ) {
       scheduleNextMinuteTick();
@@ -1035,11 +1040,23 @@ export function initOngoingNotificationLoop(): () => void {
     }
   };
 
+  const handlePersistentNotifChanged = () => {
+    if (isDisposed) return;
+    handleStateOrVisibility();
+    scheduleIngatNotifications().catch(console.warn);
+  };
+
+  const handleLanguageChanged = () => {
+    if (isDisposed) return;
+    scheduleIngatNotifications().catch(console.warn);
+  };
+
   scheduleNextMinuteTick();
   if (typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', handleStateOrVisibility);
   }
-  window.addEventListener('skweladabaw_persistent_notif_changed', handleStateOrVisibility);
+  window.addEventListener('skweladabaw_persistent_notif_changed', handlePersistentNotifChanged);
+  window.addEventListener('skweladabaw_language_changed', handleLanguageChanged);
 
   ongoingLoopCleanup = () => {
     isDisposed = true;
@@ -1047,7 +1064,8 @@ export function initOngoingNotificationLoop(): () => void {
     if (typeof document !== 'undefined') {
       document.removeEventListener('visibilitychange', handleStateOrVisibility);
     }
-    window.removeEventListener('skweladabaw_persistent_notif_changed', handleStateOrVisibility);
+    window.removeEventListener('skweladabaw_persistent_notif_changed', handlePersistentNotifChanged);
+    window.removeEventListener('skweladabaw_language_changed', handleLanguageChanged);
     ongoingLoopCleanup = null;
   };
 
@@ -1055,7 +1073,253 @@ export function initOngoingNotificationLoop(): () => void {
 }
 
 /**
- * Cancel persistent next class status bar notification
+ * Check whether Live Notification Updates (status bar card & Ingat commute alerts) are enabled.
+ */
+export function isLiveNotificationsEnabled(): boolean {
+  try {
+    return typeof localStorage !== 'undefined' && localStorage.getItem('skweladabaw_persistent_next_class') === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function enqueueIngatOp(op: () => Promise<void>): Promise<void> {
+  const next = ingatOpChain.then(op, op);
+  ingatOpChain = next.catch(() => {});
+  return next;
+}
+
+function parseTimeMinutes(timeStr?: string): number {
+  if (!timeStr || typeof timeStr !== 'string') return Number.NaN;
+  const trimmed = timeStr.trim();
+  const match = trimmed.match(/^(\d{1,2}):(\d{2})(?:\s*(AM|PM))?$/i);
+  if (!match) return Number.NaN;
+  let hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  const meridiem = match[3]?.toUpperCase();
+  if (isNaN(hours) || isNaN(minutes) || minutes < 0 || minutes > 59) return Number.NaN;
+  if (meridiem) {
+    if (hours < 1 || hours > 12) return Number.NaN;
+    if (meridiem === 'PM' && hours !== 12) hours += 12;
+    if (meridiem === 'AM' && hours === 12) hours = 0;
+  } else if (hours < 0 || hours > 23) {
+    return Number.NaN;
+  }
+  return hours * 60 + minutes;
+}
+
+function matchesScheduleDay(days: unknown, targetDay: string): boolean {
+  if (!days) return false;
+  const lowerTarget = targetDay.toLowerCase();
+  if (Array.isArray(days)) {
+    return days.some((d) => {
+      const lower = String(d).trim().toLowerCase();
+      return lower === lowerTarget || lower === 'everyday';
+    });
+  }
+  if (typeof days === 'string') {
+    return days.split(',').some((d) => {
+      const lower = d.trim().toLowerCase();
+      return lower === lowerTarget || lower === 'everyday';
+    });
+  }
+  return false;
+}
+
+async function cancelIngatNotificationsInternal(): Promise<void> {
+  try {
+    if (!Capacitor.isNativePlatform()) return;
+    const idsToCancel = [0, 1, 2, 3, 4, 5, 6, 7].flatMap((w) => [
+      { id: INGAT_PRE_CLASS_ID_BASE + w },
+      { id: INGAT_POST_CLASS_ID_BASE + w },
+      { id: 77000 + w },
+      { id: 79000 + w }
+    ]);
+    await LocalNotifications.cancel({ notifications: idsToCancel });
+  } catch (err) {
+    console.warn('Error canceling Ingat notifications:', err);
+  }
+}
+
+/**
+ * Cancel all pre-class and post-class "Ingat" / "Take Care" commute notifications
+ * (including legacy 77000..77007 and 79000..79007 IDs).
+ */
+export async function cancelIngatNotifications(): Promise<void> {
+  return enqueueIngatOp(cancelIngatNotificationsInternal);
+}
+
+async function scheduleIngatNotificationsInternal(schedules?: ClassSchedule[]): Promise<void> {
+  try {
+    // Always cancel existing and legacy Ingat notifications first
+    await cancelIngatNotificationsInternal();
+
+    if (!Capacitor.isNativePlatform()) return;
+
+    // STRICT GATE: Zero Ingat notifications may ever be scheduled when Live Notification updates are OFF
+    if (!isLiveNotificationsEnabled()) return;
+
+    let resolvedSchedules = schedules;
+    if (resolvedSchedules === undefined) {
+      try {
+        resolvedSchedules = await db.schedules.toArray();
+      } catch (dbErr) {
+        console.warn('Error reading schedules for Ingat notifications:', dbErr);
+        return;
+      }
+    }
+
+    if (!resolvedSchedules || resolvedSchedules.length === 0) return;
+
+    await initializeNotificationChannels();
+
+    // Re-verify gate after async channel init in case user toggled OFF mid-flight
+    if (!isLiveNotificationsEnabled()) return;
+
+    const language = getBayaniLanguage();
+    const weekdays = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday'
+    ] as const;
+
+    const notifications: any[] = [];
+
+    for (const dayName of weekdays) {
+      const weekday = DAY_INDEX_MAP[dayName];
+      if (!weekday) continue;
+
+      const dayClasses = resolvedSchedules.filter((s) => matchesScheduleDay(s.days, dayName));
+      if (dayClasses.length === 0) continue;
+
+      // Pre-class "Ingat" notification (45 minutes before first class of the day)
+      const validStartClasses = dayClasses.filter((cls) => Number.isFinite(parseTimeMinutes(cls.startTime)));
+      if (validStartClasses.length > 0) {
+        validStartClasses.sort((a, b) => parseTimeMinutes(a.startTime) - parseTimeMinutes(b.startTime));
+        const firstClass = validStartClasses[0];
+        const firstStartMinutes = parseTimeMinutes(firstClass.startTime);
+        let totalPreMinutes = firstStartMinutes - INGAT_PRE_CLASS_LEAD_MINUTES;
+        let preWeekday = weekday;
+        if (totalPreMinutes < 0) {
+          totalPreMinutes += 1440;
+          preWeekday = weekday === 1 ? 7 : weekday - 1;
+        }
+        const preH = Math.floor(totalPreMinutes / 60);
+        const preM = totalPreMinutes % 60;
+        const formattedStart = format12Hour(firstClass.startTime);
+
+        let preTitle: string;
+        let preBody: string;
+        if (language === 'tagalog') {
+          preTitle = 'Ingat sa Biyahe!';
+          preBody = `Mag-ingat papuntang campus! Unang klase mo: ${firstClass.subjectCode} (${formattedStart}).`;
+        } else if (language === 'english') {
+          preTitle = 'Take Care on Your Way!';
+          preBody = `First class today: ${firstClass.subjectCode} at ${formattedStart}. Have a safe commute to campus!`;
+        } else {
+          preTitle = 'Ingat sa Biyahe!';
+          preBody = `Amping padulong sa campus! Unang klase: ${firstClass.subjectCode} (${formattedStart}).`;
+        }
+
+        notifications.push({
+          id: INGAT_PRE_CLASS_ID_BASE + weekday,
+          title: preTitle,
+          body: preBody,
+          channelId: NOTIFICATION_CHANNEL_ID,
+          schedule: {
+            on: {
+              weekday: preWeekday,
+              hour: preH,
+              minute: preM
+            },
+            allowWhileIdle: true
+          },
+          extra: {
+            type: 'ingat_pre_class',
+            day: dayName
+          }
+        });
+      }
+
+      // Post-class "Ingat" notification (at final dismissal of the day)
+      const validEndClasses = dayClasses.filter((cls) => Number.isFinite(parseTimeMinutes(cls.endTime)));
+      if (validEndClasses.length > 0) {
+        validEndClasses.sort((a, b) => parseTimeMinutes(a.endTime) - parseTimeMinutes(b.endTime));
+        const lastClass = validEndClasses[validEndClasses.length - 1];
+        const lastEndMinutes = parseTimeMinutes(lastClass.endTime);
+        const lastH = Math.floor(lastEndMinutes / 60);
+        const lastM = lastEndMinutes % 60;
+
+        let postTitle: string;
+        let postBody: string;
+        if (language === 'tagalog') {
+          postTitle = 'Ingat Pauwi, Dabawenyo!';
+          postBody = `Tapos na ang mga klase mo ngayong araw (${lastClass.subjectCode}). Mag-ingat sa pag-uwi!`;
+        } else if (language === 'english') {
+          postTitle = 'Take Care Going Home!';
+          postBody = `Classes done for today (${lastClass.subjectCode}). Have a safe commute home, Dabawenyo!`;
+        } else {
+          postTitle = 'Ingat Pauwi, Dabawenyo!';
+          postBody = `Human na imong mga klase karon (${lastClass.subjectCode}). Amping sa imong pag-uli!`;
+        }
+
+        notifications.push({
+          id: INGAT_POST_CLASS_ID_BASE + weekday,
+          title: postTitle,
+          body: postBody,
+          channelId: NOTIFICATION_CHANNEL_ID,
+          schedule: {
+            on: {
+              weekday,
+              hour: lastH,
+              minute: lastM
+            },
+            allowWhileIdle: true
+          },
+          extra: {
+            type: 'ingat_post_class',
+            day: dayName
+          }
+        });
+      }
+    }
+
+    if (notifications.length > 0 && isLiveNotificationsEnabled()) {
+      await LocalNotifications.schedule({ notifications });
+    }
+  } catch (err) {
+    console.warn('Error scheduling Ingat notifications:', err);
+  }
+}
+
+/**
+ * Schedule weekly pre-class (45m before first class) and post-class (at final dismissal)
+ * "Ingat" / "Take Care" commute notifications, strictly gated by Live Notification Updates.
+ */
+export async function scheduleIngatNotifications(schedules?: ClassSchedule[]): Promise<void> {
+  return enqueueIngatOp(() => scheduleIngatNotificationsInternal(schedules));
+}
+
+/**
+ * Synchronize "Ingat" commute notifications when the Live Notification Updates toggle changes.
+ */
+export async function syncIngatNotificationsForLiveToggle(
+  enabled: boolean,
+  schedules?: ClassSchedule[]
+): Promise<void> {
+  if (!enabled) {
+    await cancelIngatNotifications();
+    return;
+  }
+  await scheduleIngatNotifications(schedules);
+}
+
+/**
+ * Cancel persistent next class status bar notification and gated Ingat commute alerts
  */
 export async function cancelPersistentNextClassNotification(): Promise<void> {
   lastOngoingEnabledState = false;
@@ -1064,6 +1328,7 @@ export async function cancelPersistentNextClassNotification(): Promise<void> {
     ongoingNotificationTimeout = null;
   }
   try {
+    await cancelIngatNotifications();
     if (Capacitor.isNativePlatform()) {
       await cancelNativeUnremovableNotification();
       await LocalNotifications.cancel({
@@ -1076,22 +1341,10 @@ export async function cancelPersistentNextClassNotification(): Promise<void> {
 }
 
 /**
- * Purge and cancel any lingering client-side commute dismissal notifications (77000..77020 and 79000..79020)
- * Eliminates unsolicited post-class alerts while ensuring complete student schedule silence.
+ * Synchronize pre- and post-class "Ingat" / "Take Care" commute alerts (strictly gated by Live Notification Updates).
  */
-export async function scheduleCommuteAndEasterNotifications(_schedules?: ClassSchedule[]): Promise<void> {
-  try {
-    if (!Capacitor.isNativePlatform()) return;
-
-    // Purge legacy and unsolicited commute dismissal alerts (77000..77020 and 79000..79020)
-    const cleanupIds = [0, 1, 2, 3, 4, 5, 6, 7].flatMap((w) => [
-      { id: 77000 + w },
-      { id: 79000 + w }
-    ]);
-    await LocalNotifications.cancel({ notifications: cleanupIds });
-  } catch (err) {
-    console.warn('Error purging commute dismissal notifications:', err);
-  }
+export async function scheduleCommuteAndEasterNotifications(schedules?: ClassSchedule[]): Promise<void> {
+  return scheduleIngatNotifications(schedules);
 }
 
 /**

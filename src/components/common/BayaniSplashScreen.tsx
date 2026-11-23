@@ -6,7 +6,8 @@ import { applyTheme } from '../../themes';
 import { 
   initializeNotificationChannels, 
   refreshUnremovableClassNotification,
-  scheduleAllClassSchedulesReminders 
+  scheduleAllClassSchedulesReminders,
+  scheduleCommuteAndEasterNotifications
 } from '../../services/notificationService';
 import { CURRENT_APP_VERSION } from '../../services/updateService';
 
@@ -63,6 +64,7 @@ export const BayaniSplashScreen: React.FC<BayaniSplashScreenProps> = ({
             if (allSchedules && allSchedules.length > 0) {
               await scheduleAllClassSchedulesReminders(allSchedules);
             }
+            await scheduleCommuteAndEasterNotifications(allSchedules);
             await refreshUnremovableClassNotification(allSchedules);
           } catch (bgErr) {
             console.warn('[BayaniSplashScreen] Background setup note:', bgErr);

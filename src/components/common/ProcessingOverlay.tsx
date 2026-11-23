@@ -17,9 +17,10 @@ export const ProcessingOverlay: React.FC<ProcessingOverlayProps> = ({
 
   return createPortal(
     <div 
-      className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/40 dark:bg-black/60 backdrop-blur-md select-none animate-fade-in pointer-events-auto"
+      className="fixed inset-0 z-[100000] flex items-center justify-center p-4 bg-black/40 dark:bg-black/60 backdrop-blur-md select-none animate-fade-in pointer-events-auto touch-none overscroll-none"
       role="dialog"
       aria-modal="true"
+      onClick={(e) => e.stopPropagation()}
     >
       <div className="w-full max-w-xs rounded-3xl bg-[var(--modal-bg)] border border-[var(--card-border)] p-6 shadow-2xl flex flex-col items-center justify-center text-center gap-3.5 animate-scale-up">
         {/* Animated Mascot with Active Orbital Spinner Ring & Glowing Halo */}

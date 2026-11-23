@@ -1,7 +1,7 @@
 {
-  "version": "1.11.5.21",
-  "versionCode": 150,
-  "releaseDate": "2026-11-20",
+  "version": "1.11.6.0",
+  "versionCode": 151,
+  "releaseDate": "2026-11-23",
   "versionScheme": {
     "digit1": "App Version",
     "digit2": "Major Features added",
@@ -13,15 +13,15 @@
   "forceUpdate": false,
   "developer": "Kurzyrio",
   "supportEmail": "jerriviencenatad@gmail.com",
-  "title": "Google Maps Pin & Location Accuracy Update for Jeep Transit",
+  "title": "Loading Overlays, Guest Account Linking & Ingat Notifications",
   "releaseNotes": [
-    "Re-verified and corrected GPS pins for all 175 selectable Jeep Transit places—including police stations, hospitals, malls, parks, transit hubs, and 55 campuses—directly against Google Maps.",
-    "Fixed major pin offsets (up to 11.8 km), corrected official DCPO PS13 Mandug & PS18 Bajada numbering, and updated relocated offices (TEU Ecoland, Maritime Police Sta. Ana, Central 911 Toril).",
-    "Removed non-existent and duplicate listings across malls, parks, and hospitals for cleaner route search."
+    "Added a unified Bayani loading screen on deleting items, syncing to cloud, and importing schedules while blocking duplicate imports.",
+    "Restored Guest-to-Account linking choice so students can keep & sync guest data or start fresh from onboarding.",
+    "Restored pre- and post-class \"Ingat / Take Care\" commute notifications, respecting the Live Notification Updates toggle."
   ],
   "downloadUrl": "https://skweladabaw.kurzyrio.site/download",
-  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.5.21.apk",
-  "sizeBytes": 27029804,
+  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.6.0.apk",
+  "sizeBytes": 27040175,
   "sizeFormatted": "25.8 MB",
-  "sha256": "bb88f9bc97a84e4f27f04ebef629c942a84ccb98a9518b27f27ddfb21cff98c4"
+  "sha256": "f2f41c868c38f6d648163a633d4fa1225bbfb00ea5daf7b39f226b094ef97195"
 }

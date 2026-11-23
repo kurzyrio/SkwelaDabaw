@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { 
@@ -27,6 +27,7 @@ import {
 import { playEagleSound } from '../../utils/audio';
 import { EagleBuddy } from '../common/EagleBuddy';
 import { useBackHandler, BackPriority } from '../../hooks/useBackHandler';
+import { useProcessingOverlay } from '../../contexts/ProcessingOverlayContext';
 
 export const TaskManager: React.FC = () => {
   const [isAdding, setIsAdding] = useState(false);
@@ -42,8 +43,13 @@ export const TaskManager: React.FC = () => {
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskItem | null>(null);
   const [taskPendingDelete, setTaskPendingDelete] = useState<TaskItem | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const isDeletingRef = useRef(false);
+  const { withProcessing } = useProcessingOverlay();
 
-  useBackHandler(Boolean(taskPendingDelete), () => setTaskPendingDelete(null), BackPriority.MODAL, 'task_delete_modal');
+  useBackHandler(Boolean(taskPendingDelete), () => {
+    if (!isDeletingRef.current) setTaskPendingDelete(null);
+  }, BackPriority.MODAL, 'task_delete_modal');
 
   // Live queries
   const rawTasks = useLiveQuery(() => db.tasks.toArray(), []) || [];
@@ -96,19 +102,34 @@ export const TaskManager: React.FC = () => {
   };
 
   const deleteTask = async (taskOrId: TaskItem | number) => {
+    if (!taskOrId || isDeletingRef.current) return;
+    isDeletingRef.current = true;
+    setIsDeleting(true);
     try {
-      if (typeof taskOrId === 'number') {
-        const found = tasks.find((t) => t.id === taskOrId) || await db.tasks.get(taskOrId);
-        if (found) {
-          await deleteTaskFromSync(found);
-        } else {
-          await db.tasks.delete(taskOrId);
+      await withProcessing(
+        {
+          message: 'Deleting Task • Please wait',
+          submessage: 'Removing task and syncing with database',
+          minVisibleMs: 250
+        },
+        async () => {
+          if (typeof taskOrId === 'number') {
+            const found = tasks.find((t) => t.id === taskOrId) || await db.tasks.get(taskOrId);
+            if (found) {
+              await deleteTaskFromSync(found, { awaitFlush: true });
+            } else {
+              await db.tasks.delete(taskOrId);
+            }
+          } else {
+            await deleteTaskFromSync(taskOrId, { awaitFlush: true });
+          }
         }
-      } else {
-        await deleteTaskFromSync(taskOrId);
-      }
+      );
     } catch (err) {
       console.error('Failed to delete task:', err);
+    } finally {
+      isDeletingRef.current = false;
+      setIsDeleting(false);
     }
   };
 
@@ -629,8 +650,12 @@ export const TaskManager: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setTaskPendingDelete(t)}
-                  className="p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[#FF453A] hover:bg-[var(--nested-bg)] transition-colors pressable"
+                  disabled={isDeleting}
+                  onClick={() => {
+                    if (isDeletingRef.current) return;
+                    setTaskPendingDelete(t);
+                  }}
+                  className="p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[#FF453A] hover:bg-[var(--nested-bg)] transition-colors pressable disabled:opacity-50"
                   title="Delete"
                   aria-label="Delete"
                 >
@@ -655,7 +680,9 @@ export const TaskManager: React.FC = () => {
       {taskPendingDelete && createPortal(
         <div 
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm sheet-backdrop-enter select-none"
-          onClick={() => setTaskPendingDelete(null)}
+          onClick={() => {
+            if (!isDeletingRef.current) setTaskPendingDelete(null);
+          }}
         >
           <div 
             className="w-full max-w-sm rounded-2xl p-5 bg-[var(--card-bg)] border border-[var(--border-color)] shadow-2xl space-y-4"
@@ -678,21 +705,26 @@ export const TaskManager: React.FC = () => {
             <div className="flex items-center justify-end gap-2 pt-1">
               <button
                 type="button"
-                onClick={() => setTaskPendingDelete(null)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--nested-bg)] transition-colors pressable"
+                disabled={isDeleting}
+                onClick={() => {
+                  if (!isDeletingRef.current) setTaskPendingDelete(null);
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--nested-bg)] transition-colors pressable disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="button"
+                disabled={isDeleting}
                 onClick={async () => {
+                  if (isDeletingRef.current || !taskPendingDelete) return;
                   const toDelete = taskPendingDelete;
                   setTaskPendingDelete(null);
                   if (toDelete.id || toDelete.uuid) {
                     await deleteTask(toDelete);
                   }
                 }}
-                className="px-4 py-2 rounded-xl bg-[#FF453A] hover:bg-red-600 text-white font-bold text-xs shadow-sm transition-colors pressable flex items-center gap-1.5"
+                className="px-4 py-2 rounded-xl bg-[#FF453A] hover:bg-red-600 text-white font-bold text-xs shadow-sm transition-colors pressable flex items-center gap-1.5 disabled:opacity-50"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 Delete Task

@@ -260,7 +260,7 @@ export async function updateTask(task: TaskItem, updates: Partial<TaskItem>): Pr
  * - If pending_create: immediately delete locally (cloud never knew about it)
  * - If synced or pending_update: mark as pending_delete so it's hidden from UI and sent to cloud
  */
-export async function deleteTask(task: TaskItem): Promise<void> {
+export async function deleteTask(task: TaskItem, options?: { awaitFlush?: boolean }): Promise<void> {
   const uid = getSavedSession()?.uid;
   const freshTask =
     (task.id ? await db.tasks.get(task.id).catch(() => undefined) : undefined) ||
@@ -316,10 +316,24 @@ export async function deleteTask(task: TaskItem): Promise<void> {
   }
 
   // Immediately flush sync so database deletes the task without delay
-  flushPendingSync().catch((err) => {
+  const flushPromise = flushPendingSync().catch((err) => {
     console.debug('[taskSyncService] Immediate flush error:', err);
     scheduleSilentSync(500);
   });
+
+  if (options?.awaitFlush && (typeof navigator === 'undefined' || navigator.onLine)) {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    try {
+      await Promise.race([
+        flushPromise,
+        new Promise<void>((resolve) => {
+          timeoutId = setTimeout(resolve, 4500);
+        })
+      ]);
+    } finally {
+      if (timeoutId !== null) clearTimeout(timeoutId);
+    }
+  }
 }
 
 /**
