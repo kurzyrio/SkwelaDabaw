@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/ov_bubble_root"
+    android:layout_width="76dp"
+    android:layout_height="76dp"
+    android:clipChildren="false"
+    android:clipToPadding="false">
+
+    <FrameLayout
+        android:id="@+id/ov_bubble_motion_layer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipChildren="false"
+        android:clipToPadding="false">
+
+        <FrameLayout
+            android:id="@+id/ov_bubble_circle"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_gravity="center"
+            android:elevation="8dp">
+
+            <ImageView
+                android:id="@+id/ov_bubble_avatar"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="SkwelaDabaw Bubble"
+                android:scaleType="centerInside"
+                android:padding="5dp"
+                android:src="@drawable/ic_eagle_buddy" />
+        </FrameLayout>
+
+        <View
+            android:id="@+id/ov_bubble_status_dot"
+            android:layout_width="12dp"
+            android:layout_height="12dp"
+            android:layout_gravity="top|end"
+            android:layout_marginTop="9dp"
+            android:layout_marginEnd="9dp"
+            android:elevation="10dp"
+            android:visibility="gone" />
+    </FrameLayout>
+</FrameLayout>

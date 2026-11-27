@@ -17,10 +17,39 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.7.0',
+    releaseDate: 'November 28, 2026',
+    title: 'Messenger-Style Floating Bubble & Settings-Only Opt-In',
+    isLatest: true,
+    tagline: 'Removed automatic overlay pop-ups and rebuilt the floating Eagle bubble from scratch with lightweight spring physics and a clean quick-glance sheet.',
+    highlights: [
+      'Removed all automatic overlay pop-ups so the floating bubble stays off unless enabled in Settings',
+      'Rebuilt the floating bubble with smooth spring-physics flinging, magnetic drag-to-dismiss, and idle edge-tucking',
+      'Redesigned the expanded quick-glance sheet with live class countdowns, weather, next task, and quick shortcuts'
+    ],
+    items: [
+      {
+        type: 'ui',
+        title: 'Messenger-Style Floating Bubble',
+        description: 'Rebuilt from scratch with smooth 60/120Hz spring physics, fling edge-snapping, magnetic drag-to-dismiss, and subtle edge-tucking when idle.'
+      },
+      {
+        type: 'improvement',
+        title: 'Settings-Only Opt-In & Clean Sync',
+        description: 'Removed all unsolicited overlay permission pop-ups; turning off or dragging the bubble to dismiss now stays cleanly synced with Settings.'
+      },
+      {
+        type: 'ui',
+        title: 'Minimalist Quick-Glance Sheet',
+        description: 'Tapping the bubble now docks it cleanly at the top and opens an airy sheet showing live class countdowns, Davao weather, next task, and Schedule, Jeep, DC Bus, and Tasks shortcuts.'
+      }
+    ]
+  },
+  {
     version: '1.11.6.1',
     releaseDate: 'November 28, 2026',
     title: 'Google Sign-In Support for Non-GMS & Huawei Devices',
-    isLatest: true,
+    isLatest: false,
     tagline: 'Automatic browser-based Google Sign-In fallback on Android devices without Google Play Services while keeping native sign-in primary on GMS devices.',
     highlights: [
       'Automatic Firebase web OAuth fallback when Google Play Services is unavailable (including newer Huawei devices)',

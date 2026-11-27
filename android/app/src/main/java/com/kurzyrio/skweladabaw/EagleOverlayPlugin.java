@@ -126,6 +126,48 @@ public class EagleOverlayPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void getOverlayState(PluginCall call) {
+        Context context = getContext();
+        boolean granted = true;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            granted = Settings.canDrawOverlays(context);
+        }
+        SharedPreferences prefs = context.getSharedPreferences(EagleOverlayService.PREFS_NAME, Context.MODE_PRIVATE);
+        boolean enabled = prefs.getBoolean(EagleOverlayService.PREF_IS_ACTIVE, false);
+        boolean running = EagleOverlayService.isRunning();
+
+        JSObject ret = new JSObject();
+        ret.put("granted", granted);
+        ret.put("running", running);
+        ret.put("enabled", enabled && granted);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void resetBubblePosition(PluginCall call) {
+        try {
+            Context context = getContext();
+            context.getSharedPreferences(EagleOverlayService.PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .remove(EagleOverlayService.PREF_DOCK_LEFT)
+                .remove(EagleOverlayService.PREF_Y_RATIO)
+                .apply();
+
+            if (EagleOverlayService.isRunning()) {
+                Intent resetIntent = new Intent(context, EagleOverlayService.class);
+                resetIntent.setAction(EagleOverlayService.ACTION_RESET_POSITION);
+                context.startService(resetIntent);
+            }
+
+            JSObject ret = new JSObject();
+            ret.put("success", true);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Failed to reset bubble position", e);
+        }
+    }
+
+    @PluginMethod
     public void syncOverlayData(PluginCall call) {
         try {
             Context context = getContext();

@@ -28,9 +28,7 @@ import { WeatherPage } from './components/weather/WeatherPage';
 import { StudentHubPage } from './components/layout/StudentHubPage';
 import { BayaniSplashScreen } from './components/common/BayaniSplashScreen';
 import { BatteryOptimizationModal } from './components/common/BatteryOptimizationModal';
-import { EagleOverlayOptInModal } from './components/common/EagleOverlayOptInModal';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
-import { EagleOverlay } from './components/common/EagleOverlay';
 import { initOverlayLifecycle } from './services/eagleOverlayService';
 import { ExitToast } from './components/common/ExitToast';
 import { AnnouncementPopupModal } from './components/announcements/AnnouncementPopupModal';
@@ -118,7 +116,6 @@ export function App() {
   const [missingProfileFields, setMissingProfileFields] = useState<string[]>([]);
   const [isMissingProfileModalOpen, setIsMissingProfileModalOpen] = useState<boolean>(false);
   const [isBatteryModalOpen, setIsBatteryModalOpen] = useState<boolean>(false);
-  const [isEagleOverlayPromptOpen, setIsEagleOverlayPromptOpen] = useState<boolean>(false);
   const [theme, setTheme] = useState<string>(() => {
     return localStorage.getItem('skweladabaw_theme') || DEFAULT_THEME_ID;
   });
@@ -251,15 +248,6 @@ export function App() {
     'app_announcement_popup'
   );
 
-  useBackHandler(
-    isEagleOverlayPromptOpen,
-    () => {
-      setIsEagleOverlayPromptOpen(false);
-    },
-    BackPriority.MODAL,
-    'app_eagle_overlay_prompt'
-  );
-
   // Subscribe to root double-tap exit toast visibility
   useEffect(() => {
     const unsubscribe = navigationManager.onExitArmedChange((armed) => {
@@ -287,10 +275,6 @@ export function App() {
           console.warn('Initial cloud restore note:', err);
         }
       })();
-      // Check if user has not yet been prompted for Eagle Overlay (Native Android Only)
-      if (Capacitor.isNativePlatform() && typeof localStorage !== 'undefined' && localStorage.getItem('skwela_eagle_overlay_prompted') !== 'true') {
-        setIsEagleOverlayPromptOpen(true);
-      }
     } else if (!hasCompletedOnboarding()) {
       setIsOnboardingOpen(true);
     }
@@ -825,9 +809,6 @@ export function App() {
     setUserSession(session);
     saveSession(session);
     setIsOnboardingOpen(false);
-    if (Capacitor.isNativePlatform() && typeof localStorage !== 'undefined' && localStorage.getItem('skwela_eagle_overlay_prompted') !== 'true') {
-      setIsEagleOverlayPromptOpen(true);
-    }
   };
 
   const handleStartFreshOnboarding = useCallback((googleSession: StudentAuthSession) => {
@@ -857,11 +838,6 @@ export function App() {
         syncCloudDataBiDirectional().catch(() => {});
       } else {
         queueCloudSync(session);
-      }
-    }
-    if (!wasLoggedIn && session.isLoggedIn) {
-      if (Capacitor.isNativePlatform() && typeof localStorage !== 'undefined' && localStorage.getItem('skwela_eagle_overlay_prompted') !== 'true') {
-        setIsEagleOverlayPromptOpen(true);
       }
     }
     if (wasLoggedIn && !session.isLoggedIn) {
@@ -1169,11 +1145,6 @@ export function App() {
       {/* Global Interactive Screen Tap Particle Effect (Mounted Globally at Root) */}
       <ScreenTapEffect />
 
-      {/* Assistive Draggable Snapping Eagle Mascot Overlay (Mobile Android Native Only) */}
-      {Capacitor.isNativePlatform() && (
-        <EagleOverlay onNavigate={(tab) => navigateToTab(tab)} currentTab={activeTab} />
-      )}
-
       {/* In-App Live Class Reminder Alert Banner */}
       {activeAlert && (
         <div className="fixed top-[calc(max(env(safe-area-inset-top),1.25rem)+4rem)] left-0 right-0 px-4 z-[9999] flex justify-center pointer-events-none select-none">
@@ -1250,14 +1221,6 @@ export function App() {
         isOpen={isBatteryModalOpen}
         onClose={() => setIsBatteryModalOpen(false)}
       />
-
-      {/* Eagle Floating Overlay Onboarding Opt-In Modal (Mobile Android Native Only) */}
-      {Capacitor.isNativePlatform() && (
-        <EagleOverlayOptInModal
-          isOpen={isEagleOverlayPromptOpen}
-          onClose={() => setIsEagleOverlayPromptOpen(false)}
-        />
-      )}
 
       {/* Android Hardware Back Button Double-Tap Exit Notification */}
       <ExitToast isVisible={isExitToastVisible} />

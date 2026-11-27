@@ -1,6 +1,6 @@
 {
-  "version": "1.11.6.1",
-  "versionCode": 152,
+  "version": "1.11.7.0",
+  "versionCode": 153,
   "releaseDate": "2026-11-28",
   "versionScheme": {
     "digit1": "App Version",
@@ -13,15 +13,15 @@
   "forceUpdate": false,
   "developer": "Kurzyrio",
   "supportEmail": "jerriviencenatad@gmail.com",
-  "title": "Google Sign-In Support for Non-GMS & Huawei Devices",
+  "title": "Messenger-Style Floating Bubble & Settings-Only Opt-In",
   "releaseNotes": [
-    "Added automatic browser-based Google Sign-In fallback on Android devices without Google Play Services (such as newer Huawei devices).",
-    "Kept existing native Google Sign-In as the primary flow on Play Services devices while syncing all accounts to the same profile without duplicates.",
-    "Improved Google Sign-In cancellation and error messages so failures are clearly reported instead of failing silently."
+    "Removed all automatic floating bubble pop-ups; the bubble now stays off unless you enable it in Settings.",
+    "Rebuilt the floating Eagle bubble from scratch with smooth spring-physics flinging, magnetic drag-to-dismiss, and idle edge-tucking.",
+    "Redesigned the expanded quick-glance sheet with live class countdowns, weather, pending task peek, and one-tap Schedule, Jeep, DC Bus, and Tasks shortcuts."
   ],
   "downloadUrl": "https://skweladabaw.kurzyrio.site/download",
-  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.6.1.apk",
-  "sizeBytes": 27047097,
+  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.7.0.apk",
+  "sizeBytes": 27061316,
   "sizeFormatted": "25.8 MB",
-  "sha256": "3c49748a2283090a8fb1ab32ca097e27c5c532eb1cf2bb4aa2e0de7a00e9e999"
+  "sha256": "ada07f908c1bc8d5593e3698f9a05b394f6423671e9fe49b07eca6f4b739dad3"
 }

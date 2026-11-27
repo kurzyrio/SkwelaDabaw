@@ -54,8 +54,7 @@ import {
   CheckCheck,
   ExternalLink,
   Bot,
-  CloudSun,
-  MoveHorizontal
+  CloudSun
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { LegalModal } from '../common/LegalModal';
@@ -64,10 +63,12 @@ import { CustomSelect } from '../common/CustomSelect';
 import { db, clearAllDexieData } from '../../db';
 import { DAVAO_CAMPUSES } from '../../data/davaoCampuses';
 import { 
+  getNativeOverlayState,
   isOverlayPermitted, 
   requestOverlayPerm, 
   startEagleOverlay, 
   stopEagleOverlay, 
+  resetEagleBubblePosition,
   setEagleOverlayEnabledPref, 
   isEagleOverlayEnabledPref,
   autoSyncCurrentStateToOverlay 
@@ -177,8 +178,8 @@ export const SETTINGS_CATEGORIES: CategoryOption[] = [
   },
   {
     id: 'overlay',
-    label: 'Eagle Assistive Overlay',
-    description: 'System-wide floating companion & live glance',
+    label: 'Eagle Floating Bubble',
+    description: 'Optional floating bubble & quick glance',
     icon: Compass
   },
   {
@@ -285,16 +286,21 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const [isNotifSettingsModalOpen, setIsNotifSettingsModalOpen] = useState<boolean>(false);
   const [resetSuccessToast, setResetSuccessToast] = useState<boolean>(false);
 
-  // Eagle Assistive Overlay State
+  // Eagle Floating Bubble State
   const [eagleOverlayEnabled, setEagleOverlayEnabled] = useState<boolean>(() => {
     return isEagleOverlayEnabledPref();
   });
+  const pendingOverlayEnableRef = useRef<boolean>(false);
   const [eagleResetFeedback, setEagleResetFeedback] = useState<string | null>(null);
 
-  // Check overlay permission & task metrics
+  // Check overlay state & task metrics
   const checkPerm = useCallback(async () => {
-    const granted = await isOverlayPermitted();
-    setIsOverlayPermGranted(granted);
+    const state = await getNativeOverlayState();
+    setIsOverlayPermGranted(state.granted);
+    if (!pendingOverlayEnableRef.current) {
+      setEagleOverlayEnabled(state.enabled);
+      setEagleOverlayEnabledPref(state.enabled);
+    }
   }, []);
 
   const refreshTaskMetrics = useCallback(async () => {
@@ -416,15 +422,30 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
   useBodyScrollLock(isAnyModalActive);
 
-  // Re-check overlay permission when app gains focus or visibility (e.g. returning from Android system settings)
+  // Re-sync overlay state when returning from Android System Settings or after bubble dismissal
   useEffect(() => {
     const handleCheckOverlay = async () => {
-      const permitted = await isOverlayPermitted();
-      setIsOverlayPermGranted(permitted);
-      if (permitted && eagleOverlayEnabled) {
-        await startEagleOverlay();
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      const state = await getNativeOverlayState();
+      setIsOverlayPermGranted(state.granted);
+
+      if (pendingOverlayEnableRef.current) {
+        pendingOverlayEnableRef.current = false;
+        if (state.granted) {
+          const started = await startEagleOverlay();
+          setEagleOverlayEnabled(started);
+          setEagleOverlayEnabledPref(started);
+          return;
+        }
+        setEagleOverlayEnabled(false);
+        setEagleOverlayEnabledPref(false);
+        return;
       }
+
+      setEagleOverlayEnabled(state.enabled);
+      setEagleOverlayEnabledPref(state.enabled);
     };
+
     handleCheckOverlay();
     window.addEventListener('focus', handleCheckOverlay);
     document.addEventListener('visibilitychange', handleCheckOverlay);
@@ -432,7 +453,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       window.removeEventListener('focus', handleCheckOverlay);
       document.removeEventListener('visibilitychange', handleCheckOverlay);
     };
-  }, [eagleOverlayEnabled]);
+  }, []);
 
   // Tap Motion Settings
   const [tapEnabled, setTapEnabled] = useState<boolean>(isTapEffectEnabled());
@@ -605,25 +626,31 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     if (enabled) {
       const permitted = await isOverlayPermitted();
       if (!permitted) {
+        pendingOverlayEnableRef.current = true;
         const res = await requestOverlayPerm();
         if (res.granted) {
+          pendingOverlayEnableRef.current = false;
           setIsOverlayPermGranted(true);
-          await startEagleOverlay();
+          const started = await startEagleOverlay();
+          setEagleOverlayEnabled(started);
+          setEagleOverlayEnabledPref(started);
+        } else {
+          setEagleOverlayEnabled(false);
+          setEagleOverlayEnabledPref(false);
         }
       } else {
+        pendingOverlayEnableRef.current = false;
         setIsOverlayPermGranted(true);
-        await startEagleOverlay();
+        const started = await startEagleOverlay();
+        setEagleOverlayEnabled(started);
+        setEagleOverlayEnabledPref(started);
       }
-      setEagleOverlayEnabled(true);
-      setEagleOverlayEnabledPref(true);
     } else {
+      pendingOverlayEnableRef.current = false;
       await stopEagleOverlay();
       setEagleOverlayEnabled(false);
       setEagleOverlayEnabledPref(false);
     }
-    try {
-      window.dispatchEvent(new CustomEvent('skweladabaw_eagle_overlay_toggled', { detail: { enabled } }));
-    } catch (_) {}
   };
 
   const handleRequestOverlayPerm = async () => {
@@ -633,18 +660,15 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     }
   };
 
-  const handleResetEaglePosition = () => {
-    localStorage.removeItem('skweladabaw_eagle_overlay_position');
-    try {
-      window.dispatchEvent(new CustomEvent('skweladabaw_eagle_overlay_reset_pos'));
-    } catch (_) {}
-    setEagleResetFeedback('Position reset to default');
+  const handleResetEaglePosition = async () => {
+    await resetEagleBubblePosition();
+    setEagleResetFeedback('Position reset');
     setTimeout(() => setEagleResetFeedback(null), 2500);
   };
 
   const handleSyncOverlayNow = async () => {
     await autoSyncCurrentStateToOverlay();
-    setEagleResetFeedback('Schedule & weather pushed to overlay');
+    setEagleResetFeedback('Overlay updated');
     setTimeout(() => setEagleResetFeedback(null), 2500);
   };
 
@@ -2221,41 +2245,40 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           </div>
         )}
 
-        {/* CATEGORY 2: EAGLE OVERLAY */}
+        {/* CATEGORY 2: EAGLE FLOATING BUBBLE */}
         {activeCategory === 'overlay' && (
           <div className="space-y-4 animate-fade-in flex flex-col min-h-[60vh]">
             <div className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider px-1">
-              Eagle Assistive Overlay
+              Eagle Floating Bubble
             </div>
 
-            {/* Eagle Floating Service Card */}
-            <div className="p-6 rounded-3xl bg-[var(--card-bg)] border border-[var(--card-border)] space-y-4">
+            <div className="p-6 rounded-3xl bg-[var(--card-bg)] border border-[var(--card-border)] space-y-5">
               <div className="flex items-start justify-between gap-4">
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="font-bold text-sm text-[var(--text-primary)] flex items-center gap-2">
                       <Compass className="w-4 h-4 text-[var(--btn-primary-bg,#3b82f6)]" />
-                      <span>Eagle Floating Overlay</span>
+                      <span>Floating Bubble</span>
                     </h3>
                     {isOverlayPermGranted ? (
                       <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#30D158]/15 text-[#30D158] border border-[#30D158]/30 flex items-center gap-1">
                         <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>Granted</span>
+                        <span>Allowed</span>
                       </span>
                     ) : (
                       <button
                         type="button"
                         onClick={handleRequestOverlayPerm}
                         className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center gap-1 hover:bg-amber-500/25 transition-all pressable cursor-pointer"
-                        title="Click to grant overlay permission in Android Settings"
+                        title="Grant Display Over Other Apps permission"
                       >
                         <AlertTriangle className="w-3.5 h-3.5" />
-                        <span>Permission Required</span>
+                        <span>Allow Permission</span>
                       </button>
                     )}
                   </div>
                   <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
-                    Android system-wide floating companion rendered above all applications via WindowManager. Quick glance at live Davao weather, heat index, and ongoing classes.
+                    Lightweight floating bubble for live classes, weather, and quick app jumps. Drag to the bottom to close anytime.
                   </p>
                 </div>
 
@@ -2270,60 +2293,21 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 </label>
               </div>
 
-              {/* Gesture Physics & Dismiss Specifications */}
-              <div className="space-y-2 pt-3 border-t border-[var(--card-border)]">
-                <div className="text-xs font-bold text-[var(--text-primary)]">
-                  Motion &amp; Interaction Physics
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
-                  <div className="p-3 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] space-y-1">
-                    <div className="flex items-center gap-2 text-xs font-semibold text-[var(--text-primary)]">
-                      <MoveHorizontal className="w-3.5 h-3.5 text-[#30D158]" />
-                      <span>Edge Snapping</span>
-                    </div>
-                    <p className="text-[11px] text-[var(--text-secondary)] leading-snug">
-                      Snaps smoothly to left or right display border upon drag release.
-                    </p>
-                  </div>
-
-                  <div className="p-3 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] space-y-1">
-                    <div className="flex items-center gap-2 text-xs font-semibold text-[var(--text-primary)]">
-                      <X className="w-3.5 h-3.5 text-[#FF453A]" />
-                      <span>Bottom Dismiss</span>
-                    </div>
-                    <p className="text-[11px] text-[var(--text-secondary)] leading-snug">
-                      Drag into bottom dismiss zone to terminate overlay service cleanly.
-                    </p>
-                  </div>
-
-                  <div className="p-3 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] space-y-1">
-                    <div className="flex items-center gap-2 text-xs font-semibold text-[var(--text-primary)]">
-                      <Zap className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Quick Card</span>
-                    </div>
-                    <p className="text-[11px] text-[var(--text-secondary)] leading-snug">
-                      Single tap expands live cached weather, heat index, and next class.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="pt-2 flex flex-col sm:flex-row items-center gap-2">
+              <div className="pt-4 border-t border-[var(--card-border)] flex flex-wrap items-center gap-2.5">
                 <button
                   type="button"
                   onClick={handleSyncOverlayNow}
-                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-[var(--nested-bg)] hover:bg-[var(--card-bg)] border border-[var(--card-border)] text-xs font-semibold text-[var(--text-primary)] pressable flex items-center justify-center gap-2 cursor-pointer transition-all"
+                  className="px-4 py-2.5 rounded-xl bg-[var(--nested-bg)] hover:bg-[var(--card-bg)] border border-[var(--card-border)] text-xs font-semibold text-[var(--text-primary)] pressable flex items-center justify-center gap-2 cursor-pointer transition-all"
                 >
                   <RefreshCw className="w-3.5 h-3.5 text-[var(--btn-primary-bg,#3b82f6)]" />
-                  <span>Push Current Timetable &amp; Weather</span>
+                  <span>Sync Now</span>
                 </button>
                 <button
                   type="button"
                   onClick={handleResetEaglePosition}
-                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-[var(--nested-bg)] hover:bg-[var(--card-bg)] border border-[var(--card-border)] text-xs font-semibold text-[var(--text-primary)] pressable flex items-center justify-center gap-2 cursor-pointer transition-all"
+                  className="px-4 py-2.5 rounded-xl bg-[var(--nested-bg)] hover:bg-[var(--card-bg)] border border-[var(--card-border)] text-xs font-semibold text-[var(--text-primary)] pressable flex items-center justify-center gap-2 cursor-pointer transition-all"
                 >
-                  <span>Reset Bubble Position</span>
+                  <span>Reset Position</span>
                 </button>
                 {eagleResetFeedback && (
                   <span className="text-xs text-[#30D158] font-medium animate-fade-in">
