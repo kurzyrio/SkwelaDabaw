@@ -1,7 +1,7 @@
 {
-  "version": "1.11.6.0",
-  "versionCode": 151,
-  "releaseDate": "2026-11-23",
+  "version": "1.11.6.1",
+  "versionCode": 152,
+  "releaseDate": "2026-11-28",
   "versionScheme": {
     "digit1": "App Version",
     "digit2": "Major Features added",
@@ -13,15 +13,15 @@
   "forceUpdate": false,
   "developer": "Kurzyrio",
   "supportEmail": "jerriviencenatad@gmail.com",
-  "title": "Loading Overlays, Guest Account Linking & Ingat Notifications",
+  "title": "Google Sign-In Support for Non-GMS & Huawei Devices",
   "releaseNotes": [
-    "Added a unified Bayani loading screen on deleting items, syncing to cloud, and importing schedules while blocking duplicate imports.",
-    "Restored Guest-to-Account linking choice so students can keep & sync guest data or start fresh from onboarding.",
-    "Restored pre- and post-class \"Ingat / Take Care\" commute notifications, respecting the Live Notification Updates toggle."
+    "Added automatic browser-based Google Sign-In fallback on Android devices without Google Play Services (such as newer Huawei devices).",
+    "Kept existing native Google Sign-In as the primary flow on Play Services devices while syncing all accounts to the same profile without duplicates.",
+    "Improved Google Sign-In cancellation and error messages so failures are clearly reported instead of failing silently."
   ],
   "downloadUrl": "https://skweladabaw.kurzyrio.site/download",
-  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.6.0.apk",
-  "sizeBytes": 27040175,
+  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.11.6.1.apk",
+  "sizeBytes": 27047097,
   "sizeFormatted": "25.8 MB",
-  "sha256": "f2f41c868c38f6d648163a633d4fa1225bbfb00ea5daf7b39f226b094ef97195"
+  "sha256": "3c49748a2283090a8fb1ab32ca097e27c5c532eb1cf2bb4aa2e0de7a00e9e999"
 }

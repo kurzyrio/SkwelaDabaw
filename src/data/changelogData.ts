@@ -17,10 +17,34 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.11.6.1',
+    releaseDate: 'November 28, 2026',
+    title: 'Google Sign-In Support for Non-GMS & Huawei Devices',
+    isLatest: true,
+    tagline: 'Automatic browser-based Google Sign-In fallback on Android devices without Google Play Services while keeping native sign-in primary on GMS devices.',
+    highlights: [
+      'Automatic Firebase web OAuth fallback when Google Play Services is unavailable (including newer Huawei devices)',
+      'Unified post-login account and schedule sync across both GMS and non-GMS devices with zero duplicate accounts',
+      'Clear cancellation and error feedback for Google Sign-In failures'
+    ],
+    items: [
+      {
+        type: 'fix',
+        title: 'Non-GMS & Huawei Google Sign-In Fallback',
+        description: 'Automatically falls back to secure browser-based Google Sign-In when Google Play Services is missing or unavailable.'
+      },
+      {
+        type: 'improvement',
+        title: 'Unified Account Sync & Clear Error Handling',
+        description: 'Routes GMS and browser sign-ins into the same account session and surfaces clear error messages on network or browser issues.'
+      }
+    ]
+  },
+  {
     version: '1.11.6.0',
     releaseDate: 'November 23, 2026',
     title: 'Loading Overlays, Guest Account Linking & Ingat Notifications',
-    isLatest: true,
+    isLatest: false,
     tagline: 'Unified Bayani loading screens across delete, sync, and import flows, restored Guest-to-Account linking choice, and pre-/post-class Ingat commute reminders.',
     highlights: [
       'Unified Bayani loading screen on deleting items, syncing to cloud, and importing schedules (blocking duplicate imports)',

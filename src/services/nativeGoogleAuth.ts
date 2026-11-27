@@ -2,10 +2,13 @@ import { registerPlugin } from '@capacitor/core';
 
 export interface NativeGoogleSignInResult {
   idToken: string;
+  accessToken?: string;
+  firebaseIdToken?: string;
   uid?: string;
   email?: string;
   displayName?: string;
   photoUrl?: string;
+  authFlow?: string;
 }
 
 export interface NativeGoogleAuthPluginInterface {

@@ -15,7 +15,7 @@ import {
 } from 'firebase/auth';
 import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 import { Capacitor } from '@capacitor/core';
-import { NativeGoogleAuth } from './nativeGoogleAuth';
+import { NativeGoogleAuth, NativeGoogleSignInResult } from './nativeGoogleAuth';
 import { auth, googleProvider, isFirebaseConfigured } from './firebase';
 import { switchAccountSchedules, snapshotAccountBackup, clearAccountBackup } from './userService';
 import { hasPendingLocalSync, syncLocalDataToCloud } from './cloudSyncService';
@@ -217,22 +217,17 @@ const performGoogleSignIn = async (
 
   // 1. Native Android Google Sign-In (Interactive picker has NO artificial timeout; post-picker network steps do)
   if (Capacitor.isNativePlatform()) {
-    let nativeResult: {
-      idToken: string;
-      uid?: string;
-      email?: string;
-      displayName?: string;
-      photoUrl?: string;
-    } | null = null;
+    let nativeResult: NativeGoogleSignInResult | null = null;
 
     try {
       nativeResult = await NativeGoogleAuth.signIn({ webClientId: GOOGLE_WEB_CLIENT_ID });
     } catch (nativeErr: any) {
       const errMsg = String(nativeErr?.message || nativeErr || '');
+      const lowerErrMsg = errMsg.toLowerCase();
       const isCancellation =
-        errMsg.includes('cancelled') ||
-        errMsg.includes('canceled') ||
-        errMsg.includes('dismissed');
+        lowerErrMsg.includes('cancelled') ||
+        lowerErrMsg.includes('canceled') ||
+        lowerErrMsg.includes('dismissed');
 
       if (isCancellation) {
         console.info('Google Sign-In was cancelled by user.');
@@ -241,17 +236,35 @@ const performGoogleSignIn = async (
 
       console.warn('NativeGoogleAuth bridge note:', nativeErr);
 
+      // Avoid retrying Play Services GoogleSignIn when the web OAuth fallback already reported a clear failure
+      const isWebOAuthFailure =
+        lowerErrMsg.includes('via browser') ||
+        lowerErrMsg.includes('browser sign-in') ||
+        lowerErrMsg.includes('compatible web browser') ||
+        lowerErrMsg.includes('sign-in window is already open');
+
+      if (isWebOAuthFailure) {
+        throw nativeErr;
+      }
+
       // Secondary fallback to @capacitor-firebase/authentication if native bridge encountered an unexpected platform issue
       try {
         const fallbackRes = await FirebaseAuthentication.signInWithGoogle();
-        if (fallbackRes?.credential?.idToken) {
+        const fallbackIdToken = fallbackRes?.credential?.idToken || '';
+        const fallbackAccessToken = fallbackRes?.credential?.accessToken || undefined;
+        const fallbackUid = fallbackRes?.user?.uid || undefined;
+
+        if (fallbackIdToken || fallbackAccessToken || fallbackUid) {
           nativeResult = {
-            idToken: fallbackRes.credential.idToken,
-            uid: fallbackRes.user?.uid,
+            idToken: fallbackIdToken,
+            accessToken: fallbackAccessToken,
+            uid: fallbackUid,
             email: fallbackRes.user?.email || undefined,
             displayName: fallbackRes.user?.displayName || undefined,
             photoUrl: fallbackRes.user?.photoUrl || undefined
           };
+        } else {
+          throw nativeErr;
         }
       } catch (fbErr: any) {
         console.error('All native Google sign-in attempts failed:', fbErr);
@@ -259,67 +272,139 @@ const performGoogleSignIn = async (
       }
     }
 
-    if (!nativeResult?.idToken) {
-      return null;
+    if (!nativeResult || (!nativeResult.idToken && !nativeResult.accessToken && !nativeResult.uid)) {
+      throw new Error('Google Sign-In did not return valid account credentials. Please try again.');
     }
 
     if (!auth) {
       throw new Error('Authentication service is not configured on this build.');
     }
 
+    // Shared post-login completion handler for GMS native Sign-In and non-GMS Firebase web OAuth
+    const finalizeNativeGoogleSession = async (identity: {
+      uid: string;
+      email: string;
+      displayName: string;
+      photoUrl: string;
+      firebaseIdToken?: string;
+    }): Promise<StudentAuthSession> => {
+      const isSameOrGuest = !prevUid || prevUid === identity.uid;
+      const deferGuest = Boolean(!prevUid && options?.deferGuestMigration);
+      const inheritPrevProfile = isSameOrGuest && !deferGuest;
+
+      if (deferGuest) {
+        isDeferredGuestChoicePending = true;
+      }
+
+      const resolvedNativeEmail =
+        identity.email ||
+        (inheritPrevProfile ? prevSession.email : '') ||
+        '';
+
+      const session: StudentAuthSession = {
+        isLoggedIn: true,
+        uid: identity.uid,
+        name: identity.displayName || (inheritPrevProfile ? prevSession.name : '') || 'Student',
+        email: resolvedNativeEmail,
+        avatar: identity.photoUrl || (inheritPrevProfile ? prevSession.avatar : '') || '',
+        campusId: deferGuest ? '' : (currentCampusId || (isSameOrGuest ? prevSession.campusId : '') || ''),
+        studentId: inheritPrevProfile ? (prevSession.studentId || '') : '',
+        course: inheritPrevProfile ? (prevSession.course || 'Enrolled Student') : 'Enrolled Student',
+        yearLevel: inheritPrevProfile ? (prevSession.yearLevel || 'College Student') : 'Freshman',
+        role: inheritPrevProfile ? (prevSession.role || 'student') : 'student',
+        age: inheritPrevProfile ? prevSession.age : undefined,
+        gender: inheritPrevProfile ? prevSession.gender : undefined
+      };
+      try { localStorage.removeItem('skweladabaw_auth_token'); } catch (_) {}
+      saveSession(session);
+
+      // Always use canonical Firebase ID token (never Google GIS sub) so backend never relinks/duplicates rows
+      const switchRes = await switchAccountSchedules(
+        prevUid,
+        identity.uid,
+        prevSession,
+        identity.firebaseIdToken,
+        options
+      );
+      if (!switchRes.success) {
+        await rollbackFailedAuth(prevSession);
+        throw new Error(switchRes.message || 'Please connect to the internet to back up unsynced data before switching accounts.');
+      }
+      return session;
+    };
+
     activeAuthTransactionCount++;
     try {
       return await withTimeout(
         (async () => {
-          const credential = GoogleAuthProvider.credential(nativeResult!.idToken);
-          const userCred = await signInWithCredential(auth!, credential);
-          const firebaseUser = userCred.user;
-          const isSameOrGuest = !prevUid || prevUid === firebaseUser.uid;
-          const deferGuest = Boolean(!prevUid && options?.deferGuestMigration);
-          const inheritPrevProfile = isSameOrGuest && !deferGuest;
+          let resolvedUid = nativeResult!.uid || '';
+          let resolvedEmail = nativeResult!.email || '';
+          let resolvedDisplayName = nativeResult!.displayName || '';
+          let resolvedPhotoUrl = nativeResult!.photoUrl || '';
+          let firebaseIdToken: string | undefined = nativeResult!.firebaseIdToken || undefined;
 
-          if (deferGuest) {
-            isDeferredGuestChoicePending = true;
+          if (nativeResult!.idToken || nativeResult!.accessToken) {
+            const credential = GoogleAuthProvider.credential(
+              nativeResult!.idToken || null,
+              nativeResult!.accessToken || null
+            );
+            try {
+              const userCred = await signInWithCredential(auth!, credential);
+              const firebaseUser = userCred.user;
+              resolvedUid = firebaseUser.uid;
+              resolvedEmail =
+                firebaseUser.email ||
+                firebaseUser.providerData?.find((p) => Boolean(p?.email))?.email ||
+                resolvedEmail;
+              resolvedDisplayName = firebaseUser.displayName || resolvedDisplayName;
+              resolvedPhotoUrl = firebaseUser.photoURL || resolvedPhotoUrl;
+              firebaseIdToken = (await firebaseUser.getIdToken(false).catch(() => undefined)) || firebaseIdToken;
+            } catch (credErr) {
+              // If native Firebase Auth already completed via web OAuth with a verified UID & Firebase ID token,
+              // keep Web JS SDK clean and continue through the exact same native Firebase session pipeline.
+              if (nativeResult!.authFlow === 'firebase_web_oauth' && resolvedUid) {
+                console.warn('Web Firebase JS credential sync fallback to native Firebase session:', credErr);
+                if (auth!.currentUser && auth!.currentUser.uid !== resolvedUid) {
+                  await signOut(auth!).catch(() => {});
+                }
+                if (!firebaseIdToken) {
+                  firebaseIdToken = await FirebaseAuthentication.getIdToken()
+                    .then((res) => res?.token || undefined)
+                    .catch(() => undefined);
+                }
+              } else {
+                throw credErr;
+              }
+            }
+          } else if (resolvedUid) {
+            // Native Firebase web OAuth authenticated FirebaseUser directly without exposing a raw OAuth token.
+            // Clear any mismatched Web JS SDK user so cloudSyncService uses native FirebaseAuthentication.getIdToken().
+            if (auth!.currentUser && auth!.currentUser.uid !== resolvedUid) {
+              await signOut(auth!).catch(() => {});
+            }
+            if (!firebaseIdToken) {
+              firebaseIdToken = await FirebaseAuthentication.getIdToken()
+                .then((res) => res?.token || undefined)
+                .catch(() => undefined);
+            }
           }
 
-          const resolvedNativeEmail =
-            firebaseUser.email ||
-            firebaseUser.providerData?.find((p) => Boolean(p?.email))?.email ||
-            nativeResult!.email ||
-            (inheritPrevProfile ? prevSession.email : '') ||
-            '';
-
-          const session: StudentAuthSession = {
-            isLoggedIn: true,
-            uid: firebaseUser.uid,
-            name: firebaseUser.displayName || nativeResult!.displayName || (inheritPrevProfile ? prevSession.name : '') || 'Student',
-            email: resolvedNativeEmail,
-            avatar: firebaseUser.photoURL || nativeResult!.photoUrl || (inheritPrevProfile ? prevSession.avatar : '') || '',
-            campusId: deferGuest ? '' : (currentCampusId || (isSameOrGuest ? prevSession.campusId : '') || ''),
-            studentId: inheritPrevProfile ? (prevSession.studentId || '') : '',
-            course: inheritPrevProfile ? (prevSession.course || 'Enrolled Student') : 'Enrolled Student',
-            yearLevel: inheritPrevProfile ? (prevSession.yearLevel || 'College Student') : 'Freshman',
-            role: inheritPrevProfile ? (prevSession.role || 'student') : 'student',
-            age: inheritPrevProfile ? prevSession.age : undefined,
-            gender: inheritPrevProfile ? prevSession.gender : undefined
-          };
-          try { localStorage.removeItem('skweladabaw_auth_token'); } catch (_) {}
-          saveSession(session);
-
-          // Always use canonical Firebase ID token (never Google GIS sub) so backend never relinks/duplicates rows
-          const firebaseIdToken = await firebaseUser.getIdToken(false).catch(() => undefined);
-          const switchRes = await switchAccountSchedules(
-            prevUid,
-            firebaseUser.uid,
-            prevSession,
-            firebaseIdToken,
-            options
-          );
-          if (!switchRes.success) {
-            await rollbackFailedAuth(prevSession);
-            throw new Error(switchRes.message || 'Please connect to the internet to back up unsynced data before switching accounts.');
+          if (!resolvedUid) {
+            throw new Error('Google Sign-In completed, but your account ID could not be resolved. Please try again.');
           }
-          return session;
+          if (!firebaseIdToken) {
+            firebaseIdToken = await FirebaseAuthentication.getIdToken({ forceRefresh: true })
+              .then((res) => res?.token || undefined)
+              .catch(() => undefined);
+          }
+
+          return await finalizeNativeGoogleSession({
+            uid: resolvedUid,
+            email: resolvedEmail,
+            displayName: resolvedDisplayName,
+            photoUrl: resolvedPhotoUrl,
+            firebaseIdToken
+          });
         })(),
         AUTH_TIMEOUT_MS,
         'Authentication timeout • Network response took too long'
