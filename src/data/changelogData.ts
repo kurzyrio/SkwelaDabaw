@@ -17,10 +17,39 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.12.0.0',
+    releaseDate: 'November 28, 2026',
+    title: 'Custom Community Themes & Free Theme Studio',
+    isLatest: true,
+    tagline: 'Install free community themes with custom colors, gradients, glass cards, and animated GIF wallpapers—saved offline and synced across every screen, widget, and overlay.',
+    highlights: [
+      'One-tap theme installation via deep links or QR scanner from the free theme.kurzyrio.dev Theme Studio',
+      'Permanent offline theme library supporting solid colors, gradients, photos, animated GIFs, and frosted glass',
+      'Full theme sync across all app screens, all 7 Android widgets, the Eagle floating overlay, and optional Match App Theme ongoing notification'
+    ],
+    items: [
+      {
+        type: 'feature',
+        title: 'Custom & Community Themes',
+        description: 'Browse or create free themes on theme.kurzyrio.dev and install them in one tap via deep link or QR code straight into Settings.'
+      },
+      {
+        type: 'feature',
+        title: 'Offline Wallpapers, GIFs & Frosted Glass',
+        description: 'Downloaded themes store custom color palettes, background photos, and animated GIFs offline on your device without touching the 6 built-in official themes.'
+      },
+      {
+        type: 'ui',
+        title: 'Full Widget, Overlay & Notification Sync',
+        description: 'Custom theme colors automatically cascade across all 7 Android home screen widgets, the floating Eagle overlay, and an optional Match App Theme ongoing notification style.'
+      }
+    ]
+  },
+  {
     version: '1.11.7.0',
     releaseDate: 'November 28, 2026',
     title: 'Messenger-Style Floating Bubble & Settings-Only Opt-In',
-    isLatest: true,
+    isLatest: false,
     tagline: 'Removed automatic overlay pop-ups and rebuilt the floating Eagle bubble from scratch with lightweight spring physics and a clean quick-glance sheet.',
     highlights: [
       'Removed all automatic overlay pop-ups so the floating bubble stays off unless enabled in Settings',

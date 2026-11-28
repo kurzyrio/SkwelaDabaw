@@ -54,7 +54,8 @@ import {
   CheckCheck,
   ExternalLink,
   Bot,
-  CloudSun
+  CloudSun,
+  QrCode
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { LegalModal } from '../common/LegalModal';
@@ -106,6 +107,7 @@ import {
   sendTestNotification, 
   NOTIFICATION_THEMES, 
   NotificationThemeConfig,
+  resolveNotificationTheme,
   updatePersistentNextClassNotification,
   refreshUnremovableClassNotification,
   cancelPersistentNextClassNotification,
@@ -126,7 +128,18 @@ import {
   playTapSound,
   notifyTapSettingsChange
 } from '../common/ScreenTapEffect';
-import { AVAILABLE_THEMES, applyTheme, getTheme } from '../../themes';
+import {
+  AVAILABLE_THEMES,
+  ThemeConfig,
+  applyTheme,
+  getTheme,
+  getCustomThemes,
+  hydrateCustomThemes,
+  deleteCustomThemeAndFallback
+} from '../../themes';
+import { THEME_PORTAL_BASE_URL } from '../../services/themeDownloadService';
+import { ThemeInstallModal } from '../themes/ThemeInstallModal';
+import { ThemeQrScannerModal } from '../themes/ThemeQrScannerModal';
 
 export interface UserSession extends StudentAuthSession {
   lastUsernameChange?: string;
@@ -349,6 +362,38 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const { language, setLanguage } = useAppLanguage();
   const [soundEnabled, setSoundEnabledState] = useState<boolean>(isAudioEnabled);
   const [selectedTheme, setSelectedTheme] = useState<string>(currentTheme);
+  const [customThemes, setCustomThemes] = useState<ThemeConfig[]>(() => getCustomThemes());
+  const [pendingInstallThemeId, setPendingInstallThemeId] = useState<string | null>(null);
+  const [isThemeQrOpen, setIsThemeQrOpen] = useState<boolean>(false);
+  const [confirmDeleteThemeId, setConfirmDeleteThemeId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSelectedTheme(currentTheme);
+  }, [currentTheme]);
+
+  useEffect(() => {
+    let active = true;
+    hydrateCustomThemes()
+      .then((list) => {
+        if (active) setCustomThemes(list);
+      })
+      .catch(() => {});
+
+    const onUpdated = () => {
+      if (active) setCustomThemes(getCustomThemes());
+    };
+    const onThemeChanged = (e: Event) => {
+      const nextId = (e as CustomEvent)?.detail?.themeId;
+      if (active && nextId) setSelectedTheme(nextId);
+    };
+    window.addEventListener('skweladabaw_custom_themes_updated', onUpdated);
+    window.addEventListener('skweladabaw_theme_changed', onThemeChanged);
+    return () => {
+      active = false;
+      window.removeEventListener('skweladabaw_custom_themes_updated', onUpdated);
+      window.removeEventListener('skweladabaw_theme_changed', onThemeChanged);
+    };
+  }, []);
 
   // Account Deletion State (Google Play Policy Compliance)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
@@ -1984,6 +2029,158 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               </div>
             </div>
 
+            {/* Downloaded Community Themes Library (Permanent Offline Device Storage) */}
+            <div className="p-5 rounded-3xl bg-[var(--card-bg)] border border-[var(--card-border)] space-y-4">
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                  <h3 className="font-bold text-sm text-[var(--text-primary)] flex items-center gap-2">
+                    <Download className="w-4 h-4 text-[var(--accent-color)]" />
+                    <span>Downloaded Community Themes</span>
+                  </h3>
+                  <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                    Free themes from theme.kurzyrio.dev stay saved offline on your device.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsThemeQrOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold bg-[var(--nested-bg)] border border-[var(--card-border)] text-[var(--text-primary)] hover:border-[var(--card-hover-border)] cursor-pointer pressable"
+                  >
+                    <QrCode className="w-3.5 h-3.5" />
+                    <span>Scan QR</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.open(THEME_PORTAL_BASE_URL, '_blank', 'noopener,noreferrer')}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-bold bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] cursor-pointer pressable"
+                  >
+                    <span>Browse Marketplace</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {customThemes.length === 0 ? (
+                <div className="p-4 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] text-xs text-[var(--text-secondary)]">
+                  No downloaded themes yet. Open the marketplace to install free community themes.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {customThemes.map((ct) => {
+                    const isSelected = selectedTheme === ct.id;
+                    const isConfirmingDelete = confirmDeleteThemeId === ct.id;
+                    return (
+                      <div
+                        key={ct.id}
+                        className={`p-4 rounded-2xl border text-left transition-all flex flex-col justify-between gap-3 ${
+                          isSelected
+                            ? 'border-[var(--text-primary)] bg-[var(--card-bg)] shadow-md ring-2 ring-[var(--text-primary)]/20'
+                            : 'border-[var(--card-border)] bg-[var(--nested-bg)] hover:border-[var(--card-hover-border)]'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => handleToggleTheme(ct.id)}
+                          className="w-full text-left space-y-3 cursor-pointer pressable"
+                        >
+                          <div className="flex items-center justify-between w-full gap-2">
+                            <div
+                              className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shadow-xs shrink-0"
+                              style={{
+                                backgroundColor: ct.variables['--canvas-bg'],
+                                backgroundImage: ct.variables['--canvas-gradient'] || undefined,
+                                color: ct.accentColor,
+                                border: `1px solid ${ct.variables['--card-border']}`
+                              }}
+                            >
+                              {ct.isDark ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              {isSelected && (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)]">
+                                  Active
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div>
+                            <div className="text-xs font-bold text-[var(--text-primary)] truncate">{ct.name}</div>
+                            <div className="text-[10px] text-[var(--text-secondary)] truncate mt-0.5">
+                              by {ct.author || 'Community'}
+                            </div>
+                          </div>
+                        </button>
+
+                        <div className="pt-2 border-t border-[var(--card-border)] flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1">
+                            {[ct.variables['--canvas-bg'], ct.variables['--card-bg'], ct.accentColor].map((sw, idx) => (
+                              <span
+                                key={idx}
+                                className="w-3.5 h-3.5 rounded-full border border-[var(--card-border)]"
+                                style={{ backgroundColor: sw }}
+                              />
+                            ))}
+                          </div>
+
+                          {isConfirmingDelete ? (
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  await deleteCustomThemeAndFallback(ct.id);
+                                  setConfirmDeleteThemeId(null);
+                                  if (selectedTheme === ct.id && onChangeTheme) {
+                                    onChangeTheme('light');
+                                  }
+                                }}
+                                className="px-2 py-1 rounded-lg text-[10px] font-bold bg-rose-500 text-white cursor-pointer pressable"
+                              >
+                                Delete
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteThemeId(null)}
+                                className="px-2 py-1 rounded-lg text-[10px] font-semibold bg-[var(--card-bg)] text-[var(--text-secondary)] cursor-pointer pressable"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteThemeId(ct.id)}
+                              aria-label={`Delete ${ct.name}`}
+                              className="p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer pressable"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <ThemeQrScannerModal
+              isOpen={isThemeQrOpen}
+              onClose={() => setIsThemeQrOpen(false)}
+              onDetectedThemeId={(id) => setPendingInstallThemeId(id)}
+            />
+
+            <ThemeInstallModal
+              themeId={pendingInstallThemeId}
+              onClose={() => setPendingInstallThemeId(null)}
+              onThemeEquipped={(id) => {
+                setSelectedTheme(id);
+                if (onChangeTheme) onChangeTheme(id);
+              }}
+            />
+
             {/* Tri-Lingual Language Selector Card */}
             <div className="p-5 rounded-3xl bg-[var(--card-bg)] border border-[var(--card-border)] space-y-3">
               <div>
@@ -2708,7 +2905,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                       Live Status Bar Shade Preview:
                     </label>
                     {(() => {
-                      const activeTheme = NOTIFICATION_THEMES[persistentTheme] || NOTIFICATION_THEMES.midnight;
+                      const activeTheme = resolveNotificationTheme(persistentTheme);
                       return (
                         <div
                           className="p-3.5 rounded-2xl border transition-all select-none"
@@ -3504,7 +3701,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                       Live Status Bar Shade Preview:
                     </label>
                     {(() => {
-                      const activeTheme = NOTIFICATION_THEMES[persistentTheme] || NOTIFICATION_THEMES.midnight;
+                      const activeTheme = resolveNotificationTheme(persistentTheme);
                       return (
                         <div
                           className="p-3.5 rounded-2xl border transition-all select-none"

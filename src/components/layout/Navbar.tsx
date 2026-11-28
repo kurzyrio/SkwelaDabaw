@@ -196,15 +196,15 @@ export const Navbar: React.FC<NavbarProps> = ({
                   onClick={() => handleSelectTab(tab.id)}
                   aria-label={tab.label}
                   className={`relative flex flex-col items-center justify-center py-1 px-3 rounded-full transition-all duration-150 cursor-pointer pressable ${
-                    isActive ? 'text-[#8B5CF6]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    isActive ? 'text-[var(--nav-active-color,#8B5CF6)]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                   }`}
                 >
                   <Icon className="w-5 h-5 transition-transform duration-150 active:scale-90" />
-                  <span className={`text-[10px] mt-0.5 tracking-tight ${isActive ? 'font-bold text-[#8B5CF6]' : 'font-medium'}`}>
+                  <span className={`text-[10px] mt-0.5 tracking-tight ${isActive ? 'font-bold text-[var(--nav-active-color,#8B5CF6)]' : 'font-medium'}`}>
                     {tab.label}
                   </span>
                   {isActive && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#8B5CF6] mt-0.5 transition-all" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--nav-active-color,#8B5CF6)] mt-0.5 transition-all" />
                   )}
                 </button>
               );
@@ -220,15 +220,18 @@ export const Navbar: React.FC<NavbarProps> = ({
                 setIsMoreOpen(true);
               }}
               aria-label="Student Hub"
-              className="w-12 h-12 rounded-full bg-gradient-to-tr from-[#7C3AED] via-[#8B5CF6] to-[#A855F7] text-white flex items-center justify-center shadow-lg shadow-purple-500/40 border-4 border-[var(--card-bg)] transition-all duration-200 active:scale-95 hover:scale-105 cursor-pointer pressable"
+              className="w-12 h-12 rounded-full text-[var(--btn-primary-text,#FFFFFF)] flex items-center justify-center shadow-lg border-4 border-[var(--card-bg)] transition-all duration-200 active:scale-95 hover:scale-105 cursor-pointer pressable"
+              style={{
+                background: 'var(--nav-fab-bg, linear-gradient(to top right, #7C3AED, #8B5CF6, #A855F7))'
+              }}
             >
-              <LayoutGrid className="w-5 h-5 text-white" />
+              <LayoutGrid className="w-5 h-5" />
             </button>
-            <span className={`text-[10px] tracking-tight mt-0.5 ${isHubActive ? 'font-bold text-[#8B5CF6]' : 'font-medium text-[var(--text-secondary)]'}`}>
+            <span className={`text-[10px] tracking-tight mt-0.5 ${isHubActive ? 'font-bold text-[var(--nav-active-color,#8B5CF6)]' : 'font-medium text-[var(--text-secondary)]'}`}>
               Hub
             </span>
             {isHubActive && (
-              <span className="w-1.5 h-1.5 rounded-full bg-[#8B5CF6] mt-0.5 transition-all" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--nav-active-color,#8B5CF6)] mt-0.5 transition-all" />
             )}
           </div>
 
@@ -243,7 +246,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   onClick={() => handleSelectTab(tab.id)}
                   aria-label={tab.label}
                   className={`relative flex flex-col items-center justify-center py-1 px-3 rounded-full transition-all duration-150 cursor-pointer pressable ${
-                    isActive ? 'text-[#8B5CF6]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    isActive ? 'text-[var(--nav-active-color,#8B5CF6)]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                   }`}
                 >
                   <div className="relative">
@@ -254,11 +257,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                       </span>
                     ) : null}
                   </div>
-                  <span className={`text-[10px] mt-0.5 tracking-tight ${isActive ? 'font-bold text-[#8B5CF6]' : 'font-medium'}`}>
+                  <span className={`text-[10px] mt-0.5 tracking-tight ${isActive ? 'font-bold text-[var(--nav-active-color,#8B5CF6)]' : 'font-medium'}`}>
                     {tab.label}
                   </span>
                   {isActive && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#8B5CF6] mt-0.5 transition-all" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--nav-active-color,#8B5CF6)] mt-0.5 transition-all" />
                   )}
                 </button>
               );

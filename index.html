@@ -25,8 +25,33 @@
     </noscript>
     <script>
       (function() {
-        var theme = localStorage.getItem('skweladabaw_theme') || 'davao-classic-blue';
-        var isDark = theme.indexOf('dark') !== -1 || theme.indexOf('midnight') !== -1 || theme.indexOf('oled') !== -1 || theme.indexOf('cyber') !== -1;
+        try {
+          var rawSnap = localStorage.getItem('skweladabaw_active_theme_snapshot');
+          if (rawSnap) {
+            var snap = JSON.parse(rawSnap);
+            if (snap && snap.variables) {
+              var root = document.documentElement;
+              root.setAttribute('data-theme', snap.id || 'custom');
+              root.setAttribute('data-custom-theme', 'true');
+              if (snap.isDark) root.classList.add('dark');
+              else root.classList.remove('dark');
+              var keys = Object.keys(snap.variables);
+              for (var i = 0; i < keys.length; i++) {
+                var val = snap.variables[keys[i]];
+                if (val) root.style.setProperty(keys[i], val);
+              }
+              return;
+            }
+          }
+          var isDarkStored = localStorage.getItem('skweladabaw_theme_is_dark');
+          if (isDarkStored !== null) {
+            if (isDarkStored === 'true') document.documentElement.classList.add('dark');
+            else document.documentElement.classList.remove('dark');
+            return;
+          }
+        } catch (e) {}
+        var theme = localStorage.getItem('skweladabaw_theme') || 'light';
+        var isDark = theme.indexOf('dark') !== -1 || theme.indexOf('midnight') !== -1 || theme.indexOf('oled') !== -1 || theme.indexOf('cyber') !== -1 || theme.indexOf('emerald') !== -1;
         if (isDark) {
           document.documentElement.classList.add('dark');
         } else {

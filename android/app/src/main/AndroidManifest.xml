@@ -32,6 +32,16 @@
                 <data android:scheme="https" android:host="skweladabaw.kurzyrio.site" android:pathPrefix="/schedule" />
             </intent-filter>
 
+            <!-- Verified Android App Links (Deep Linking to theme.kurzyrio.dev Free Theme Marketplace) -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="theme.kurzyrio.dev" android:pathPrefix="/theme" />
+                <data android:scheme="https" android:host="theme.kurzyrio.dev" android:pathPrefix="/themes" />
+                <data android:scheme="https" android:host="theme.kurzyrio.dev" android:pathPrefix="/t" />
+            </intent-filter>
+
             <!-- Custom URI Scheme Deep Link Fallback (skwela://) -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />

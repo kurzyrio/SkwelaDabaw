@@ -854,4 +854,43 @@ html:not(.dark) .divide-\[\#38383A\] {
   padding-top: env(safe-area-inset-top, 0px);
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   CUSTOM COMMUNITY THEME EXTENSIONS (Strictly Scoped to data-custom-theme="true")
+   Zero impact on the 6 official built-in themes.
+   ───────────────────────────────────────────────────────────────────────────── */
+html[data-custom-theme="true"][data-has-wallpaper="true"] body,
+html[data-custom-theme="true"][data-has-wallpaper="true"] .ios-canvas,
+html[data-custom-theme="true"][data-has-wallpaper="true"] .skwela-app-shell {
+  background-color: transparent !important;
+}
+
+/* Unlock custom light-mode primary CTA gradients & input text colors */
+html[data-custom-theme="true"]:not(.dark) input,
+html[data-custom-theme="true"]:not(.dark) textarea,
+html[data-custom-theme="true"]:not(.dark) select {
+  color: var(--input-text) !important;
+}
+
+html[data-custom-theme="true"] .btn-primary-ios,
+html[data-custom-theme="true"] .btn-3d {
+  background: var(--btn-primary-bg) !important;
+  color: var(--btn-primary-text) !important;
+  border-color: var(--card-border) !important;
+}
+
+/* Optional Frosted Glass Blur on Cards & Modals when custom theme enables it */
+html[data-custom-theme="true"] .ios-card,
+html[data-custom-theme="true"] .card-chunky,
+html[data-custom-theme="true"] .glass-card,
+html[data-custom-theme="true"] [class*="bg-[var(--card-bg)]"] {
+  backdrop-filter: var(--card-backdrop-blur, none);
+  -webkit-backdrop-filter: var(--card-backdrop-blur, none);
+}
+
+html[data-custom-theme="true"] [class*="bg-[var(--modal-bg)]"] {
+  backdrop-filter: var(--modal-backdrop-blur, var(--card-backdrop-blur, none));
+  -webkit-backdrop-filter: var(--modal-backdrop-blur, var(--card-backdrop-blur, none));
+}
+
+
 

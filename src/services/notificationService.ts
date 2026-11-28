@@ -719,8 +719,66 @@ export const NOTIFICATION_THEMES: Record<string, NotificationThemeConfig> = {
     accentHex: '#000000',
     borderHex: '#E5E5EA',
     textHex: '#000000'
+  },
+  match_app: {
+    id: 'match_app',
+    name: 'Match App Theme',
+    bgHex: '#18181B',
+    accentHex: '#38BDF8',
+    borderHex: '#2C2C2E',
+    textHex: '#FFFFFF'
   }
 };
+
+/**
+ * Safely resolves the ongoing notification theme config.
+ * Preserves all 5 built-in presets 100% identically, while dynamically reading the active
+ * app theme (official or custom) ONLY when the user opts into 'match_app'.
+ */
+export function resolveNotificationTheme(themeKey?: string): NotificationThemeConfig {
+  const key = themeKey || 'midnight';
+  if (key !== 'match_app') {
+    return NOTIFICATION_THEMES[key] || NOTIFICATION_THEMES.midnight;
+  }
+
+  try {
+    const activeId = typeof localStorage !== 'undefined'
+      ? (localStorage.getItem('skweladabaw_theme') || 'light')
+      : 'light';
+    // Lazy sync-safe lookup without creating circular startup cost
+    const rawSnap = typeof localStorage !== 'undefined'
+      ? localStorage.getItem('skweladabaw_active_theme_snapshot')
+      : null;
+
+    if (rawSnap) {
+      const snap = JSON.parse(rawSnap);
+      if (snap && snap.id === activeId && snap.variables) {
+        const ns = snap.nativeSurfaces || {};
+        const isDark = Boolean(snap.isDark);
+        return {
+          id: 'match_app',
+          name: 'Match App Theme',
+          bgHex: ns.cardBg || (isDark ? '#18181B' : '#FFFFFF'),
+          accentHex: ns.accent || snap.accentColor || (isDark ? '#38BDF8' : '#007AFF'),
+          borderHex: ns.stroke || (isDark ? '#2C2C2E' : '#E5E5EA'),
+          textHex: ns.textPrimary || (isDark ? '#FFFFFF' : '#000000')
+        };
+      }
+    }
+
+    const officialMap: Record<string, NotificationThemeConfig> = {
+      light: { id: 'match_app', name: 'Match App Theme', bgHex: '#FFFFFF', accentHex: '#007AFF', borderHex: '#E5E5EA', textHex: '#000000' },
+      dark: { id: 'match_app', name: 'Match App Theme', bgHex: '#1A1A1A', accentHex: '#30D158', borderHex: '#2C2C2E', textHex: '#FFFFFF' },
+      oled: { id: 'match_app', name: 'Match App Theme', bgHex: '#000000', accentHex: '#FFFFFF', borderHex: '#1F1F1F', textHex: '#FFFFFF' },
+      emerald: { id: 'match_app', name: 'Match App Theme', bgHex: '#0A2215', accentHex: '#10B981', borderHex: '#16432B', textHex: '#ECFDF5' },
+      cyber: { id: 'match_app', name: 'Match App Theme', bgHex: '#0D111A', accentHex: '#00E5FF', borderHex: '#1F293D', textHex: '#FFFFFF' },
+      violet: { id: 'match_app', name: 'Match App Theme', bgHex: '#FFFFFF', accentHex: '#7C3AED', borderHex: '#EDE9FE', textHex: '#1E1B4B' }
+    };
+    return officialMap[activeId] || NOTIFICATION_THEMES.midnight;
+  } catch {
+    return NOTIFICATION_THEMES.midnight;
+  }
+}
 
 /**
  * Dispatch or update an ongoing non-removable Study Focus Timer notification
@@ -797,7 +855,7 @@ export async function updateUnremovableClassNotification(
       return;
     }
 
-    const theme = NOTIFICATION_THEMES[themeKey] || NOTIFICATION_THEMES.midnight;
+    const theme = resolveNotificationTheme(themeKey);
     await initializeNotificationChannels();
 
     let notifTitle = 'Student Timetable';

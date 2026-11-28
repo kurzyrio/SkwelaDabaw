@@ -8,6 +8,8 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.res.ColorStateList;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.util.Log;
@@ -230,6 +232,46 @@ public class WidgetScheduleHelper {
         public int textAccent;
         public int badgeTextColor;
         public int btnTextColor;
+        public boolean useCustomTint;
+        public int customCardColor;
+        public int customItemColor;
+        public int customBtnColor;
+        public int customBadgeColor;
+    }
+
+    public static int parseHexColorSafe(String hex, int fallback) {
+        if (hex == null) return fallback;
+        String trimmed = hex.trim();
+        if (trimmed.isEmpty() || !trimmed.startsWith("#")) return fallback;
+        try {
+            return Color.parseColor(trimmed);
+        } catch (Exception ignored) {
+            return fallback;
+        }
+    }
+
+    /**
+     * Applies background to a RemoteViews element safely across Android API 23-36.
+     * Official themes use their exact untouched XML drawables and clear any prior tint on API 31+.
+     * Custom themes apply rounded tintable XML drawables + setBackgroundTintList on Android 12+ (API 31+),
+     * and fall back cleanly to dark/light rounded shapes on Android 6-11 (API 23-30).
+     */
+    public static void applyThemedBackground(
+            RemoteViews views,
+            int viewId,
+            int fallbackDrawableRes,
+            int tintableDrawableRes,
+            boolean useCustomTint,
+            int customColor) {
+        if (useCustomTint && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            views.setInt(viewId, "setBackgroundResource", tintableDrawableRes);
+            views.setColorStateList(viewId, "setBackgroundTintList", ColorStateList.valueOf(customColor));
+        } else {
+            views.setInt(viewId, "setBackgroundResource", fallbackDrawableRes);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                views.setColorStateList(viewId, "setBackgroundTintList", (ColorStateList) null);
+            }
+        }
     }
 
     public static String getActiveThemeId(Context context) {
@@ -306,8 +348,52 @@ public class WidgetScheduleHelper {
             t.textAccent = 0xFF7C3AED;
             t.badgeTextColor = 0xFF7C3AED;
             t.btnTextColor = 0xFF7C3AED;
+        } else if ("light".equals(id) || "bw-light".equals(id)) {
+            // Official "light" (Morning Sun Light)
+            t.cardBgRes = R.drawable.widget_card_bg_light;
+            t.itemBgRes = R.drawable.widget_item_bg_light;
+            t.btnBgRes = R.drawable.widget_btn_bg_light;
+            t.badgeBgRes = R.drawable.widget_badge_bg_light;
+            t.textPrimary = 0xFF000000;
+            t.textSecondary = 0xFF6C6C70;
+            t.textAccent = 0xFF007AFF;
+            t.badgeTextColor = 0xFF007AFF;
+            t.btnTextColor = 0xFF007AFF;
         } else {
-            // Default "light" (Morning Sun Light)
+            // Custom community theme: read dynamic theme_colors_json if stored, else fallback to Morning Sun Light
+            String colorsJson = null;
+            if (context != null) {
+                SharedPreferences widgetPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+                colorsJson = widgetPrefs.getString("theme_colors_json", null);
+                if (colorsJson == null || colorsJson.trim().isEmpty()) {
+                    SharedPreferences customPrefs = context.getSharedPreferences("SkwelaDabawWidgets", Context.MODE_PRIVATE);
+                    colorsJson = customPrefs.getString("theme_colors_json", null);
+                }
+            }
+            if (colorsJson != null && !colorsJson.trim().isEmpty()) {
+                try {
+                    JSONObject obj = new JSONObject(colorsJson);
+                    boolean isDark = obj.optBoolean("isDark", true);
+                    t.cardBgRes = isDark ? R.drawable.widget_card_bg_dark : R.drawable.widget_card_bg_light;
+                    t.itemBgRes = isDark ? R.drawable.widget_item_bg_dark : R.drawable.widget_item_bg_light;
+                    t.btnBgRes = isDark ? R.drawable.widget_btn_bg_dark : R.drawable.widget_btn_bg_light;
+                    t.badgeBgRes = isDark ? R.drawable.widget_badge_bg_dark : R.drawable.widget_badge_bg_light;
+
+                    t.customCardColor = parseHexColorSafe(obj.optString("cardBg", null), isDark ? 0xFF1A1A1A : 0xFFFFFFFF);
+                    t.customItemColor = parseHexColorSafe(obj.optString("itemBg", null), isDark ? 0xFF282828 : 0xFFE5E5EA);
+                    t.customBtnColor = parseHexColorSafe(obj.optString("btnBg", null), t.customItemColor);
+                    t.customBadgeColor = parseHexColorSafe(obj.optString("badgeBg", null), t.customItemColor);
+                    t.textPrimary = parseHexColorSafe(obj.optString("textPrimary", null), isDark ? 0xFFFFFFFF : 0xFF000000);
+                    t.textSecondary = parseHexColorSafe(obj.optString("textSecondary", null), isDark ? 0xFF8E8E93 : 0xFF6C6C70);
+                    int accent = parseHexColorSafe(obj.optString("accent", null), isDark ? 0xFF38BDF8 : 0xFF007AFF);
+                    t.textAccent = accent;
+                    t.badgeTextColor = accent;
+                    t.btnTextColor = accent;
+                    t.useCustomTint = true;
+                    return t;
+                } catch (Exception ignored) {}
+            }
+            // Safe fallback
             t.cardBgRes = R.drawable.widget_card_bg_light;
             t.itemBgRes = R.drawable.widget_item_bg_light;
             t.btnBgRes = R.drawable.widget_btn_bg_light;
@@ -411,29 +497,29 @@ public class WidgetScheduleHelper {
 
         // Apply active theme
         WidgetTheme theme = getWidgetTheme(context);
-        views.setInt(R.id.widget_large_root, "setBackgroundResource", theme.cardBgRes);
-        views.setInt(R.id.widget_large_badge, "setBackgroundResource", theme.badgeBgRes);
+        applyThemedBackground(views, R.id.widget_large_root, theme.cardBgRes, R.drawable.widget_card_bg_tintable, theme.useCustomTint, theme.customCardColor);
+        applyThemedBackground(views, R.id.widget_large_badge, theme.badgeBgRes, R.drawable.widget_badge_bg_tintable, theme.useCustomTint, theme.customBadgeColor);
         views.setTextColor(R.id.widget_large_badge, theme.badgeTextColor);
 
-        views.setInt(R.id.widget_btn_prev_day, "setBackgroundResource", theme.btnBgRes);
+        applyThemedBackground(views, R.id.widget_btn_prev_day, theme.btnBgRes, R.drawable.widget_btn_bg_tintable, theme.useCustomTint, theme.customBtnColor);
         views.setTextColor(R.id.widget_btn_prev_day, theme.btnTextColor);
-        views.setInt(R.id.widget_btn_next_day, "setBackgroundResource", theme.btnBgRes);
+        applyThemedBackground(views, R.id.widget_btn_next_day, theme.btnBgRes, R.drawable.widget_btn_bg_tintable, theme.useCustomTint, theme.customBtnColor);
         views.setTextColor(R.id.widget_btn_next_day, theme.btnTextColor);
-        views.setInt(R.id.widget_btn_today, "setBackgroundResource", theme.btnBgRes);
+        applyThemedBackground(views, R.id.widget_btn_today, theme.btnBgRes, R.drawable.widget_btn_bg_tintable, theme.useCustomTint, theme.customBtnColor);
         views.setTextColor(R.id.widget_btn_today, theme.textAccent);
-        views.setInt(R.id.widget_btn_refresh, "setBackgroundResource", theme.btnBgRes);
+        applyThemedBackground(views, R.id.widget_btn_refresh, theme.btnBgRes, R.drawable.widget_btn_bg_tintable, theme.useCustomTint, theme.customBtnColor);
         views.setTextColor(R.id.widget_btn_refresh, theme.btnTextColor);
-        views.setInt(R.id.widget_large_btn_add, "setBackgroundResource", theme.btnBgRes);
+        applyThemedBackground(views, R.id.widget_large_btn_add, theme.btnBgRes, R.drawable.widget_btn_bg_tintable, theme.useCustomTint, theme.customBtnColor);
         views.setTextColor(R.id.widget_large_btn_add, theme.textAccent);
 
         views.setTextColor(R.id.widget_large_day, theme.textPrimary);
         views.setTextColor(R.id.widget_large_empty_title, theme.textPrimary);
         views.setTextColor(R.id.widget_large_empty_sub, theme.textSecondary);
 
-        views.setInt(R.id.widget_large_btn_schedule, "setBackgroundResource", theme.btnBgRes);
+        applyThemedBackground(views, R.id.widget_large_btn_schedule, theme.btnBgRes, R.drawable.widget_btn_bg_tintable, theme.useCustomTint, theme.customBtnColor);
         views.setTextColor(R.id.widget_large_btn_schedule, theme.textAccent);
-        views.setInt(R.id.widget_large_btn_transit, "setBackgroundResource", theme.btnBgRes);
-        views.setInt(R.id.widget_large_btn_tasks, "setBackgroundResource", theme.btnBgRes);
+        applyThemedBackground(views, R.id.widget_large_btn_transit, theme.btnBgRes, R.drawable.widget_btn_bg_tintable, theme.useCustomTint, theme.customBtnColor);
+        applyThemedBackground(views, R.id.widget_large_btn_tasks, theme.btnBgRes, R.drawable.widget_btn_bg_tintable, theme.useCustomTint, theme.customBtnColor);
         views.setTextColor(R.id.widget_large_btn_tasks, theme.textSecondary);
 
         return views;
@@ -543,17 +629,17 @@ public class WidgetScheduleHelper {
 
         // Apply active theme
         WidgetTheme theme = getWidgetTheme(context);
-        views.setInt(R.id.widget_medium_root, "setBackgroundResource", theme.cardBgRes);
-        views.setInt(R.id.widget_medium_badge, "setBackgroundResource", theme.badgeBgRes);
+        applyThemedBackground(views, R.id.widget_medium_root, theme.cardBgRes, R.drawable.widget_card_bg_tintable, theme.useCustomTint, theme.customCardColor);
+        applyThemedBackground(views, R.id.widget_medium_badge, theme.badgeBgRes, R.drawable.widget_badge_bg_tintable, theme.useCustomTint, theme.customBadgeColor);
         views.setTextColor(R.id.widget_medium_badge, theme.badgeTextColor);
 
-        views.setInt(R.id.widget_medium_btn_prev, "setBackgroundResource", theme.btnBgRes);
+        applyThemedBackground(views, R.id.widget_medium_btn_prev, theme.btnBgRes, R.drawable.widget_btn_bg_tintable, theme.useCustomTint, theme.customBtnColor);
         views.setTextColor(R.id.widget_medium_btn_prev, theme.btnTextColor);
-        views.setInt(R.id.widget_medium_btn_next, "setBackgroundResource", theme.btnBgRes);
+        applyThemedBackground(views, R.id.widget_medium_btn_next, theme.btnBgRes, R.drawable.widget_btn_bg_tintable, theme.useCustomTint, theme.customBtnColor);
         views.setTextColor(R.id.widget_medium_btn_next, theme.btnTextColor);
-        views.setInt(R.id.widget_medium_btn_refresh, "setBackgroundResource", theme.btnBgRes);
+        applyThemedBackground(views, R.id.widget_medium_btn_refresh, theme.btnBgRes, R.drawable.widget_btn_bg_tintable, theme.useCustomTint, theme.customBtnColor);
         views.setTextColor(R.id.widget_medium_btn_refresh, theme.btnTextColor);
-        views.setInt(R.id.widget_medium_btn_add, "setBackgroundResource", theme.btnBgRes);
+        applyThemedBackground(views, R.id.widget_medium_btn_add, theme.btnBgRes, R.drawable.widget_btn_bg_tintable, theme.useCustomTint, theme.customBtnColor);
         views.setTextColor(R.id.widget_medium_btn_add, theme.textAccent);
 
         views.setTextColor(R.id.widget_medium_count, theme.textSecondary);
@@ -627,11 +713,11 @@ public class WidgetScheduleHelper {
 
         // Apply active theme
         WidgetTheme theme = getWidgetTheme(context);
-        views.setInt(R.id.widget_small_root, "setBackgroundResource", theme.cardBgRes);
-        views.setInt(R.id.widget_small_badge, "setBackgroundResource", theme.badgeBgRes);
+        applyThemedBackground(views, R.id.widget_small_root, theme.cardBgRes, R.drawable.widget_card_bg_tintable, theme.useCustomTint, theme.customCardColor);
+        applyThemedBackground(views, R.id.widget_small_badge, theme.badgeBgRes, R.drawable.widget_badge_bg_tintable, theme.useCustomTint, theme.customBadgeColor);
         views.setTextColor(R.id.widget_small_badge, theme.badgeTextColor);
 
-        views.setInt(R.id.widget_small_btn_refresh, "setBackgroundResource", theme.btnBgRes);
+        applyThemedBackground(views, R.id.widget_small_btn_refresh, theme.btnBgRes, R.drawable.widget_btn_bg_tintable, theme.useCustomTint, theme.customBtnColor);
         views.setTextColor(R.id.widget_small_btn_refresh, theme.btnTextColor);
 
         views.setTextColor(R.id.widget_small_time, theme.textAccent);
@@ -708,12 +794,12 @@ public class WidgetScheduleHelper {
 
         // Apply active theme
         WidgetTheme theme = getWidgetTheme(context);
-        views.setInt(R.id.skwela_widget_root, "setBackgroundResource", theme.cardBgRes);
-        views.setInt(R.id.widget_title, "setBackgroundResource", theme.badgeBgRes);
+        applyThemedBackground(views, R.id.skwela_widget_root, theme.cardBgRes, R.drawable.widget_card_bg_tintable, theme.useCustomTint, theme.customCardColor);
+        applyThemedBackground(views, R.id.widget_title, theme.badgeBgRes, R.drawable.widget_badge_bg_tintable, theme.useCustomTint, theme.customBadgeColor);
         views.setTextColor(R.id.widget_title, theme.badgeTextColor);
 
         views.setTextColor(R.id.skwela_widget_count, theme.textSecondary);
-        views.setInt(R.id.skwela_widget_btn_refresh, "setBackgroundResource", theme.btnBgRes);
+        applyThemedBackground(views, R.id.skwela_widget_btn_refresh, theme.btnBgRes, R.drawable.widget_btn_bg_tintable, theme.useCustomTint, theme.customBtnColor);
         views.setTextColor(R.id.skwela_widget_btn_refresh, theme.btnTextColor);
 
         views.setTextColor(R.id.widget_current_class, theme.textPrimary);
@@ -771,14 +857,14 @@ public class WidgetScheduleHelper {
 
         // Apply active theme
         WidgetTheme theme = getWidgetTheme(context);
-        views.setInt(R.id.widget_tasks_root, "setBackgroundResource", theme.cardBgRes);
-        views.setInt(R.id.widget_tasks_badge, "setBackgroundResource", theme.badgeBgRes);
+        applyThemedBackground(views, R.id.widget_tasks_root, theme.cardBgRes, R.drawable.widget_card_bg_tintable, theme.useCustomTint, theme.customCardColor);
+        applyThemedBackground(views, R.id.widget_tasks_badge, theme.badgeBgRes, R.drawable.widget_badge_bg_tintable, theme.useCustomTint, theme.customBadgeColor);
         views.setTextColor(R.id.widget_tasks_badge, theme.badgeTextColor);
 
         views.setTextColor(R.id.widget_tasks_count, theme.textSecondary);
-        views.setInt(R.id.widget_tasks_btn_add, "setBackgroundResource", theme.btnBgRes);
+        applyThemedBackground(views, R.id.widget_tasks_btn_add, theme.btnBgRes, R.drawable.widget_btn_bg_tintable, theme.useCustomTint, theme.customBtnColor);
         views.setTextColor(R.id.widget_tasks_btn_add, theme.textAccent);
-        views.setInt(R.id.widget_tasks_btn_refresh, "setBackgroundResource", theme.btnBgRes);
+        applyThemedBackground(views, R.id.widget_tasks_btn_refresh, theme.btnBgRes, R.drawable.widget_btn_bg_tintable, theme.useCustomTint, theme.customBtnColor);
         views.setTextColor(R.id.widget_tasks_btn_refresh, theme.btnTextColor);
 
         views.setTextColor(R.id.widget_task_item_1, theme.textPrimary);
@@ -908,14 +994,14 @@ public class WidgetScheduleHelper {
 
         // Apply theme
         WidgetTheme theme = getWidgetTheme(context);
-        views.setInt(R.id.widget_routines_root, "setBackgroundResource", theme.cardBgRes);
-        views.setInt(R.id.widget_routines_badge, "setBackgroundResource", theme.badgeBgRes);
+        applyThemedBackground(views, R.id.widget_routines_root, theme.cardBgRes, R.drawable.widget_card_bg_tintable, theme.useCustomTint, theme.customCardColor);
+        applyThemedBackground(views, R.id.widget_routines_badge, theme.badgeBgRes, R.drawable.widget_badge_bg_tintable, theme.useCustomTint, theme.customBadgeColor);
         views.setTextColor(R.id.widget_routines_badge, theme.badgeTextColor);
 
         views.setTextColor(R.id.widget_routines_count, theme.textSecondary);
-        views.setInt(R.id.widget_routines_btn_add, "setBackgroundResource", theme.btnBgRes);
+        applyThemedBackground(views, R.id.widget_routines_btn_add, theme.btnBgRes, R.drawable.widget_btn_bg_tintable, theme.useCustomTint, theme.customBtnColor);
         views.setTextColor(R.id.widget_routines_btn_add, theme.textAccent);
-        views.setInt(R.id.widget_routines_btn_refresh, "setBackgroundResource", theme.btnBgRes);
+        applyThemedBackground(views, R.id.widget_routines_btn_refresh, theme.btnBgRes, R.drawable.widget_btn_bg_tintable, theme.useCustomTint, theme.customBtnColor);
         views.setTextColor(R.id.widget_routines_btn_refresh, theme.btnTextColor);
 
         views.setTextColor(R.id.widget_routines_empty_title, theme.textPrimary);
@@ -963,14 +1049,14 @@ public class WidgetScheduleHelper {
 
         // Apply theme
         WidgetTheme theme = getWidgetTheme(context);
-        views.setInt(R.id.widget_tasks_large_root, "setBackgroundResource", theme.cardBgRes);
-        views.setInt(R.id.widget_tasks_large_badge, "setBackgroundResource", theme.badgeBgRes);
+        applyThemedBackground(views, R.id.widget_tasks_large_root, theme.cardBgRes, R.drawable.widget_card_bg_tintable, theme.useCustomTint, theme.customCardColor);
+        applyThemedBackground(views, R.id.widget_tasks_large_badge, theme.badgeBgRes, R.drawable.widget_badge_bg_tintable, theme.useCustomTint, theme.customBadgeColor);
         views.setTextColor(R.id.widget_tasks_large_badge, theme.badgeTextColor);
 
         views.setTextColor(R.id.widget_tasks_large_count, theme.textSecondary);
-        views.setInt(R.id.widget_tasks_large_btn_add, "setBackgroundResource", theme.btnBgRes);
+        applyThemedBackground(views, R.id.widget_tasks_large_btn_add, theme.btnBgRes, R.drawable.widget_btn_bg_tintable, theme.useCustomTint, theme.customBtnColor);
         views.setTextColor(R.id.widget_tasks_large_btn_add, theme.textAccent);
-        views.setInt(R.id.widget_tasks_large_btn_refresh, "setBackgroundResource", theme.btnBgRes);
+        applyThemedBackground(views, R.id.widget_tasks_large_btn_refresh, theme.btnBgRes, R.drawable.widget_btn_bg_tintable, theme.useCustomTint, theme.customBtnColor);
         views.setTextColor(R.id.widget_tasks_large_btn_refresh, theme.btnTextColor);
 
         views.setTextColor(R.id.widget_tasks_large_empty_title, theme.textPrimary);

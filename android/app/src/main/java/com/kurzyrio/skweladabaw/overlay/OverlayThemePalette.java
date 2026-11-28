@@ -9,6 +9,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
 import com.kurzyrio.skweladabaw.EagleOverlayService;
 import com.kurzyrio.skweladabaw.WidgetScheduleHelper;
+import org.json.JSONObject;
 
 /**
  * Self-contained color tokens and surface builders for the native floating overlay.
@@ -63,16 +64,33 @@ public final class OverlayThemePalette {
         this.scrimColor = isDark ? 0x66000000 : 0x45000000;
     }
 
+    private static int parseColorSafe(String hex, int fallback) {
+        if (hex == null) return fallback;
+        String trimmed = hex.trim();
+        if (trimmed.isEmpty() || !trimmed.startsWith("#")) return fallback;
+        try {
+            return Color.parseColor(trimmed);
+        } catch (Exception ignored) {
+            return fallback;
+        }
+    }
+
     public static OverlayThemePalette resolve(Context context) {
         String themeId = null;
+        String colorsJson = null;
         if (context != null) {
             SharedPreferences overlayPrefs = context.getSharedPreferences(
                 EagleOverlayService.PREFS_NAME,
                 Context.MODE_PRIVATE
             );
             themeId = overlayPrefs.getString("theme_id", null);
+            colorsJson = overlayPrefs.getString("theme_colors_json", null);
             if (themeId == null || themeId.trim().isEmpty()) {
                 themeId = WidgetScheduleHelper.getActiveThemeId(context);
+            }
+            if (colorsJson == null || colorsJson.trim().isEmpty()) {
+                SharedPreferences widgetPrefs = context.getSharedPreferences("SkwelaWidgetPrefs", Context.MODE_PRIVATE);
+                colorsJson = widgetPrefs.getString("theme_colors_json", null);
             }
         }
         String id = themeId != null ? themeId.trim().toLowerCase() : "light";
@@ -151,7 +169,48 @@ public final class OverlayThemePalette {
 
             case "light":
             case "bw-light":
+                return new OverlayThemePalette(
+                    false,
+                    0xFFFFFFFF,
+                    0xFFF2F2F7,
+                    0xFFE5E5EA,
+                    0xFFFFFFFF,
+                    0x24000000,
+                    0xFF111114,
+                    0xFF6C6C70,
+                    0xFF007AFF,
+                    0x1A000000
+                );
+
             default:
+                if (colorsJson != null && !colorsJson.trim().isEmpty()) {
+                    try {
+                        JSONObject obj = new JSONObject(colorsJson);
+                        boolean isDark = obj.optBoolean("isDark", true);
+                        int surfaceBg = parseColorSafe(obj.optString("cardBg", null), isDark ? 0xFF1A1A1C : 0xFFFFFFFF);
+                        int surfaceNestedBg = parseColorSafe(obj.optString("itemBg", null), isDark ? 0xFF262629 : 0xFFF2F2F7);
+                        int surfaceStroke = parseColorSafe(obj.optString("stroke", null), isDark ? 0xFF333338 : 0xFFE5E5EA);
+                        int bubbleBg = parseColorSafe(obj.optString("bubbleBg", null), surfaceBg);
+                        int accent = parseColorSafe(obj.optString("accent", null), isDark ? 0xFF38BDF8 : 0xFF007AFF);
+                        int bubbleRimRaw = parseColorSafe(obj.optString("bubbleRim", null), accent);
+                        int bubbleRim = withAlpha(bubbleRimRaw, isDark ? 0x55 : 0x38);
+                        int textPrimary = parseColorSafe(obj.optString("textPrimary", null), isDark ? 0xFFFFFFFF : 0xFF111114);
+                        int textSecondary = parseColorSafe(obj.optString("textSecondary", null), isDark ? 0xFF98989F : 0xFF6C6C70);
+                        int rippleColor = withAlpha(accent, isDark ? 0x2A : 0x20);
+                        return new OverlayThemePalette(
+                            isDark,
+                            surfaceBg,
+                            surfaceNestedBg,
+                            surfaceStroke,
+                            bubbleBg,
+                            bubbleRim,
+                            textPrimary,
+                            textSecondary,
+                            accent,
+                            rippleColor
+                        );
+                    } catch (Exception ignored) {}
+                }
                 return new OverlayThemePalette(
                     false,
                     0xFFFFFFFF,

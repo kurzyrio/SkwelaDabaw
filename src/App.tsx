@@ -68,7 +68,10 @@ import { useBackHandler } from './hooks/useBackHandler';
 import { useAntiSnooperEasterEgg } from './hooks/useAntiSnooperEasterEgg';
 import { forceUnlockBodyScroll } from './hooks/useBodyScrollLock';
 import { navigationManager, BackPriority } from './services/navigationManager';
-import { applyTheme, DEFAULT_THEME_ID } from './themes';
+import { applyTheme, DEFAULT_THEME_ID, hydrateCustomThemes } from './themes';
+import { ThemeWallpaperLayer } from './components/common/ThemeWallpaperLayer';
+import { ThemeInstallModal } from './components/themes/ThemeInstallModal';
+import { extractThemeIdFromUrl } from './services/themeDownloadService';
 
 export type AppView = 'main' | 'settings' | 'about' | 'changelog' | 'feedback' | 'import-schedule';
 
@@ -125,6 +128,7 @@ export function App() {
   const [isJeepMapFullScreen, setIsJeepMapFullScreen] = useState<boolean>(false);
   const [isChatTyping, setIsChatTyping] = useState<boolean>(false);
   const [pendingImportCode, setPendingImportCode] = useState<string | undefined>(undefined);
+  const [pendingThemeInstallId, setPendingThemeInstallId] = useState<string | null>(null);
 
   const { activeAlert, dismissAlert } = useScheduleAlarm();
 
@@ -618,6 +622,13 @@ export function App() {
       if (!urlStr) return;
       const lower = urlStr.toLowerCase();
 
+      // Deep link / App Link handler for theme.kurzyrio.dev community themes
+      const extractedThemeId = extractThemeIdFromUrl(urlStr);
+      if (extractedThemeId) {
+        setPendingThemeInstallId(extractedThemeId);
+        return;
+      }
+
       // Deep link / App Link handler for shared timetable links
       const shareCodeMatch = urlStr.match(/[?&](?:code|import)=([A-Za-z0-9_-]+)/i) ||
                              urlStr.match(/(?:share|schedule)\/([A-Za-z0-9_-]{5,10})/i);
@@ -641,22 +652,34 @@ export function App() {
       }
     };
 
-    const hash = window.location.hash.toLowerCase();
-    const href = window.location.href.toLowerCase();
+    const hash = window.location.hash;
+    const href = window.location.href;
     handleUrl(`${hash} ${href}`);
 
-    // Check cold-boot launch target from Android WidgetBridge
+    // Check cold-boot launch target & URL from Android WidgetBridge and Capacitor App plugin
     if (Capacitor.isNativePlatform()) {
+      CapApp.getLaunchUrl().then((launch) => {
+        if (!isDisposed && launch?.url) {
+          handleUrl(launch.url);
+        }
+      }).catch(() => {});
+
       WidgetBridge.getLaunchTarget().then((res) => {
-        if (!isDisposed && res && (res.tab || res.action)) {
-          processLaunch(res.tab, res.action);
+        if (!isDisposed && res) {
+          if (res.url) {
+            handleUrl(res.url);
+          } else if (res.tab || res.action) {
+            processLaunch(res.tab, res.action);
+          }
         }
       }).catch((e) => console.warn('Error reading launch target:', e));
 
       try {
         Promise.resolve(
-          (WidgetBridge as any).addListener('launchTarget', (data: { tab?: string; action?: string }) => {
-            if (data && (data.tab || data.action)) {
+          (WidgetBridge as any).addListener('launchTarget', (data: { tab?: string; action?: string; url?: string }) => {
+            if (data?.url) {
+              handleUrl(data.url);
+            } else if (data && (data.tab || data.action)) {
               processLaunch(data.tab, data.action);
             }
           })
@@ -790,7 +813,17 @@ export function App() {
     };
   }, []);
 
-  // Modular Theme Syncing & Persistence
+  // Modular Theme Syncing & Persistence (hydrate offline SkwelaDabawThemesDB on mount)
+  useEffect(() => {
+    let active = true;
+    hydrateCustomThemes()
+      .then(() => {
+        if (active) applyTheme(localStorage.getItem('skweladabaw_theme') || DEFAULT_THEME_ID);
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
+
   useEffect(() => {
     applyTheme(theme);
 
@@ -961,7 +994,7 @@ export function App() {
     const isFullScreenMap = activeTab === 'jeep' && isJeepMapFullScreen;
 
     return (
-      <div className={`min-h-screen bg-[var(--canvas-bg)] text-[var(--text-primary)] flex flex-col transition-colors ${(activeTab === 'dcbus' || activeTab === 'chat' || isFullScreenMap) ? 'h-[100dvh] overflow-hidden' : ''}`}>
+      <div className={`skwela-app-shell relative z-10 min-h-screen bg-[var(--canvas-bg)] text-[var(--text-primary)] flex flex-col transition-colors ${(activeTab === 'dcbus' || activeTab === 'chat' || isFullScreenMap) ? 'h-[100dvh] overflow-hidden' : ''}`}>
         {/* Top Header */}
         {!isFullScreenMap && activeTab !== 'chat' && (
           <Header
@@ -1139,6 +1172,9 @@ export function App() {
       onGoBack={() => { setCurrentView('main'); setActiveTab('schedule'); }}
       onReset={() => { setCurrentView('main'); setActiveTab('schedule'); }}
     >
+      {/* GPU-Composited Wallpaper/GIF/Gradient Layer (renders null on official themes) */}
+      <ThemeWallpaperLayer />
+
       {/* Isolated Dexie -> Widget/Notification synchronization (prevents root <App /> re-renders) */}
       <WidgetDexieSync />
 
@@ -1220,6 +1256,13 @@ export function App() {
       <BatteryOptimizationModal
         isOpen={isBatteryModalOpen}
         onClose={() => setIsBatteryModalOpen(false)}
+      />
+
+      {/* Community Theme Install Modal (Deep Link / App Link / QR Code) */}
+      <ThemeInstallModal
+        themeId={!showSplashScreen ? pendingThemeInstallId : null}
+        onClose={() => setPendingThemeInstallId(null)}
+        onThemeEquipped={(newId) => setTheme(newId)}
       />
 
       {/* Android Hardware Back Button Double-Tap Exit Notification */}

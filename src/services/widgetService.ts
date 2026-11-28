@@ -1,5 +1,7 @@
 import { registerPlugin, Capacitor } from '@capacitor/core';
 import { ClassSchedule, TaskItem, DayReminderItem } from '../types';
+import type { ThemeConfig } from '../themes/types';
+import { buildNativeThemeColorsPayload } from './themeDownloadService';
 
 export interface WidgetBridgePluginType {
   setWidgetData(options: { key: string; value: string }): Promise<{ success: boolean }>;
@@ -21,7 +23,7 @@ export interface WidgetBridgePluginType {
   }): Promise<{ success: boolean }>;
   cancelUnremovableNotification(): Promise<{ success: boolean }>;
   saveImageToGallery(options: { dataUrl: string; fileName: string }): Promise<{ success: boolean; message: string }>;
-  getLaunchTarget(): Promise<{ tab: string; action: string }>;
+  getLaunchTarget(): Promise<{ tab: string; action: string; url?: string }>;
   getCurrentLocation(): Promise<{ lat: number; lng: number; accuracy?: number }>;
   openLocationSettings(options?: { type?: 'location' | 'permission' }): Promise<{ success: boolean }>;
   checkLocationStatus?(): Promise<{ isPermitted: boolean; isGpsEnabled: boolean }>;
@@ -312,14 +314,18 @@ export async function syncRoutinesToWidgets(routines: DayReminderItem[]): Promis
 }
 
 /**
- * Synchronize currently equipped app theme to Android Home Screen Widgets
+ * Synchronize currently equipped app theme (official or custom) to Android Home Screen Widgets
  */
-export async function syncThemeToWidgets(themeId: string): Promise<void> {
+export async function syncThemeToWidgets(themeId: string, themeConfig?: ThemeConfig): Promise<void> {
   try {
     if (!themeId) return;
     localStorage.setItem('skweladabaw_theme', themeId);
     if (Capacitor.isNativePlatform()) {
       await WidgetBridge.setWidgetData({ key: 'app_theme_id', value: themeId });
+      if (themeConfig) {
+        const colorsPayload = buildNativeThemeColorsPayload(themeConfig);
+        await WidgetBridge.setWidgetData({ key: 'theme_colors_json', value: colorsPayload });
+      }
       await WidgetBridge.updateWidgets();
     }
   } catch (err) {

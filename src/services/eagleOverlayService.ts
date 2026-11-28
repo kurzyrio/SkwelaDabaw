@@ -1,5 +1,7 @@
 import { registerPlugin, Capacitor } from '@capacitor/core';
 import { db } from '../db';
+import { getTheme } from '../themes';
+import { buildNativeThemeColorsPayload } from './themeDownloadService';
 
 export interface EagleOverlayData {
   weatherTemp?: number | string;
@@ -17,6 +19,7 @@ export interface EagleOverlayData {
   nextTaskTitle?: string;
   nextTaskDue?: string;
   themeId?: string;
+  themeColorsJson?: string;
 }
 
 export interface NativeOverlayState {
@@ -303,9 +306,14 @@ export async function autoSyncCurrentStateToOverlay(): Promise<void> {
       console.warn('Error fetching tasks for overlay:', taskErr);
     }
 
-    payload.themeId = typeof localStorage !== 'undefined'
+    const activeThemeId = typeof localStorage !== 'undefined'
       ? (localStorage.getItem('skweladabaw_theme') || 'light')
       : 'light';
+    payload.themeId = activeThemeId;
+    try {
+      const resolvedTheme = getTheme(activeThemeId);
+      payload.themeColorsJson = buildNativeThemeColorsPayload(resolvedTheme);
+    } catch (_) {}
 
     await syncDataToEagleOverlay(payload);
   } catch (err) {

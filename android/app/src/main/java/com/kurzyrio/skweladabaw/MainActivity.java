@@ -27,6 +27,7 @@ public class MainActivity extends BridgeActivity {
     private GeolocationPermissions.Callback pendingGeoCallback = null;
     public static volatile String lastLaunchTab = null;
     public static volatile String lastLaunchAction = null;
+    public static volatile String lastLaunchUrl = null;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -224,8 +225,10 @@ public class MainActivity extends BridgeActivity {
         if (intent == null) return;
         String tab = intent.getStringExtra("target_tab");
         String action = intent.getStringExtra("target_action");
+        String fullUrl = null;
         Uri data = intent.getData();
         if (data != null) {
+            fullUrl = data.toString();
             if (tab == null) {
                 tab = data.getHost();
                 if (tab == null || tab.isEmpty()) {
@@ -245,10 +248,11 @@ public class MainActivity extends BridgeActivity {
                 action = data.getQueryParameter("action");
             }
         }
-        if (tab != null || action != null) {
+        if (tab != null || action != null || fullUrl != null) {
             lastLaunchTab = tab;
             lastLaunchAction = action;
-            WidgetBridgePlugin.notifyLaunchTarget(tab, action);
+            lastLaunchUrl = fullUrl;
+            WidgetBridgePlugin.notifyLaunchTarget(tab, action, fullUrl);
         }
     }
 }

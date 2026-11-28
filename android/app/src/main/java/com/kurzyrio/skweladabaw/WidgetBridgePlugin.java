@@ -66,10 +66,15 @@ public class WidgetBridgePlugin extends Plugin {
     }
 
     public static void notifyLaunchTarget(String tab, String action) {
+        notifyLaunchTarget(tab, action, null);
+    }
+
+    public static void notifyLaunchTarget(String tab, String action, String url) {
         if (instance != null) {
             JSObject data = new JSObject();
             data.put("tab", tab != null ? tab : "");
             data.put("action", action != null ? action : "");
+            data.put("url", url != null ? url : "");
             instance.notifyListeners("launchTarget", data);
         }
     }
@@ -79,8 +84,10 @@ public class WidgetBridgePlugin extends Plugin {
         JSObject ret = new JSObject();
         ret.put("tab", MainActivity.lastLaunchTab != null ? MainActivity.lastLaunchTab : "");
         ret.put("action", MainActivity.lastLaunchAction != null ? MainActivity.lastLaunchAction : "");
+        ret.put("url", MainActivity.lastLaunchUrl != null ? MainActivity.lastLaunchUrl : "");
         MainActivity.lastLaunchTab = null;
         MainActivity.lastLaunchAction = null;
+        MainActivity.lastLaunchUrl = null;
         call.resolve(ret);
     }
 
@@ -127,7 +134,7 @@ public class WidgetBridgePlugin extends Plugin {
                     SkwelaOngoingService.refreshNotificationFromBackground(context);
                 } else if ("widget_tasks_data".equals(key)) {
                     WidgetScheduleHelper.updateWidgetProvidersDirectly(context);
-                } else if ("app_theme_id".equals(key)) {
+                } else if ("app_theme_id".equals(key) || "theme_colors_json".equals(key)) {
                     WidgetScheduleHelper.evaluateAndUpdateAllWidgets(context);
                     WidgetScheduleHelper.updateWidgetProvidersDirectly(context);
                 } else if ("skweladabaw_weather_alerts_enabled".equals(key)) {
@@ -154,7 +161,9 @@ public class WidgetBridgePlugin extends Plugin {
                 ScheduleSmallWidgetProvider.class,
                 ScheduleMediumWidgetProvider.class,
                 ScheduleLargeWidgetProvider.class,
-                TasksWidgetProvider.class
+                TasksWidgetProvider.class,
+                TasksLargeWidgetProvider.class,
+                RoutinesWidgetProvider.class
             };
 
             for (Class<?> cls : providers) {

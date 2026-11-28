@@ -462,6 +462,10 @@ public class SkwelaOngoingService extends Service {
         int pillBgRes = R.drawable.notification_current_pill_bg_midnight;
         int nextContainerBgRes = R.drawable.notification_next_container_bg_midnight;
         boolean isLight = false;
+        boolean isMatchApp = "match_app".equalsIgnoreCase(themeKey);
+        int customBgColor = 0xFF141416;
+        int customAccentColor = 0xFF3B82F6;
+        int customTextColor = 0xFFFFFFFF;
 
         if ("emerald".equalsIgnoreCase(themeKey)) {
             cardBgRes = R.drawable.notification_card_bg_emerald;
@@ -480,18 +484,40 @@ public class SkwelaOngoingService extends Service {
             pillBgRes = R.drawable.notification_current_pill_bg_nordic;
             nextContainerBgRes = R.drawable.notification_next_container_bg_nordic;
             isLight = true;
+        } else if (isMatchApp) {
+            String bgHex = intent != null && intent.getStringExtra(EXTRA_THEME_BG) != null
+                ? intent.getStringExtra(EXTRA_THEME_BG)
+                : prefs.getString(PREF_THEME_BG, "#141416");
+            String accHex = intent != null && intent.getStringExtra(EXTRA_THEME_ACCENT) != null
+                ? intent.getStringExtra(EXTRA_THEME_ACCENT)
+                : prefs.getString(PREF_THEME_ACCENT, "#3B82F6");
+            String txtHex = intent != null && intent.getStringExtra(EXTRA_THEME_TEXT) != null
+                ? intent.getStringExtra(EXTRA_THEME_TEXT)
+                : prefs.getString(PREF_THEME_TEXT, "#FFFFFF");
+
+            customBgColor = WidgetScheduleHelper.parseHexColorSafe(bgHex, 0xFF141416);
+            customAccentColor = WidgetScheduleHelper.parseHexColorSafe(accHex, 0xFF3B82F6);
+            customTextColor = WidgetScheduleHelper.parseHexColorSafe(txtHex, 0xFFFFFFFF);
+            double bgLum = (0.299 * Color.red(customBgColor) + 0.587 * Color.green(customBgColor) + 0.114 * Color.blue(customBgColor)) / 255.0;
+            isLight = bgLum > 0.55;
+            if (isLight) {
+                cardBgRes = R.drawable.notification_card_bg_nordic;
+                pillBgRes = R.drawable.notification_current_pill_bg_nordic;
+                nextContainerBgRes = R.drawable.notification_next_container_bg_nordic;
+            }
         }
 
-        int primaryTextColor = isLight ? Color.parseColor("#000000") : Color.parseColor("#FFFFFF");
+        int primaryTextColor = isMatchApp ? customTextColor : (isLight ? Color.parseColor("#000000") : Color.parseColor("#FFFFFF"));
         int metaTextColor = isLight ? Color.parseColor("#52525B") : Color.parseColor("#A1A1AA");
-        int pillTextColor = Color.parseColor("#FFFFFF");
+        double accLum = (0.299 * Color.red(customAccentColor) + 0.587 * Color.green(customAccentColor) + 0.114 * Color.blue(customAccentColor)) / 255.0;
+        int pillTextColor = isMatchApp ? (accLum > 0.62 ? Color.parseColor("#000000") : Color.parseColor("#FFFFFF")) : Color.parseColor("#FFFFFF");
         int brandTextColor = Color.parseColor("#71717A");
         int nextDetailsColor = isLight ? Color.parseColor("#18181B") : Color.parseColor("#D4D4D8");
 
         // Inflate custom RemoteViews layouts without duplicate app icon/name
         RemoteViews compactView = new RemoteViews(getPackageName(), R.layout.notification_class_compact);
-        compactView.setInt(R.id.notif_root, "setBackgroundResource", cardBgRes);
-        compactView.setInt(R.id.notif_current_badge, "setBackgroundResource", pillBgRes);
+        WidgetScheduleHelper.applyThemedBackground(compactView, R.id.notif_root, cardBgRes, R.drawable.widget_card_bg_tintable, isMatchApp, customBgColor);
+        WidgetScheduleHelper.applyThemedBackground(compactView, R.id.notif_current_badge, pillBgRes, R.drawable.widget_badge_bg_tintable, isMatchApp, customAccentColor);
         compactView.setInt(R.id.notif_next_container, "setBackgroundResource", nextContainerBgRes);
         compactView.setTextViewText(R.id.notif_current_badge, currentBadgeText);
         compactView.setTextColor(R.id.notif_current_badge, pillTextColor);
@@ -504,8 +530,8 @@ public class SkwelaOngoingService extends Service {
         compactView.setTextColor(R.id.notif_next_details, nextDetailsColor);
 
         RemoteViews expandedView = new RemoteViews(getPackageName(), R.layout.notification_class_expanded);
-        expandedView.setInt(R.id.notif_expanded_root, "setBackgroundResource", cardBgRes);
-        expandedView.setInt(R.id.notif_expanded_status_badge, "setBackgroundResource", pillBgRes);
+        WidgetScheduleHelper.applyThemedBackground(expandedView, R.id.notif_expanded_root, cardBgRes, R.drawable.widget_card_bg_tintable, isMatchApp, customBgColor);
+        WidgetScheduleHelper.applyThemedBackground(expandedView, R.id.notif_expanded_status_badge, pillBgRes, R.drawable.widget_badge_bg_tintable, isMatchApp, customAccentColor);
         expandedView.setTextViewText(R.id.notif_expanded_status_badge, statusPillText);
         expandedView.setTextColor(R.id.notif_expanded_status_badge, pillTextColor);
         expandedView.setTextViewText(R.id.notif_expanded_current_label, currentBadgeText);

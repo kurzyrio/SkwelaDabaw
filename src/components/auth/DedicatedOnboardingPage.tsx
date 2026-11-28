@@ -59,6 +59,7 @@ import {
   requestNotificationPermission, 
   sendTestNotification, 
   NOTIFICATION_THEMES,
+  resolveNotificationTheme,
   refreshUnremovableClassNotification,
   cancelPersistentNextClassNotification,
   cancelAllAccountReminders,
@@ -1864,7 +1865,7 @@ export const DedicatedOnboardingPage: React.FC<DedicatedOnboardingPageProps> = (
                   </div>
 
                   {(() => {
-                    const activeTheme = NOTIFICATION_THEMES[persistentTheme] || NOTIFICATION_THEMES.midnight;
+                    const activeTheme = resolveNotificationTheme(persistentTheme);
                     return (
                       <div
                         className="p-3 rounded-xl border transition-all text-left"

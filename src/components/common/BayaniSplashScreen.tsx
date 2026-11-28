@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { EagleBuddy } from './EagleBuddy';
 import { playEagleSound } from '../../utils/audio';
 import { db, initializeDatabaseWithSeedData } from '../../db';
-import { applyTheme } from '../../themes';
+import { applyTheme, DEFAULT_THEME_ID, hydrateCustomThemes } from '../../themes';
 import { 
   initializeNotificationChannels, 
   refreshUnremovableClassNotification,
@@ -42,8 +42,11 @@ export const BayaniSplashScreen: React.FC<BayaniSplashScreenProps> = ({
         await db.open();
         await initializeDatabaseWithSeedData();
 
-        // Stage 2: Load and apply active theme
-        const savedTheme = localStorage.getItem('skweladabaw_theme') || 'davao-classic-blue';
+        // Stage 2: Hydrate offline custom themes from SkwelaDabawThemesDB and apply active theme
+        try {
+          await hydrateCustomThemes();
+        } catch (_) {}
+        const savedTheme = localStorage.getItem('skweladabaw_theme') || DEFAULT_THEME_ID;
         applyTheme(savedTheme);
 
         if (isMounted) {

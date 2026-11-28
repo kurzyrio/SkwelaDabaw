@@ -188,6 +188,7 @@ public class EagleOverlayPlugin extends Plugin {
             if (call.hasOption("nextTaskTitle")) editor.putString("next_task_title", call.getString("nextTaskTitle"));
             if (call.hasOption("nextTaskDue")) editor.putString("next_task_due", call.getString("nextTaskDue"));
             if (call.hasOption("themeId")) editor.putString("theme_id", call.getString("themeId"));
+            if (call.hasOption("themeColorsJson")) editor.putString("theme_colors_json", call.getString("themeColorsJson"));
             editor.apply();
 
             if (EagleOverlayService.isRunning()) {

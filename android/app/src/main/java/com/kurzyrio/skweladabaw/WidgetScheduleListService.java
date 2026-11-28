@@ -87,7 +87,14 @@ public class WidgetScheduleListService extends RemoteViewsService {
             RemoteViews row = new RemoteViews(mContext.getPackageName(), R.layout.widget_schedule_list_item);
 
             WidgetScheduleHelper.WidgetTheme theme = WidgetScheduleHelper.getWidgetTheme(mContext);
-            row.setInt(R.id.widget_item_root, "setBackgroundResource", theme.itemBgRes);
+            WidgetScheduleHelper.applyThemedBackground(
+                    row,
+                    R.id.widget_item_root,
+                    theme.itemBgRes,
+                    R.drawable.widget_item_bg_tintable,
+                    theme.useCustomTint,
+                    theme.customItemColor
+            );
 
             String timeStr = WidgetScheduleHelper.format12Hour(item.startTime) + " - " + WidgetScheduleHelper.format12Hour(item.endTime);
             row.setTextViewText(R.id.widget_item_time, timeStr);

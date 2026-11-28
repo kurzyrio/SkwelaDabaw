@@ -125,7 +125,12 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         aria-label="Student Profile"
       >
         {/* Cover Header Banner */}
-        <div className="h-24 bg-gradient-to-tr from-[#7C3AED] via-[#8B5CF6] to-[#A855F7] relative flex items-start justify-end p-3">
+        <div
+          className="h-24 relative flex items-start justify-end p-3"
+          style={{
+            background: 'var(--nav-fab-bg, linear-gradient(to top right, #7C3AED, #8B5CF6, #A855F7))'
+          }}
+        >
           <button
             onClick={onClose}
             aria-label="Close profile modal"
@@ -191,7 +196,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               )}
             </div>
             {displayUsername && (
-              <p className="text-xs text-[#8B5CF6] font-semibold flex items-center gap-0.5">
+              <p className="text-xs text-[var(--nav-active-color,#8B5CF6)] font-semibold flex items-center gap-0.5">
                 <span>@{displayUsername}</span>
               </p>
             )}
@@ -201,7 +206,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           <div className="p-3.5 rounded-2xl bg-[var(--nested-bg)] border border-[var(--card-border)] space-y-2.5 text-xs">
             {/* Campus */}
             <div className="flex items-start gap-2.5">
-              <School className="w-4 h-4 text-[#8B5CF6] shrink-0 mt-0.5" />
+              <School className="w-4 h-4 text-[var(--nav-active-color,#8B5CF6)] shrink-0 mt-0.5" />
               <div className="min-w-0">
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-tertiary)] block">
                   Campus
@@ -215,7 +220,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             {/* Program / Course */}
             {(course || yearLevel) && (
               <div className="flex items-start gap-2.5 pt-2 border-t border-[var(--card-border)]">
-                <GraduationCap className="w-4 h-4 text-[#8B5CF6] shrink-0 mt-0.5" />
+                <GraduationCap className="w-4 h-4 text-[var(--nav-active-color,#8B5CF6)] shrink-0 mt-0.5" />
                 <div className="min-w-0">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-tertiary)] block">
                     Academic Program
@@ -230,7 +235,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             {/* Gender Identity */}
             {profile?.gender && profile.gender !== 'Prefer not to say' && (
               <div className="flex items-start gap-2.5 pt-2 border-t border-[var(--card-border)]">
-                <UserCheck className="w-4 h-4 text-[#8B5CF6] shrink-0 mt-0.5" />
+                <UserCheck className="w-4 h-4 text-[var(--nav-active-color,#8B5CF6)] shrink-0 mt-0.5" />
                 <div className="min-w-0">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-tertiary)] block">
                     Gender Identity
