@@ -204,6 +204,42 @@ public class MainActivity extends BridgeActivity {
         checkAndResumeEagleOverlay();
     }
 
+    @Override
+    public void onPause() {
+        // Do not tear down a pending runtime Camera permission request while the system dialog is on screen
+        if (pendingPermissionRequest == null) {
+            dispatchCameraPauseEvent();
+        }
+        super.onPause();
+    }
+
+    @Override
+    public void onStop() {
+        releaseWebViewCameraPrivacyGuard();
+        super.onStop();
+    }
+
+    private void dispatchCameraPauseEvent() {
+        try {
+            if (bridge != null && bridge.getWebView() != null) {
+                bridge.getWebView().evaluateJavascript(
+                    "window.dispatchEvent(new Event('skwela:app-pause'));",
+                    null
+                );
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private void releaseWebViewCameraPrivacyGuard() {
+        if (pendingPermissionRequest != null) {
+            try {
+                pendingPermissionRequest.deny();
+            } catch (Exception ignored) {}
+            pendingPermissionRequest = null;
+        }
+        dispatchCameraPauseEvent();
+    }
+
     private void checkAndResumeEagleOverlay() {
         try {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {

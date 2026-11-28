@@ -17,10 +17,39 @@ export interface ChangelogRelease {
 
 export const CHANGELOG_DATA: ChangelogRelease[] = [
   {
+    version: '1.12.0.1',
+    releaseDate: 'November 28, 2026',
+    title: 'Reliable QR Scanner & Instant Camera Auto-Shutoff',
+    isLatest: true,
+    tagline: 'Rebuilt QR scanning for faster detection and guaranteed instant camera shutoff the moment you finish scanning or leave the screen.',
+    highlights: [
+      'Rebuilt Schedule and Theme QR scanners with native hardware detection, continuous autofocus, flashlight toggle, and dark-mode QR support',
+      'Fixed camera hardware staying active after closing the scanner, switching tabs, locking the screen, or minimizing the app',
+      'Added clear Camera Active status, instant Turn Off Camera controls, and reliable QR image upload decoding'
+    ],
+    items: [
+      {
+        type: 'fix',
+        title: 'Instant Camera Privacy Auto-Shutoff',
+        description: 'Hardware camera streams now terminate immediately on QR detection, modal close, back press, tab switch, screen lock, or app backgrounding.'
+      },
+      {
+        type: 'fix',
+        title: 'Faster, Accurate QR Code Scanning',
+        description: 'Replaced the unreliable legacy scanner with native BarcodeDetector and multi-zone fallback decoding that reads dense schedule QRs, theme links, and uploaded screenshots.'
+      },
+      {
+        type: 'ui',
+        title: 'Clear Camera Status & Flashlight Controls',
+        description: 'Added live Camera Active badges, one-tap Turn Off Camera buttons, camera flip, and flashlight toggles across all QR scanners.'
+      }
+    ]
+  },
+  {
     version: '1.12.0.0',
     releaseDate: 'November 28, 2026',
     title: 'Custom Community Themes & Free Theme Studio',
-    isLatest: true,
+    isLatest: false,
     tagline: 'Install free community themes with custom colors, gradients, glass cards, and animated GIF wallpapers—saved offline and synced across every screen, widget, and overlay.',
     highlights: [
       'One-tap theme installation via deep links or QR scanner from the free theme.kurzyrio.dev Theme Studio',

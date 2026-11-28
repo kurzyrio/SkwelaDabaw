@@ -1,6 +1,6 @@
 {
-  "version": "1.12.0.0",
-  "versionCode": 154,
+  "version": "1.12.0.1",
+  "versionCode": 155,
   "releaseDate": "2026-11-28",
   "versionScheme": {
     "digit1": "App Version",
@@ -13,15 +13,15 @@
   "forceUpdate": false,
   "developer": "Kurzyrio",
   "supportEmail": "jerriviencenatad@gmail.com",
-  "title": "Custom Community Themes & Free Theme Studio",
+  "title": "Reliable QR Scanner & Instant Camera Auto-Shutoff",
   "releaseNotes": [
-    "Added one-tap Custom & Community Theme support via deep links and QR codes from the free theme.kurzyrio.dev studio.",
-    "Themes save permanently offline with custom colors, gradients, frosted glass, and wallpaper photos or animated GIFs.",
-    "Full theme synchronization across every app screen, all 7 Android home screen widgets, the floating Eagle overlay, and an optional Match App Theme ongoing notification style."
+    "Rebuilt QR code scanning for schedules and themes with native hardware detection, multi-zone decoding, autofocus, and flashlight support.",
+    "Fixed the camera staying active after closing the scanner—hardware camera access now shuts off instantly on scan, close, screen lock, or app switch.",
+    "Added live Camera Active status, one-tap Turn Off Camera controls, and reliable QR screenshot uploads."
   ],
   "downloadUrl": "https://skweladabaw.kurzyrio.site/download",
-  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.12.0.0.apk",
-  "sizeBytes": 27079840,
+  "apkUrl": "https://skweladabaw.kurzyrio.site/downloads/SkwelaDabaw-v1.12.0.1.apk",
+  "sizeBytes": 27018287,
   "sizeFormatted": "25.8 MB",
-  "sha256": "37582a9e0f65c3bd7a067826bb3f06e03e79af5be955fb030d2f8d72f0ced95f"
+  "sha256": "367c1cc882cc0037a7c783b04da53c4fc785c7e1d7d4183ebe4f177745089088"
 }

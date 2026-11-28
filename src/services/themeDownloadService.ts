@@ -501,14 +501,14 @@ export function extractThemeIdFromUrl(input: string): string | null {
   const queryThemeMatch = trimmed.match(/[?&](?:theme|themeId)=([a-zA-Z0-9_-]{2,64})/i);
   if (queryThemeMatch?.[1]) return queryThemeMatch[1];
 
-  // skwela://theme?id=XYZ or https://theme.kurzyrio.dev/theme?id=XYZ or /theme.php?id=XYZ
-  if (/(?:skwela:\/\/theme|theme\.kurzyrio\.dev\/(?:theme(?:\.php)?|t)?)/i.test(trimmed)) {
+  // skwela://theme?id=XYZ, skweladabaw://theme?id=XYZ, or https://theme.kurzyrio.dev/theme?id=XYZ
+  if (/(?:skwela(?:dabaw)?:\/\/theme|theme\.kurzyrio\.dev\/(?:theme(?:\.php)?|t)?)/i.test(trimmed)) {
     const idQuery = trimmed.match(/[?&]id=([a-zA-Z0-9_-]{2,64})/i);
     if (idQuery?.[1]) return idQuery[1];
   }
 
-  // Path style: /theme/XYZ, /t/XYZ, or skwela://theme/XYZ
-  const pathMatch = trimmed.match(/(?:skwela:\/\/theme\/|theme\.kurzyrio\.dev\/(?:theme|t)\/)([a-zA-Z0-9_-]{2,64})/i);
+  // Path style: /theme/XYZ, /t/XYZ, skwela://theme/XYZ, or skweladabaw://theme/XYZ
+  const pathMatch = trimmed.match(/(?:skwela(?:dabaw)?:\/\/theme\/|theme\.kurzyrio\.dev\/(?:theme|t)\/)([a-zA-Z0-9_-]{2,64})/i);
   if (pathMatch?.[1]) return pathMatch[1];
 
   return null;

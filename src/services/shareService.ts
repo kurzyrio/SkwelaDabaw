@@ -535,13 +535,24 @@ export function decodeScheduleFromQrPayload(rawInput: string): DecodedScheduleRe
       }
     }
 
-    // 3. ID: Cloud Short-Code Lookup
+    // 3. ID: Cloud Short-Code Lookup (direct ID:XXXXXX or shared URL ?code=XXXXXX)
     if (text.startsWith('ID:')) {
       const shortCode = text.substring(3).trim().toUpperCase();
       return {
         success: true,
         isCloudLookup: true,
         shortCode,
+        format: 'ID',
+        schedules: []
+      };
+    }
+
+    const shareUrlMatch = text.match(/(?:skweladabaw\.kurzyrio\.site\/share|skwela(?:dabaw)?:\/\/share)[^\s]*[?&]code=([A-Za-z0-9]{3,12})/i);
+    if (shareUrlMatch?.[1]) {
+      return {
+        success: true,
+        isCloudLookup: true,
+        shortCode: shareUrlMatch[1].toUpperCase(),
         format: 'ID',
         schedules: []
       };

@@ -23,7 +23,9 @@ import {
   Server,
   Cpu,
   Lightbulb,
-  RefreshCw
+  RefreshCw,
+  Flashlight,
+  CameraOff
 } from 'lucide-react';
 import { ClassSchedule, DayOfWeek } from '../../types';
 import { db } from '../../db';
@@ -52,10 +54,13 @@ import { syncScheduleToWidgets } from '../../services/widgetService';
 import { Copy, CheckCheck, ExternalLink, ShieldAlert, AlertTriangle, Edit3, QrCode } from 'lucide-react';
 import { playEagleSound } from '../../utils/audio';
 import confetti from 'canvas-confetti';
-import { Html5Qrcode } from 'html5-qrcode';
+import {
+  startQrCameraSession,
+  forceStopAllQrCameras,
+  decodeQrFromImageFile,
+  QrCameraController
+} from '../../services/qrCameraEngine';
 import { decodeScheduleFromQrPayload, fetchScheduleByCloudCode } from '../../services/shareService';
-import { Camera as CapacitorCamera } from '@capacitor/camera';
-import { Capacitor } from '@capacitor/core';
 import { useBackHandler, BackPriority } from '../../hooks/useBackHandler';
 import { useProcessingOverlay } from '../../contexts/ProcessingOverlayContext';
 
@@ -77,6 +82,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
 
   const handleSafeClose = () => {
     if (isSaving || isImportingRef.current) return;
+    stopQrCamera();
     onClose();
   };
 
@@ -87,8 +93,11 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
   const [isQrCameraActive, setIsQrCameraActive] = useState<boolean>(false);
   const [isStartingQrCamera, setIsStartingQrCamera] = useState<boolean>(false);
   const [qrFacingMode, setQrFacingMode] = useState<'environment' | 'user'>('environment');
+  const [qrSupportsTorch, setQrSupportsTorch] = useState<boolean>(false);
+  const [qrTorchOn, setQrTorchOn] = useState<boolean>(false);
   const [qrPastedText, setQrPastedText] = useState<string>('');
-  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const qrControllerRef = useRef<QrCameraController | null>(null);
+  const qrVideoRef = useRef<HTMLVideoElement | null>(null);
   const qrCameraInputRef = useRef<HTMLInputElement>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [processStep, setProcessStep] = useState<number>(0);
@@ -571,21 +580,19 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
     }
   };
 
-  // Stop running scanner safely
-  const stopQrCamera = async () => {
+  // Stop running scanner safely & synchronously
+  const stopQrCamera = () => {
     setIsStartingQrCamera(false);
-    if (scannerRef.current) {
+    if (qrControllerRef.current) {
       try {
-        if (scannerRef.current.isScanning) {
-          await scannerRef.current.stop();
-        }
-        await scannerRef.current.clear();
-      } catch (err) {
-        console.warn('Error stopping QR scanner:', err);
-      }
-      scannerRef.current = null;
+        qrControllerRef.current.stop();
+      } catch {}
+      qrControllerRef.current = null;
     }
+    forceStopAllQrCameras();
     setIsQrCameraActive(false);
+    setQrTorchOn(false);
+    setQrSupportsTorch(false);
   };
 
   const handleProcessQrOrCloudPayload = async (rawText: string) => {
@@ -669,83 +676,44 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
     setIsStartingQrCamera(true);
     const targetMode = facingModeOverride || qrFacingMode;
     try {
-      await stopQrCamera();
+      stopQrCamera();
+      setIsStartingQrCamera(true);
 
-      // Explicitly check & request Android runtime camera permission
-      if (Capacitor.isNativePlatform()) {
-        try {
-          const status = await CapacitorCamera.checkPermissions();
-          if (status.camera !== 'granted') {
-            const req = await CapacitorCamera.requestPermissions({ permissions: ['camera'] });
-            if (req.camera !== 'granted') {
-              setQrCameraError('Camera permission is required to scan QR codes. Please allow camera access in app settings.');
-              setIsStartingQrCamera(false);
-              return;
-            }
-          }
-        } catch (permErr) {
-          console.warn('Camera permission check note:', permErr);
-          try {
-            await CapacitorCamera.requestPermissions({ permissions: ['camera'] });
-          } catch (reqErr) {
-            console.warn('Camera request note:', reqErr);
-          }
-        }
-      }
+      // Small delay to ensure viewfinder video is connected in DOM
+      await new Promise((res) => setTimeout(res, 60));
 
-      // Small delay to ensure viewfinder container is properly laid out in DOM
-      await new Promise((res) => setTimeout(res, 160));
-
-      const container = document.getElementById('qr-reader-container');
-      if (!container) {
+      const videoEl = qrVideoRef.current;
+      if (!videoEl) {
         setIsStartingQrCamera(false);
         return;
       }
 
-      const scanner = new Html5Qrcode('qr-reader-container');
-      scannerRef.current = scanner;
-
-      // Select camera: prioritize requested facingMode
-      let cameraConfig: any = { facingMode: targetMode };
-      try {
-        const devices = await Html5Qrcode.getCameras();
-        if (devices && devices.length > 0) {
-          const matchedCam = devices.find((d) =>
-            targetMode === 'environment'
-              ? /back|rear|environment/i.test(d.label)
-              : /front|user|selfie/i.test(d.label)
-          );
-          if (matchedCam && matchedCam.id) {
-            cameraConfig = matchedCam.id;
-          } else {
-            cameraConfig = { facingMode: targetMode };
-          }
-        }
-      } catch (enumErr) {
-        console.warn('Camera enumeration note:', enumErr);
-        cameraConfig = { facingMode: targetMode };
-      }
-
-      await scanner.start(
-        cameraConfig,
-        {
-          fps: 15,
-          qrbox: (viewfinderWidth, viewfinderHeight) => {
-            const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-            const edge = Math.floor(minEdge * 0.75);
-            return { width: Math.max(edge, 180), height: Math.max(edge, 180) };
+      const controller = await startQrCameraSession({
+        videoEl,
+        facingMode: targetMode,
+        onStatusChange: (active) => {
+          setIsQrCameraActive(active);
+          if (!active) {
+            setQrTorchOn(false);
+            setQrSupportsTorch(false);
           }
         },
-        (decodedText) => {
+        onDecode: (decodedText) => {
           stopQrCamera();
           handleProcessQrOrCloudPayload(decodedText);
-        },
-        () => {}
-      );
+          return true;
+        }
+      });
 
+      qrControllerRef.current = controller;
+      setQrSupportsTorch(controller.supportsTorch);
       setIsQrCameraActive(true);
       setIsStartingQrCamera(false);
     } catch (e: any) {
+      if (e?.message === 'CANCELLED') {
+        setIsStartingQrCamera(false);
+        return;
+      }
       console.warn('QR camera start failed:', e);
       setQrCameraError(e?.message || 'Camera preview unavailable. Please allow camera permissions or upload a QR screenshot.');
       setIsQrCameraActive(false);
@@ -753,60 +721,44 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
     }
   };
 
-  const toggleQrCameraFacing = async () => {
-    const nextMode = qrFacingMode === 'environment' ? 'user' : 'environment';
-    setQrFacingMode(nextMode);
-    await stopQrCamera();
-    setTimeout(() => {
-      startQrCamera(nextMode);
-    }, 200);
+  const toggleQrTorch = async () => {
+    if (!qrControllerRef.current) return;
+    const next = !qrTorchOn;
+    const ok = await qrControllerRef.current.setTorch(next);
+    if (ok) setQrTorchOn(next);
   };
 
-  // Cleanup on close or mode change
+  const toggleQrCameraFacing = () => {
+    const nextMode = qrFacingMode === 'environment' ? 'user' : 'environment';
+    setQrFacingMode(nextMode);
+    stopQrCamera();
+    setTimeout(() => {
+      startQrCamera(nextMode);
+    }, 120);
+  };
+
+  // Cleanup on close, mode change, or parsed review screen
   useEffect(() => {
-    if (!isOpen || importMode !== 'qr-scan') {
+    if (!isOpen || importMode !== 'qr-scan' || parsedSchedules.length > 0) {
       stopQrCamera();
     }
     return () => {
       stopQrCamera();
     };
-  }, [isOpen, importMode]);
+  }, [isOpen, importMode, parsedSchedules.length]);
 
   const handleScanQrFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setErrorMessage(null);
-    let fileContainer: HTMLElement | null = null;
-    let createdContainer = false;
+    stopQrCamera();
     try {
-      fileContainer = document.getElementById('qr-reader-file-container');
-      if (!fileContainer) {
-        fileContainer = document.createElement('div');
-        fileContainer.id = 'qr-reader-file-container';
-        fileContainer.style.position = 'absolute';
-        fileContainer.style.left = '-9999px';
-        fileContainer.style.top = '-9999px';
-        fileContainer.style.width = '300px';
-        fileContainer.style.height = '300px';
-        document.body.appendChild(fileContainer);
-        createdContainer = true;
-      }
-      const scanner = new Html5Qrcode('qr-reader-file-container');
-      const decodedText = await scanner.scanFile(file, true);
-      try {
-        await scanner.clear();
-      } catch (cErr) {
-        // Safe clear
-      }
-
+      const decodedText = await decodeQrFromImageFile(file);
       handleProcessQrOrCloudPayload(decodedText);
-    } catch (err) {
+    } catch (err: any) {
       console.warn('QR file scan error:', err);
-      setErrorMessage('No valid SkwelaDabaw QR code detected in this image. Please ensure the QR is clear and well-lit.');
+      setErrorMessage(err?.message || 'No valid SkwelaDabaw QR code detected in this image. Please ensure the QR is clear and well-lit.');
     } finally {
-      if (createdContainer && fileContainer?.parentNode) {
-        fileContainer.parentNode.removeChild(fileContainer);
-      }
       e.target.value = '';
     }
   };
@@ -1094,14 +1046,31 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
                     <QrCode className="w-4 h-4 text-[var(--text-primary)]" />
                     <h4 className="font-bold text-xs text-[var(--text-primary)]">Scan Classmate Schedule QR</h4>
                   </div>
-                  <span className="text-[11px] font-bold text-emerald-500">
-                    Fast Import
+                  <span className="text-[11px] font-bold text-emerald-500 flex items-center gap-1.5">
+                    {isQrCameraActive && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
+                    {isQrCameraActive ? 'Camera Active' : 'Fast Import'}
                   </span>
                 </div>
 
                 {/* Viewfinder Container */}
                 <div className="w-full max-w-xs mx-auto aspect-square rounded-2xl overflow-hidden bg-black border border-[var(--card-border)] relative flex flex-col items-center justify-center">
-                  <div id="qr-reader-container" className="w-full h-full" />
+                  <video
+                    ref={qrVideoRef}
+                    playsInline
+                    muted
+                    autoPlay
+                    className="w-full h-full object-cover"
+                  />
+                  {isQrCameraActive && (
+                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                      <div className="w-44 h-44 relative">
+                        <span className="absolute top-0 left-0 w-6 h-6 border-t-2 border-l-2 border-white/90 rounded-tl-lg" />
+                        <span className="absolute top-0 right-0 w-6 h-6 border-t-2 border-r-2 border-white/90 rounded-tr-lg" />
+                        <span className="absolute bottom-0 left-0 w-6 h-6 border-b-2 border-l-2 border-white/90 rounded-bl-lg" />
+                        <span className="absolute bottom-0 right-0 w-6 h-6 border-b-2 border-r-2 border-white/90 rounded-br-lg" />
+                      </div>
+                    </div>
+                  )}
                   {!isQrCameraActive && (
                     <div className="absolute inset-0 p-4 bg-[var(--nested-bg)] flex flex-col items-center justify-center text-center space-y-3">
                       <div className="w-12 h-12 rounded-2xl bg-[var(--card-bg)] border border-[var(--card-border)] flex items-center justify-center text-[var(--text-primary)]">
@@ -1167,26 +1136,40 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
                 </div>
 
                 {isQrCameraActive && (
-                  <div className="flex items-center justify-center gap-2">
+                  <div className="flex items-center justify-center gap-2 flex-wrap">
+                    {qrSupportsTorch && (
+                      <button
+                        type="button"
+                        onClick={toggleQrTorch}
+                        className={`py-1.5 px-3 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all active:scale-95 pressable shadow-xs ${
+                          qrTorchOn
+                            ? 'bg-amber-500/15 border-amber-500/40 text-amber-500'
+                            : 'bg-[var(--card-bg)] border-[var(--card-border)] text-[var(--text-primary)]'
+                        }`}
+                      >
+                        <Flashlight className="w-3.5 h-3.5" />
+                        <span>{qrTorchOn ? 'Flash On' : 'Flash'}</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={toggleQrCameraFacing}
                       className="py-1.5 px-3.5 rounded-xl bg-[var(--card-bg)] border border-[var(--card-border)] text-[var(--text-primary)] text-xs font-semibold flex items-center gap-1.5 transition-all active:scale-95 pressable shadow-xs"
                     >
                       <RefreshCw className="w-3.5 h-3.5" />
-                      <span>{qrFacingMode === 'environment' ? 'Switch to Front' : 'Switch to Back'}</span>
+                      <span>{qrFacingMode === 'environment' ? 'Front Camera' : 'Back Camera'}</span>
                     </button>
                     <button
                       type="button"
                       onClick={stopQrCamera}
-                      className="py-1.5 px-4 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-500 text-xs font-bold transition-all active:scale-95 pressable"
+                      className="py-1.5 px-3.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-500 text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 pressable"
                     >
-                      Stop Camera
+                      <CameraOff className="w-3.5 h-3.5" />
+                      <span>Turn Off Camera</span>
                     </button>
                   </div>
                 )}
 
-                <div id="qr-reader-file-container" className="hidden" />
                 <input
                   ref={qrCameraInputRef}
                   type="file"
